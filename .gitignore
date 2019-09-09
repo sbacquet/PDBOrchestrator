@@ -243,6 +243,7 @@ FakesAssemblies/
 _Pvt_Extensions
 
 # Paket dependency manager
+.paket/paket.bootstrapper.exe
 paket-files/
 
 # FAKE - F# Make
