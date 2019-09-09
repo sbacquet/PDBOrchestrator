@@ -2,3 +2,6 @@ source "C:\Program Files (x86)\Microsoft SDKs\NuGetPackages\"
 source https://api.nuget.org/v3/index.json
 
 nuget FSharp.Core
+nuget Microsoft.NET.Test.Sdk 16.0.1
+nuget xunit 2.4.0
+nuget xunit.runner.visualstudio 2.4.0

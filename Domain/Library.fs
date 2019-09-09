@@ -1,5 +1,8 @@
 ﻿namespace Domain
 
-module Say =
-    let hello name =
-        printfn "Hello %s" name
+module PDBDatabase =
+    type MasterPDB = {
+        Name: string
+        Schemas: string list
+        LatestVersion: int
+    }
