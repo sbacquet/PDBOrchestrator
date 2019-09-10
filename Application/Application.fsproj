@@ -4,7 +4,10 @@
     <TargetFramework>netcoreapp2.2</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="DTO.fs" />
     <Compile Include="PDBRepository.fs" />
+    <Compile Include="API.fs" />
+    <Compile Include="StateAgent.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Domain\Domain.fsproj" />

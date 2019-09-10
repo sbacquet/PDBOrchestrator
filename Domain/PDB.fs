@@ -2,22 +2,36 @@
 
 module PDB =
 
-    type MasterPDB = {
-        Name: string
-        Schemas: string list
-        LatestVersion: int
-        Lock: string option
-    }
-
-    let newMasterPDB name schemas = { Name = name; Schemas = schemas; LatestVersion = 1; Lock = Option.None }
-
-    type MasterPDBs = MasterPDB list
-
     type Version = int
 
-    type PDBVersion = {
+    type MasterPDBVersion = {
         Name: string
         Version: Version
         CreatedBy: string
-        Comments: string
+        Comment: string
     }
+
+    let newPDBVersion name version createdBy comment =
+        { Name = name; Version = version; CreatedBy = createdBy; Comment = comment }
+
+    type Schema = {
+        User: string
+        Password: string
+        Type: string
+    }
+
+    let newSchema user password t = { User = user; Password = password; Type = t }
+
+    type MasterPDB = {
+        Name: string
+        Schemas: Schema list
+    }
+
+    let newMasterPDB name schemas = { Name = name; Schemas = schemas }
+
+    type LockInfo = {
+        Locker: string
+        Date: System.DateTime
+    }
+
+    let newLockInfo locker date = { Locker = locker; Date = date }
