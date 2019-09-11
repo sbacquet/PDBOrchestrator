@@ -1,11 +1,13 @@
 ﻿module Application.DTO
 
 open Domain
+open Domain.Common
 
 type MasterPDBVersion = {
     Version: int
     CreatedBy: string
     Comment: string
+    Unused: bool
 }
 
 type Schema = {
@@ -18,6 +20,7 @@ type MasterPDB = {
     Name: string
     Schemas: Schema list
     Versions: MasterPDBVersion list
+    ActiveVersion: MasterPDBVersion option
     Locked: bool
     Locker: string
     LockDate: System.DateTime
@@ -38,19 +41,28 @@ let stateToDTO (state : Domain.State.State) : State =
                 match lock with
                 | Some lockinfo -> true, lockinfo.Locker, lockinfo.Date
                 | None -> false, "", System.DateTime.MinValue
+            let versionsDTO = 
+                versions 
+                |> List.filter (fun version -> version.Name = pdb.Name)
+                |> List.map (fun version -> {
+                    Version = version.Version
+                    Comment = version.Comment
+                    CreatedBy = version.CreatedBy
+                    Unused = Domain.State.isPDBVersionUnused pdb.Name version.Version state
+                })
+            let versionToDTO unused (version : Domain.PDB.MasterPDBVersion) =
+                { Version = version.Version; CreatedBy = version.CreatedBy; Comment = version.Comment; Unused = unused }
+            let activeVersion = 
+                Domain.State.getLatestUsedMasterPDBVersion pdb.Name state
+                |> toOption
+                |> Option.map (versionToDTO false)
             { 
                 Name = pdb.Name
                 Schemas = pdb.Schemas |> List.map (fun schema ->
                     { User = schema.User; Password = schema.Password; Type = schema.Type }
                 )
-                Versions = 
-                    versions 
-                    |> List.filter (fun version -> version.Name = pdb.Name)
-                    |> List.map (fun version -> {
-                        Version = version.Version
-                        Comment = version.Comment
-                        CreatedBy = version.CreatedBy
-                    })
+                Versions = versionsDTO
+                ActiveVersion = activeVersion
                 Locked = locked
                 Locker = locker
                 LockDate = lockDate
@@ -79,4 +91,12 @@ let DTOtoState (state : State) : Domain.State.State =
             |> List.filter (fun pdb -> pdb.Locked) 
             |> List.map (fun pdb -> pdb.Name, PDB.newLockInfo pdb.Locker pdb.LockDate)
             |> Map.ofList
+        UnusedMasterPDBVersions =
+            state.MasterPDBs
+            |> List.collect (fun pdb -> 
+                pdb.Versions 
+                |> List.filter (fun version -> version.Unused)
+                |> List.map (fun version -> (pdb.Name, version.Version))
+               ) 
+            |> Set.ofList
     }

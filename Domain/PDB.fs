@@ -4,6 +4,8 @@ module PDB =
 
     type Version = int
 
+    type VersionKey = string * int
+
     type MasterPDBVersion = {
         Name: string
         Version: Version
