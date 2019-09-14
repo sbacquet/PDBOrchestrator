@@ -10,6 +10,7 @@ open System
 open System.Data
 open Oracle.ManagedDataAccess.Client
 open Compensable
+open Application.Oracle
 
 type PDBCompensableAction = CompensableAction<string, Oracle.ManagedDataAccess.Client.OracleException>
 
@@ -31,9 +32,6 @@ let connAsDBA = connAsDBAIn "intcdb2"
 let exec result conn a = try Sql.execNonQuery conn a [] |> ignore; Ok result with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> Error ex
 let P = Sql.Parameter.make
 let (=>) a b = Sql.Parameter.make(a, b)
-
-type OracleResult<'T> = Result<'T, Oracle.ManagedDataAccess.Client.OracleException>
-type OraclePDBResult = OracleResult<string>
 
 let (>>=) r f = Result.bind f r
 let (>=>) f1 f2 = fun x -> f1 x >>= f2
@@ -109,7 +107,7 @@ let openPDBCompensable readWrite =
         (openPDB readWrite) 
         closePDB
 
-let createAndGrantPDB adminUserName adminUserPassword dest keepOpen = 
+let createAndGrantPDB keepOpen adminUserName adminUserPassword dest = 
     [
         createPDBCompensable adminUserName adminUserPassword dest true
         notCompensable grantPDB
@@ -199,3 +197,12 @@ let pdbHasSnapshots name =
         (sprintf @"select count(*) from v$pdbs where SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where name='%s')" name)
         []
     |> Option.get > 0M
+
+let oracleAPI : Application.Oracle.OracleAPI = {
+    NewPDB = createAndGrantPDB true
+    ClosePDB = closePDB
+    DeletePDB = deletePDB
+    ExportPDB = exportPDB
+    ImportPDB = importPDB
+    SnapshotPDB = snapshotPDB
+}

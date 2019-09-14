@@ -4,6 +4,7 @@
     <TargetFramework>netcoreapp2.2</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="OracleAPI.fs" />
     <Compile Include="DTO.fs" />
     <Compile Include="PDBRepository.fs" />
     <Compile Include="API.fs" />
