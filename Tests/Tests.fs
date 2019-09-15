@@ -5,7 +5,7 @@ open Domain.PDB
 open Tests.PDBRepositoryGenericTests
 open Swensen.Unquote
 open Akkling
-open Application.State
+open Application.StateActor
 open Application
 open Domain.State
 
@@ -44,7 +44,7 @@ let ``Get state`` () =
 [<Fact>]
 let ``Test Akkling`` () =
     use system = System.create "my-system" <| Configuration.defaultConfig()
-    let aref = spawn system "StateAgent" <| props (stateAgentBody domainState)
+    let aref = spawn system "StateAgent" <| props (stateActorBody domainState)
 
     let response = 
         aref <? GetState 
