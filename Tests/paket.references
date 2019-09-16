@@ -3,3 +3,4 @@ xunit
 xunit.runner.visualstudio
 FSharp.Core
 unquote
+Akkling.TestKit

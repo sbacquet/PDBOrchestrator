@@ -16,10 +16,12 @@ let reply replyTo (sender : Akka.Actor.ICanTell) from message =
 type StateMessage =
 | GetState
 | SetState of Domain.State.State
-| StateSet
 | MasterPDBCreated of string * (string * string * string) list * string * string
 | MasterPDBVersionCreated of string * int * string * string
-| Transfer of string
+| TransferState of string
+
+type StateEvent =
+| StateSet
 
 let getNewState oldState newStateResult =
     match newStateResult with
@@ -39,9 +41,6 @@ let stateActorBody initialState (ctx : Actor<_>) =
         | SetState newState -> 
             ctx.Sender() <! StateSet
             return! loop newState
-        | StateSet ->
-            printfn "State set"
-            return! loop state
         | MasterPDBCreated (name, schemas, user, comment) -> 
             let newStateResult = 
                 state 
@@ -57,11 +56,10 @@ let stateActorBody initialState (ctx : Actor<_>) =
                 state |> Domain.State.addMasterPDBVersionToState pdb version createdBy comment 
             ctx.Sender() <! newStateResult
             return! loop (getNewState state newStateResult)
-        | Transfer target ->
-            let targetActor =
-                (select ctx <| sprintf "../%s" target).ResolveOne(System.TimeSpan.FromSeconds(1.))
-                |> Async.RunSynchronously 
-            targetActor <<! SetState state
+        | TransferState target ->
+            (select ctx <| sprintf "../%s" target).ResolveOne(System.TimeSpan.FromSeconds(1.))
+            |> Async.RunSynchronously 
+            <<! SetState state
             return! loop state
     }
     loop initialState

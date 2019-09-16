@@ -6,6 +6,7 @@
     <GenerateProgramFile>false</GenerateProgramFile>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Actors.fs" />
     <Compile Include="PDBRepositoryGenericTests.fs" />
     <Compile Include="Tests.fs" />
     <Compile Include="Program.fs" />

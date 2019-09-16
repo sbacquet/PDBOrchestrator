@@ -10,3 +10,4 @@ nuget unquote
 nuget Akkling
 nuget FsSql.Core 3.0.2
 nuget Oracle.ManagedDataAccess.Core
+nuget Akkling.TestKit

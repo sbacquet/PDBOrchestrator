@@ -4,8 +4,6 @@ open Xunit
 open Domain.PDB
 open Tests.PDBRepositoryGenericTests
 open Swensen.Unquote
-open Akkling
-open Application.StateActor
 open Application
 open Domain.State
 
@@ -41,35 +39,3 @@ let ``Get state`` () =
     test <@ currentState.MasterPDBs.[0].Locked = false @>
     ()
 
-[<Fact>]
-let ``Test Akkling`` () =
-    use system = System.create "my-system" <| Configuration.defaultConfig()
-    let aref = spawn system "StateAgent" <| props (stateActorBody domainState)
-
-    let response = 
-        aref <? GetState 
-        |> Async.RunSynchronously
-
-    let tResp = box response :?> Application.DTO.State
-    System.Diagnostics.Debug.Print("-> State: PDB count = {0}\n", tResp.MasterPDBs.Length)
-
-    let response = 
-        aref <? MasterPDBCreated ("test2", [ "user", "password", "FusionInvest" ], "me", "comment")
-        |> Async.RunSynchronously |> box
-
-    let tResp = response :?> Result<State, StateError>
-    match tResp with
-    | Ok state -> 
-        System.Diagnostics.Debug.Print("-> State: PDB count = {0}\n", state.MasterPDBs.Length)
-        System.Diagnostics.Debug.Print("-> State: PDB version count = {0}\n", state.MasterPDBVersions.Length)
-    | Error error -> System.Diagnostics.Debug.Print("Error! {0}\n", buildStateErrorMessage error)
-
-    let response = 
-        aref <? MasterPDBVersionCreated ("test2", 2, "me", "comment")
-        |> Async.RunSynchronously |> box
-
-    let tResp = response :?> Result<State, StateError>
-    match tResp with
-    | Ok state -> 
-        System.Diagnostics.Debug.Print("-> State: PDB version count = {0}\n", state.MasterPDBVersions.Length)
-    | Error error -> System.Diagnostics.Debug.Print("Error! {0}\n", buildStateErrorMessage error)
