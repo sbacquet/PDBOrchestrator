@@ -1,34 +1,34 @@
 ﻿module Application.OrchestratorActor
 
 open Akkling
-open Application.StateActor
+open Application.OracleServerActor
+open Domain.OrchestratorState
 
 type Command =
 | Synchronize of string
-
-type Event =
-| Synchronized
+| GetState
 
 let primaryServerActor (ctx : Actor<_>) name =
     (select ctx name).ResolveOne(System.TimeSpan.FromSeconds(1.))
     |> Async.RunSynchronously 
 
+let spawnChildActors (ctx : Actor<_>) state getInstanceState =
+    state.OracleInstances |> List.iter (fun instance ->
+        spawn ctx instance.Name <| props (oracleServerActorBody (getInstanceState instance.Name)) |> ignore
+    )
 
-let orchestratorActorBody initialState (ctx : Actor<_>) =
-    let rec loop (state : Domain.OrchestratorState.OrchestratorState) = actor {
-        let! (msg : obj) = ctx.Receive()
+let orchestratorActorBody initialState getInstanceState (ctx : Actor<_>) =
+    let rec loop (state : OrchestratorState) = actor {
+        let! msg = ctx.Receive()
         match msg with
-        | :? Command as mess ->
-            match mess with
-            | Synchronize targetServer ->
-                let primaryServer = primaryServerActor ctx state.PrimaryServer
-                primaryServer <! TransferState targetServer
-                return! loop state
-        | :? Application.StateActor.StateEvent as stateMessage ->
-            match stateMessage with
-            | StateSet ->
-                ctx.Sender() <! Synchronized
-            | _ -> return! unhandled()
-        | _ -> return! unhandled()
+        | Synchronize targetServer ->
+            let primaryServer = primaryServerActor ctx state.PrimaryServer
+            primaryServer <<! TransferState targetServer
+            return! loop state
+        | GetState ->
+            ctx.Sender() <! state
+            return! loop state
+            
     }
+    spawnChildActors ctx initialState getInstanceState
     loop initialState

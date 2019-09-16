@@ -3,9 +3,12 @@
 open Akkling
 open Akkling.TestKit
 open Xunit
-open Application.StateActor
+open Application
 open Domain.PDB
 open Domain.State
+open Domain.OrchestratorState
+open Application.OracleServerActor
+open Application.OrchestratorActor
 
 let domainState : Domain.State.State = { 
     MasterPDBs = [ Domain.PDB.newMasterPDB "test1" [ Domain.PDB.newSchema "user" "password" "FusionInvest" ] ]
@@ -15,40 +18,38 @@ let domainState : Domain.State.State = {
 }
 
 [<Fact>]
-let ``Test StateAgent basics`` () = testDefault <| fun tck ->
-    let aref = spawn tck "StateAgent1" <| props (stateActorBody domainState)
+let ``Test state transfer`` () = testDefault <| fun tck ->
+    let aref1 = spawn tck "StateAgent1" <| props (oracleServerActorBody domainState)
+    let aref2 = spawn tck "StateAgent2" <| props (oracleServerActorBody (newState()))
 
-    let response : Application.DTO.State = 
-        aref <? GetState
-        |> Async.RunSynchronously
-        
-    System.Diagnostics.Debug.Print("-> State: PDB count = {0}\n", response.MasterPDBs.Length)
+    (retype aref1) <! TransferState "StateAgent2"
 
-    let response = 
-        aref <? MasterPDBCreated ("test2", [ "user", "password", "FusionInvest" ], "me", "comment")
-        |> Async.RunSynchronously
+    expectMsg tck (StateSet "StateAgent2")
 
-    match response with
-    | Ok state -> 
-        System.Diagnostics.Debug.Print("-> State: PDB count = {0}\n", state.MasterPDBs.Length)
-        System.Diagnostics.Debug.Print("-> State: PDB version count = {0}\n", state.MasterPDBVersions.Length)
-    | Error error -> System.Diagnostics.Debug.Print("Error! {0}\n", buildStateErrorMessage error)
+let orchestratorState = {
+    OracleInstances = [ { Name = "server1"; Server = "toto.com"; DBAUser = ""; DBAPassword = "" } ]
+    PrimaryServer = "server1"
+}
 
-    let response = 
-        aref <? MasterPDBVersionCreated ("test2", 2, "me", "comment")
-        |> Async.RunSynchronously
-
-    match response with
-    | Ok state -> 
-        System.Diagnostics.Debug.Print("-> State: PDB version count = {0}\n", state.MasterPDBVersions.Length)
-    | Error error -> System.Diagnostics.Debug.Print("Error! {0}\n", buildStateErrorMessage error)
+let getInstanceState name =
+    match name with
+    | "server1" -> domainState
+    | _ -> newState()
 
 [<Fact>]
-let ``Test state transfer`` () = testDefault <| fun tck ->
-    let aref1 = spawn tck "StateAgent1" <| props (stateActorBody domainState)
-    let aref2 = spawn tck "StateAgent2" <| props (stateActorBody (newState ()))
+let ``Synchronize state`` () = testDefault <| fun tck ->
+    let orchestrator = spawn tck "orchestrator" <| props (orchestratorActorBody orchestratorState getInstanceState)
 
-    aref1 <! TransferState "StateAgent2"
+    orchestrator <! Synchronize "server2"
 
-    expectMsg tck StateSet
+    expectMsg tck (StateSet "server2")
+
+[<Fact>]
+let ``Oracle server actor creates PDB`` () = testDefault <| fun tck ->
+    let oracleActor = spawn tck "server1" <| props (oracleServerActorBody domainState)
+
+    let res : Application.Oracle.OraclePDBResult = (retype oracleActor) <? CreateMasterPDB "test1" |> Async.RunSynchronously
+    Some res
+    //let expected : Application.Oracle.OraclePDBResult = Ok "test1"
+    //expectMsg tck expected
 

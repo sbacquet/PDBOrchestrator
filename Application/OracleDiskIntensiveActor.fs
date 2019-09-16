@@ -1,6 +1,7 @@
 ﻿module Application.OracleDiskIntensiveActor
 
-type OracleDiskIntensiveMessage =
-| InstanciateMasterPDB of string (* manifest *)
-| InstanciateTestPDB of string (* manifest *)
-| ExportPDB of string * string
+type Command =
+| ImportPDB of string * string * string
+
+type Event =
+| PDBImported of string
