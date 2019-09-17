@@ -1,4 +1,4 @@
-﻿module Application.OracleServerActor
+﻿module Application.OracleInstanceActor
 
 open Akkling
 open Application.Oracle
@@ -24,14 +24,14 @@ let validationMessage validation =
     | Valid -> "parameters are valid"
     | PDBAlreadyExists pdb -> sprintf "a PDB with name %s already exists" pdb
 
-let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : Domain.State.State) =
+let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : Domain.OracleInstanceState.OracleInstanceState) =
     match (state.MasterPDBs |> List.exists (fun x -> x.Name = parameters.Name)) with
     | true -> PDBAlreadyExists parameters.Name
     | false -> Valid
 
 type Command =
 | GetState
-| SetState of Domain.State.State
+| SetState of Domain.OracleInstanceState.OracleInstanceState
 | TransferState of string
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams>
 
@@ -54,8 +54,8 @@ let spawnChildActors oracleAPI (ctx : Actor<obj>) =
     //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())
     //spawn ctx "oracleLongTaskExecutor" <| Props.From(p) |> ignore
 
-let oracleServerActorBody oracleAPI initialState (ctx : Actor<obj>) =
-    let rec loop (state : Domain.State.State) (requests : RequestMap<Command>) = actor {
+let oracleInstanceActorBody oracleAPI initialState (ctx : Actor<obj>) =
+    let rec loop (state : Domain.OracleInstanceState.OracleInstanceState) (requests : RequestMap<Command>) = actor {
         let! msg = ctx.Receive()
         match msg with
         | :? Command as command ->
@@ -112,7 +112,7 @@ let oracleServerActorBody oracleAPI initialState (ctx : Actor<obj>) =
                     printfn "PDB %s created" parameters.Name
                     let newStateResult = 
                         state 
-                        |> Domain.State.addMasterPDBToState 
+                        |> Domain.OracleInstanceState.addMasterPDBToState 
                             parameters.Name 
                             (parameters.TargetSchemas |> List.map (fun (user, password, t) -> Domain.PDB.newSchema user password t)) 
                             parameters.User 

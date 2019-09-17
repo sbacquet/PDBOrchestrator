@@ -13,7 +13,7 @@
     <Compile Include="MasterPDBActor.fs" />
     <Compile Include="OracleDiskIntensiveActor.fs" />
     <Compile Include="OracleLongTaskExecutor.fs" />
-    <Compile Include="OracleServerActor.fs" />
+    <Compile Include="OracleInstanceActor.fs" />
     <Compile Include="OrchestratorActor.fs" />
   </ItemGroup>
   <ItemGroup>

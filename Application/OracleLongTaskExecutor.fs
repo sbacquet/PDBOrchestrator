@@ -32,11 +32,29 @@ let oracleLongTaskExecutorBody (oracleAPI : OracleAPI) (ctx : Actor<Command>) =
         let! n = ctx.Receive()
         match n with
         | CreatePDBFromDump (requestId, parameters) -> 
-            let result : OraclePDBResult = oracleAPI.NewPDBFromDump parameters.AdminUserName parameters.AdminUserPassword parameters.Destination parameters.DumpPath parameters.Schemas parameters.TargetSchemas parameters.Directory (newManifestName parameters.Name 1) parameters.Name
-            let response : WithRequestId<OraclePDBResult> = (requestId, result)
-            ctx.Sender() <! response
+            let result = oracleAPI.NewPDBFromDump parameters.AdminUserName parameters.AdminUserPassword parameters.Destination parameters.DumpPath parameters.Schemas parameters.TargetSchemas parameters.Directory (newManifestName parameters.Name 1) parameters.Name
+            ctx.Sender() <! (requestId, result)
             return! loop ()
-        | _ -> return! unhandled()
+        | ClosePDB (requestId, name) -> 
+            let result = oracleAPI.ClosePDB name
+            ctx.Sender() <! (requestId, result)
+            return! loop ()
+        | ImportPDB (requestId, manifest, dest, name) -> 
+            let result = oracleAPI.ImportPDB manifest dest name
+            ctx.Sender() <! (requestId, result)
+            return! loop ()
+        | SnapshotPDB (requestId, from, dest, name) -> 
+            let result = oracleAPI.ImportPDB from dest name
+            ctx.Sender() <! (requestId, result)
+            return! loop ()
+        | ExportPDB (requestId, manifest, name) -> 
+            let result = oracleAPI.ExportPDB manifest name
+            ctx.Sender() <! (requestId, result)
+            return! loop ()
+        | DeletePDB (requestId, name) -> 
+            let result = oracleAPI.DeletePDB name
+            ctx.Sender() <! (requestId, result)
+            return! loop ()
     }
     loop ()
 

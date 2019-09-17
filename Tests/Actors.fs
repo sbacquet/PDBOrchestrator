@@ -5,14 +5,14 @@ open Akkling.TestKit
 open Xunit
 open Application
 open Domain.PDB
-open Domain.State
+open Domain.OracleInstanceState
 open Domain.OrchestratorState
-open Application.OracleServerActor
+open Application.OracleInstanceActor
 open Application.OrchestratorActor
 open Application.PendingRequest
 open Application.Oracle
 
-let domainState : Domain.State.State = { 
+let instance1State : OracleInstanceState = { 
     MasterPDBs = [ Domain.PDB.newMasterPDB "test1" [ Domain.PDB.newSchema "user" "password" "FusionInvest" ] ]
     MasterPDBVersions = [ newPDBVersion "test1" 1 "me" "no comment" ]
     LockedMasterPDBs = Map.empty
@@ -30,8 +30,8 @@ let fakeOracleAPI = {
 
 [<Fact>]
 let ``Test state transfer`` () = testDefault <| fun tck ->
-    let aref1 = spawn tck "StateAgent1" <| props (oracleServerActorBody fakeOracleAPI domainState)
-    let aref2 = spawn tck "StateAgent2" <| props (oracleServerActorBody fakeOracleAPI (newState()))
+    let aref1 = spawn tck "StateAgent1" <| props (oracleInstanceActorBody fakeOracleAPI instance1State)
+    let aref2 = spawn tck "StateAgent2" <| props (oracleInstanceActorBody fakeOracleAPI (newState()))
 
     (retype aref1) <! TransferState "StateAgent2"
 
@@ -47,7 +47,7 @@ let orchestratorState = {
 
 let getInstanceState name =
     match name with
-    | "server1" -> domainState
+    | "server1" -> instance1State
     | _ -> newState()
 
 [<Fact>]
@@ -60,9 +60,9 @@ let ``Synchronize state`` () = testDefault <| fun tck ->
 
 [<Fact>]
 let ``Oracle server actor creates PDB`` () = testDefault <| fun tck ->
-    let oracleActor = spawn tck "server1" <| props (oracleServerActorBody fakeOracleAPI domainState)
+    let oracleActor = spawn tck "server1" <| props (oracleInstanceActorBody fakeOracleAPI instance1State)
 
-    let stateBefore : DTO.State = retype oracleActor <? Application.OracleServerActor.GetState |> Async.RunSynchronously
+    let stateBefore : DTO.State = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously
 
     let parameters = {
         Name = "test1"
@@ -74,7 +74,7 @@ let ``Oracle server actor creates PDB`` () = testDefault <| fun tck ->
     }
     let res : MasterPDBCreationResult = retype oracleActor <? CreateMasterPDB (newRequestId(), parameters) |> Async.RunSynchronously
 
-    let stateAfter : DTO.State = retype oracleActor <? Application.OracleServerActor.GetState |> Async.RunSynchronously
+    let stateAfter : DTO.State = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously
 
     Some res
     //let expected : Application.Oracle.OraclePDBResult = Ok "test1"

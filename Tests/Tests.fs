@@ -5,7 +5,7 @@ open Domain.PDB
 open Tests.PDBRepositoryGenericTests
 open Swensen.Unquote
 open Application
-open Domain.State
+open Domain.OracleInstanceState
 
 [<Fact>]
 let ``Fake PDB repo in memory`` () =
@@ -22,7 +22,7 @@ let ``Fake PDB repo in memory`` () =
         | Some pdb -> Ok pdb
     ``Add and find`` cleanMasterPDBRepo registerMasterPDB getMasterPDB
 
-let domainState : Domain.State.State = { 
+let instance1State = { 
     MasterPDBs = [ Domain.PDB.newMasterPDB "test1" [ Domain.PDB.newSchema "user" "password" "FusionInvest" ] ]
     MasterPDBVersions = [ newPDBVersion "test1" 1 "me" "no comment" ]
     LockedMasterPDBs = Map.empty
@@ -31,7 +31,7 @@ let domainState : Domain.State.State = {
 
 [<Fact>]
 let ``Get state`` () =
-    let currentState = DTO.stateToDTO domainState
+    let currentState = DTO.stateToDTO instance1State
     test <@ currentState.MasterPDBs.Length = 1 @>
     test <@ currentState.MasterPDBs.[0].Name = "test1" @>
     test <@ currentState.MasterPDBs.[0].Versions.Length = 1 @>

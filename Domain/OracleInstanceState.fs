@@ -1,9 +1,9 @@
-﻿module Domain.State
+﻿module Domain.OracleInstanceState
 
 open Domain
 open Domain.Common
 
-type State = {
+type OracleInstanceState = {
     MasterPDBs: Domain.PDB.MasterPDB list
     MasterPDBVersions: Domain.PDB.MasterPDBVersion list
     UnusedMasterPDBVersions: Set<Domain.PDB.VersionKey>
@@ -12,7 +12,7 @@ type State = {
 
 let newState () = { MasterPDBs = []; MasterPDBVersions = []; LockedMasterPDBs = Map.empty; UnusedMasterPDBVersions = Set.empty }
 
-type StateError =
+type OracleInstanceStateError =
 | MasterPDBWithSameNameAlreadyExists of Domain.PDB.MasterPDB
 | MasterPDBDoesNotExist of string
 | MasterPDBVersionAlreadyExists of Domain.PDB.MasterPDBVersion

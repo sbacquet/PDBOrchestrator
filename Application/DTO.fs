@@ -30,7 +30,7 @@ type State = {
     MasterPDBs: MasterPDB list
 }
 
-let stateToDTO (state : Domain.State.State) : State =
+let stateToDTO (state : Domain.OracleInstanceState.OracleInstanceState) : State =
     let mapMasterPDB 
         (versions:Domain.PDB.MasterPDBVersion list) 
         (locks:Map<string, Domain.PDB.LockInfo>)
@@ -48,12 +48,12 @@ let stateToDTO (state : Domain.State.State) : State =
                     Version = version.Version
                     Comment = version.Comment
                     CreatedBy = version.CreatedBy
-                    Unused = Domain.State.isPDBVersionUnused pdb.Name version.Version state
+                    Unused = Domain.OracleInstanceState.isPDBVersionUnused pdb.Name version.Version state
                 })
             let versionToDTO unused (version : Domain.PDB.MasterPDBVersion) =
                 { Version = version.Version; CreatedBy = version.CreatedBy; Comment = version.Comment; Unused = unused }
             let activeVersion = 
-                Domain.State.getLatestUsedMasterPDBVersion pdb.Name state
+                Domain.OracleInstanceState.getLatestUsedMasterPDBVersion pdb.Name state
                 |> toOption
                 |> Option.map (versionToDTO false)
             { 
@@ -73,7 +73,7 @@ let stateToDTO (state : Domain.State.State) : State =
             |> List.map (mapMasterPDB state.MasterPDBVersions state.LockedMasterPDBs)
     }
 
-let DTOtoState (state : State) : Domain.State.State =
+let DTOtoState (state : State) : Domain.OracleInstanceState.OracleInstanceState =
     {
         MasterPDBs = 
             state.MasterPDBs 

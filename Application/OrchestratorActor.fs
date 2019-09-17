@@ -1,7 +1,7 @@
 ﻿module Application.OrchestratorActor
 
 open Akkling
-open Application.OracleServerActor
+open Application.OracleInstanceActor
 open Domain.OrchestratorState
 
 type Command =
@@ -14,7 +14,7 @@ let primaryServerActor (ctx : Actor<_>) name =
 
 let spawnChildActors oracleAPI state getInstanceState (ctx : Actor<_>) =
     state.OracleInstances |> List.iter (fun instance ->
-        spawn ctx instance.Name <| props (oracleServerActorBody oracleAPI (getInstanceState instance.Name)) |> ignore
+        spawn ctx instance.Name <| props (oracleInstanceActorBody oracleAPI (getInstanceState instance.Name)) |> ignore
     )
 
 let orchestratorActorBody oracleAPI initialState getInstanceState (ctx : Actor<_>) =

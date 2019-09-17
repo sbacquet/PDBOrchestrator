@@ -6,7 +6,7 @@
   <ItemGroup>
     <Compile Include="Common.fs" />
     <Compile Include="PDB.fs" />
-    <Compile Include="State.fs" />
+    <Compile Include="OracleInstanceState.fs" />
     <Compile Include="OrchestratorState.fs" />
   </ItemGroup>
   <Import Project="..\.paket\Paket.Restore.targets" />
