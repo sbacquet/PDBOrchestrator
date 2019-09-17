@@ -27,7 +27,10 @@ let ``Test state transfer`` () = testDefault <| fun tck ->
     expectMsg tck (StateSet "StateAgent2")
 
 let orchestratorState = {
-    OracleInstances = [ { Name = "server1"; Server = "toto.com"; DBAUser = ""; DBAPassword = "" } ]
+    OracleInstances = [ 
+        { Name = "server1"; Server = "toto.com"; DBAUser = ""; DBAPassword = "" } 
+        { Name = "server2"; Server = "toto.com"; DBAUser = ""; DBAPassword = "" } 
+    ]
     PrimaryServer = "server1"
 }
 

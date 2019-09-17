@@ -2,8 +2,8 @@
 
 #if INTERACTIVE
 #load "CompensableAction.fsx"
-#r @"d:\Documents\git_repos\PDBOrchestrator\packages\FsSql.Core\lib\netstandard2.0\FsSql.dll"
-#r @"d:\Documents\git_repos\PDBOrchestrator\packages\Oracle.ManagedDataAccess.Core\lib\netstandard2.0\Oracle.ManagedDataAccess.dll"
+#r @"..\packages\FsSql.Core\lib\netstandard2.0\FsSql.dll"
+#r @"..\packages\Oracle.ManagedDataAccess.Core\lib\netstandard2.0\Oracle.ManagedDataAccess.dll"
 #endif
 
 open System
