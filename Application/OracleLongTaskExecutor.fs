@@ -1,9 +1,25 @@
 ﻿module Application.OracleLongTaskExecutor
 
 open Akkling
+open Application.PendingRequest
+open Application.Oracle
+
+type CreatePDBFromDumpParams = {
+    Name: string
+    AdminUserName: string
+    AdminUserPassword: string
+    Destination: string 
+    DumpPath:string
+    Schemas: string list
+    TargetSchemas: (string * string) list
+    Directory:string
+    User: string
+    Comment: string
+    Callback: Akka.Actor.IActorRef -> OraclePDBResult -> unit
+}
 
 type Command =
-| CreatePDB of string * string * string * string
+| CreatePDBFromDump of CreatePDBFromDumpParams
 | ClosePDB of System.Guid * string
 | ImportPDB of System.Guid * string * string * string
 | SnapshotPDB of System.Guid * string * string * string
@@ -11,13 +27,13 @@ type Command =
 | DeletePDB of System.Guid * string
 
 
-let oracleLogTaskExecutorBody (ctx : Actor<_>) =
+let oracleLogTaskExecutorBody (ctx : Actor<Command>) =
     let rec loop () = actor {
         let! n = ctx.Receive()
         match n with
-        | CreatePDB (a, b, c, name) -> 
-            let result : Application.Oracle.OraclePDBResult = Ok name // TODO (inject OracleAPI)
-            ctx.Sender() <! result
+        | CreatePDBFromDump parameters -> 
+            let result : OraclePDBResult = Ok parameters.Name // TODO (inject OracleAPI)
+            result |> parameters.Callback (untyped (ctx.Sender()))
             return! loop ()
         | _ -> return! unhandled()
     }

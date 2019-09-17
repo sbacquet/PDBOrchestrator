@@ -51,7 +51,15 @@ let ``Synchronize state`` () = testDefault <| fun tck ->
 let ``Oracle server actor creates PDB`` () = testDefault <| fun tck ->
     let oracleActor = spawn tck "server1" <| props (oracleServerActorBody domainState)
 
-    let res : Application.Oracle.OraclePDBResult = (retype oracleActor) <? CreateMasterPDB "test1" |> Async.RunSynchronously
+    let parameters = {
+        Name = "test1"
+        Dump = ""
+        Schemas = []
+        TargetSchemas = []
+        User = ""
+        Comment = ""
+    }
+    let res : Application.Oracle.OraclePDBResult = oracleActor <? CreateMasterPDB parameters |> Async.RunSynchronously
     Some res
     //let expected : Application.Oracle.OraclePDBResult = Ok "test1"
     //expectMsg tck expected

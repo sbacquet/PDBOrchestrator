@@ -4,11 +4,21 @@ open Akkling
 open Application.Oracle
 open Application.OracleLongTaskExecutor
 
+type CreateMasterPDBParams = {
+    Name: string
+    Dump: string
+    Schemas: string list
+    TargetSchemas: (string * string * string) list
+    User: string
+    Comment: string
+}
+
 type Command =
 | GetState
 | SetState of Domain.State.State
 | TransferState of string
-| CreateMasterPDB of string
+| CreateMasterPDB of CreateMasterPDBParams
+| PDBCreated of CreateMasterPDBParams * OraclePDBResult * IActorRef<OraclePDBResult>
 
 type Event =
 | StateSet of string
@@ -21,82 +31,71 @@ let getNewState oldState newStateResult =
         System.Diagnostics.Debug.Print("Error: {0}\n", error.ToString()) |> ignore
         oldState
 
-type TransientState = {
-    PendingPDBRequests: Map<PendingRequest.RequestId, PendingRequest.PendingRequest<Command>>
-}
-
-let newTransientState () = { PendingPDBRequests = Map.empty }
-
-let registerCommand command requester transientState =
-    let id = System.Guid.NewGuid()
-    let request = { PendingRequest.Id = id; PendingRequest.Command = command; PendingRequest.Requester = requester }
-    id, { transientState with PendingPDBRequests = transientState.PendingPDBRequests.Add(id, request) }
-
-let getRequest id transientState =
-    transientState.PendingPDBRequests.TryFind id
-
 let spawnChildActors<'M> (ctx : Actor<'M>) =
     spawn ctx "oracleLongTaskExecutor" <| props oracleLogTaskExecutorBody |> ignore
     //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())
     //spawn ctx "oracleLongTaskExecutor" <| Props.From(p) |> ignore
 
-let oracleServerActorBody initialDomainState (ctx : Actor<Command>) =
-    let rec loop (state : Domain.State.State * TransientState) = actor {
+let oracleServerActorBody initialState (ctx : Actor<_>) =
+    let rec loop (state : Domain.State.State) = actor {
         let! msg = ctx.Receive()
-        let domainState, transientState = state
         match msg with
-        //| :? Command as command ->
-        //    match command with
-            | GetState -> 
-                System.Diagnostics.Debug.Print("State: PDB count = {0}\n", domainState.MasterPDBs.Length) |> ignore
-                ctx.Sender() <! DTO.stateToDTO domainState
+        | GetState -> 
+            System.Diagnostics.Debug.Print("State: PDB count = {0}\n", state.MasterPDBs.Length) |> ignore
+            ctx.Sender() <! DTO.stateToDTO state
+            return! loop state
+        | SetState newState -> 
+            ctx.Sender() <! StateSet ctx.Self.Path.Name
+            return! loop newState
+        //| MasterPDBVersionCreated (pdb, version, createdBy, comment) ->
+        //    let newStateResult =
+        //        state |> Domain.State.addMasterPDBVersionToState pdb version createdBy comment 
+        //    ctx.Sender() <! newStateResult
+        //    return! loop (getNewState state newStateResult)
+        | TransferState target ->
+            let targetActor = 
+                (select ctx <| sprintf "../%s" target).ResolveOne(System.TimeSpan.FromSeconds(1.))
+                |> Async.RunSynchronously 
+            targetActor <<! SetState state
+            return! loop state
+        | CreateMasterPDB parameters ->
+            let oracleExecutor = 
+                (select ctx <| "oracleLongTaskExecutor").ResolveOne(System.TimeSpan.FromSeconds(1.))
+                |> Async.RunSynchronously 
+            let parameters = {
+                Name = parameters.Name
+                AdminUserName = "dbadmin"
+                AdminUserPassword = "pass"
+                Destination = "/u01/blabla"
+                DumpPath = parameters.Dump
+                Schemas = parameters.Schemas
+                TargetSchemas = parameters.TargetSchemas |> List.map (fun (u, p, _) -> (u, p))
+                Directory = "blabla"
+                User = parameters.User
+                Comment = parameters.Comment
+                Callback = fun sender r -> 
+                    typed(sender) <! PDBCreated (parameters, r, ctx.Sender())                
+            }
+            oracleExecutor <! OracleLongTaskExecutor.CreatePDBFromDump parameters
+            return! loop state
+        | PDBCreated (parameters, result, replyTo) ->
+            match result with
+            | Ok _ -> 
+                printfn "PDB %s created" parameters.Name
+                let newStateResult = 
+                    state 
+                    |> Domain.State.addMasterPDBToState 
+                        parameters.Name 
+                        (parameters.TargetSchemas |> List.map (fun (user, password, t) -> Domain.PDB.newSchema user password t)) 
+                        parameters.User 
+                        parameters.Comment
+                replyTo <! result
+                return! loop (getNewState state newStateResult)
+            | Error e -> 
+                printfn "PDB %s failed to create with error %A" parameters.Name e
+                replyTo <! result
                 return! loop state
-            | SetState newState -> 
-                ctx.Sender() <! StateSet ctx.Self.Path.Name
-                return! loop (newState, transientState)
-            //| MasterPDBCreated (name, schemas, user, comment) -> 
-            //    let newStateResult = 
-            //        state 
-            //        |> Domain.State.addMasterPDBToState 
-            //            name 
-            //            (schemas |> List.map (fun (user, password, t) -> Domain.PDB.newSchema user password t)) 
-            //            user 
-            //            comment
-            //    ctx.Sender() <! newStateResult
-            //    return! loop (getNewState state newStateResult)
-            //| MasterPDBVersionCreated (pdb, version, createdBy, comment) ->
-            //    let newStateResult =
-            //        state |> Domain.State.addMasterPDBVersionToState pdb version createdBy comment 
-            //    ctx.Sender() <! newStateResult
-            //    return! loop (getNewState state newStateResult)
-            | TransferState target ->
-                let targetActor = 
-                    (select ctx <| sprintf "../%s" target).ResolveOne(System.TimeSpan.FromSeconds(1.))
-                    |> Async.RunSynchronously 
-                targetActor <<! SetState domainState
-                return! loop state
-            | CreateMasterPDB name as command ->
-                //let requestId, newTransientState = registerCommand command (untyped (ctx.Sender())) transientState
-                let oracleExecutor = 
-                    (select ctx <| "oracleLongTaskExecutor").ResolveOne(System.TimeSpan.FromSeconds(1.))
-                    |> Async.RunSynchronously 
-                oracleExecutor <<! OracleLongTaskExecutor.CreatePDB ("dbadmin", "pass", "/u01/blabla", name)
-                return! loop state
-        //| :? PendingRequest.RequestResult<OraclePDBResult> as requestResult ->
-        //    let (requestId, result) = requestResult
-        //    let request = transientState |> getRequest requestId
-        //    match request with
-        //    | Some r ->
-        //        match r.Command with
-        //        | CreateMasterPDB name -> 
-        //            (typed r.Requester) <! MasterPDBCreated result
-        //            return! loop (domainState, transientState)
-        //        | _ -> return! loop state
-        //    | None -> 
-        //        printfn "!!! Request with id %s not found !!!" (requestId.ToString())
-        //        return! loop state
-        //| _ -> return! loop state
     }
     ctx |> spawnChildActors<Command>
-    loop (initialDomainState, newTransientState())
+    loop initialState
 
