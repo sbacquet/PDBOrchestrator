@@ -4,7 +4,7 @@ type OracleResult<'T> = Result<'T, Oracle.ManagedDataAccess.Client.OracleExcepti
 type OraclePDBResult = OracleResult<string>
 
 type OracleAPI = {
-    NewPDBFromDump : string -> string -> string -> string -> string list -> string list -> string -> string -> string -> OraclePDBResult
+    NewPDBFromDump : string -> string -> string -> string -> string list -> (string * string) list -> string -> string -> string -> OraclePDBResult
     ClosePDB : string -> OraclePDBResult
     DeletePDB : string -> OraclePDBResult
     ExportPDB : string -> string -> OraclePDBResult

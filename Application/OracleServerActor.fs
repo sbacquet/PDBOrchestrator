@@ -49,12 +49,12 @@ let getNewState oldState newStateResult =
         System.Diagnostics.Debug.Print("Error: {0}\n", error.ToString()) |> ignore
         oldState
 
-let spawnChildActors (ctx : Actor<obj>) =
-    spawn ctx "oracleLongTaskExecutor" <| props oracleLogTaskExecutorBody |> ignore
+let spawnChildActors oracleAPI (ctx : Actor<obj>) =
+    spawn ctx "oracleLongTaskExecutor" <| props (oracleLongTaskExecutorBody oracleAPI) |> ignore
     //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())
     //spawn ctx "oracleLongTaskExecutor" <| Props.From(p) |> ignore
 
-let oracleServerActorBody initialState (ctx : Actor<obj>) =
+let oracleServerActorBody oracleAPI initialState (ctx : Actor<obj>) =
     let rec loop (state : Domain.State.State) (requests : RequestMap<Command>) = actor {
         let! msg = ctx.Receive()
         match msg with
@@ -125,6 +125,6 @@ let oracleServerActorBody initialState (ctx : Actor<obj>) =
                     return! loop state newRequests
         | _ -> return! loop state requests
     }
-    ctx |> spawnChildActors
+    ctx |> spawnChildActors oracleAPI
     loop initialState Map.empty
 

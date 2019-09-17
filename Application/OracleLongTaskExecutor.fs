@@ -19,18 +19,20 @@ type CreatePDBFromDumpParams = {
 type Command =
 | CreatePDBFromDump of WithRequestId<CreatePDBFromDumpParams>
 | ClosePDB of WithRequestId<string>
-| ImportPDB of System.Guid * string * string * string
-| SnapshotPDB of System.Guid * string * string * string
-| ExportPDB of System.Guid * string * string
-| DeletePDB of System.Guid * string
+| ImportPDB of WithRequestId<string, string, string>
+| SnapshotPDB of WithRequestId<string, string, string>
+| ExportPDB of WithRequestId<string, string>
+| DeletePDB of WithRequestId<string>
 
+let newManifestName (pdb:string) version =
+    sprintf "%s_v%03d" (pdb.ToUpper()) version
 
-let oracleLogTaskExecutorBody (ctx : Actor<Command>) =
+let oracleLongTaskExecutorBody (oracleAPI : OracleAPI) (ctx : Actor<Command>) =
     let rec loop () = actor {
         let! n = ctx.Receive()
         match n with
         | CreatePDBFromDump (requestId, parameters) -> 
-            let result : OraclePDBResult = Ok parameters.Name // TODO (inject OracleAPI)
+            let result : OraclePDBResult = oracleAPI.NewPDBFromDump parameters.AdminUserName parameters.AdminUserPassword parameters.Destination parameters.DumpPath parameters.Schemas parameters.TargetSchemas parameters.Directory (newManifestName parameters.Name 1) parameters.Name
             let response : WithRequestId<OraclePDBResult> = (requestId, result)
             ctx.Sender() <! response
             return! loop ()

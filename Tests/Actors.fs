@@ -10,6 +10,7 @@ open Domain.OrchestratorState
 open Application.OracleServerActor
 open Application.OrchestratorActor
 open Application.PendingRequest
+open Application.Oracle
 
 let domainState : Domain.State.State = { 
     MasterPDBs = [ Domain.PDB.newMasterPDB "test1" [ Domain.PDB.newSchema "user" "password" "FusionInvest" ] ]
@@ -18,10 +19,19 @@ let domainState : Domain.State.State = {
     UnusedMasterPDBVersions = Set.empty
 }
 
+let fakeOracleAPI = {
+    NewPDBFromDump = fun _ _ _ _ _ _ _ _ name -> printfn "Creating new PDB %s..." name; Ok name
+    ClosePDB = fun name -> Ok name
+    DeletePDB = fun name -> Ok name
+    ExportPDB = fun _ name -> Ok name
+    ImportPDB = fun _ _ name -> Ok name
+    SnapshotPDB = fun _ _ name -> Ok name
+}
+
 [<Fact>]
 let ``Test state transfer`` () = testDefault <| fun tck ->
-    let aref1 = spawn tck "StateAgent1" <| props (oracleServerActorBody domainState)
-    let aref2 = spawn tck "StateAgent2" <| props (oracleServerActorBody (newState()))
+    let aref1 = spawn tck "StateAgent1" <| props (oracleServerActorBody fakeOracleAPI domainState)
+    let aref2 = spawn tck "StateAgent2" <| props (oracleServerActorBody fakeOracleAPI (newState()))
 
     (retype aref1) <! TransferState "StateAgent2"
 
@@ -42,7 +52,7 @@ let getInstanceState name =
 
 [<Fact>]
 let ``Synchronize state`` () = testDefault <| fun tck ->
-    let orchestrator = spawn tck "orchestrator" <| props (orchestratorActorBody orchestratorState getInstanceState)
+    let orchestrator = spawn tck "orchestrator" <| props (orchestratorActorBody fakeOracleAPI orchestratorState getInstanceState)
 
     orchestrator <! Synchronize "server2"
 
@@ -50,7 +60,7 @@ let ``Synchronize state`` () = testDefault <| fun tck ->
 
 [<Fact>]
 let ``Oracle server actor creates PDB`` () = testDefault <| fun tck ->
-    let oracleActor = spawn tck "server1" <| props (oracleServerActorBody domainState)
+    let oracleActor = spawn tck "server1" <| props (oracleServerActorBody fakeOracleAPI domainState)
 
     let stateBefore : DTO.State = retype oracleActor <? Application.OracleServerActor.GetState |> Async.RunSynchronously
 

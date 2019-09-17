@@ -107,7 +107,7 @@ let openPDBCompensable readWrite =
         (openPDB readWrite) 
         closePDB
 
-let importSchemasInPDB (dumpPath:string) (schemas:string list) (targetSchemas:string list) (directory:string) name : OraclePDBResult =
+let importSchemasInPDB (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) name : OraclePDBResult =
     Ok name // TODO
 
 let createAndGrantPDB keepOpen adminUserName adminUserPassword dest = 
@@ -132,7 +132,7 @@ let exportPDB manifest =
 
     closePDB >=> export
 
-let createManifestFromDump adminUserName adminUserPassword dest (dumpPath:string) (schemas:string list) (targetSchemas:string list) (directory:string) (manifest:string) = 
+let createManifestFromDump adminUserName adminUserPassword dest (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) (manifest:string) = 
     [
         createPDBCompensable adminUserName adminUserPassword dest true
         notCompensable grantPDB

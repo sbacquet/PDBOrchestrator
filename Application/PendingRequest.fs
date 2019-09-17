@@ -6,8 +6,6 @@ type RequestId = System.Guid
 
 let newRequestId () = System.Guid.NewGuid()
 
-type RequestResult<'R> = RequestId * 'R
-
 type PendingRequest<'C> = {
     Id: System.Guid 
     Command: 'C
@@ -15,6 +13,9 @@ type PendingRequest<'C> = {
 }
 
 type WithRequestId<'T> = RequestId * 'T
+type WithRequestId<'T1, 'T2> = RequestId * 'T1 * 'T2
+type WithRequestId<'T1, 'T2, 'T3> = RequestId * 'T1 * 'T2 * 'T3
+type WithRequestId<'T1, 'T2, 'T3, 'T4> = RequestId * 'T1 * 'T2 * 'T3 * 'T4
 
 type RequestMap<'C> = Map<RequestId, PendingRequest<'C>>
 
