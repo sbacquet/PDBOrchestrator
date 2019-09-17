@@ -20,9 +20,8 @@ type Command =
 | CreateMasterPDB of CreateMasterPDBParams
 | PDBCreated of CreateMasterPDBParams * OraclePDBResult * IActorRef<OraclePDBResult>
 
-type Event =
-| StateSet of string
-| MasterPDBCreated of OraclePDBResult
+type StateSet = | StateSet of string
+type MasterPDBCreated = | MasterPDBCreated of OraclePDBResult
 
 let getNewState oldState newStateResult =
     match newStateResult with
@@ -62,7 +61,7 @@ let oracleServerActorBody initialState (ctx : Actor<_>) =
             let oracleExecutor = 
                 (select ctx <| "oracleLongTaskExecutor").ResolveOne(System.TimeSpan.FromSeconds(1.))
                 |> Async.RunSynchronously 
-            let parameters = {
+            let parameters2 = {
                 Name = parameters.Name
                 AdminUserName = "dbadmin"
                 AdminUserPassword = "pass"
@@ -71,12 +70,10 @@ let oracleServerActorBody initialState (ctx : Actor<_>) =
                 Schemas = parameters.Schemas
                 TargetSchemas = parameters.TargetSchemas |> List.map (fun (u, p, _) -> (u, p))
                 Directory = "blabla"
-                User = parameters.User
-                Comment = parameters.Comment
                 Callback = fun sender r -> 
                     typed(sender) <! PDBCreated (parameters, r, ctx.Sender())                
             }
-            oracleExecutor <! OracleLongTaskExecutor.CreatePDBFromDump parameters
+            oracleExecutor <! OracleLongTaskExecutor.CreatePDBFromDump parameters2
             return! loop state
         | PDBCreated (parameters, result, replyTo) ->
             match result with

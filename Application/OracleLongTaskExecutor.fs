@@ -13,8 +13,6 @@ type CreatePDBFromDumpParams = {
     Schemas: string list
     TargetSchemas: (string * string) list
     Directory:string
-    User: string
-    Comment: string
     Callback: Akka.Actor.IActorRef -> OraclePDBResult -> unit
 }
 
