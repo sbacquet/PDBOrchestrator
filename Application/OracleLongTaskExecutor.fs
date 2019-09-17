@@ -3,6 +3,7 @@
 open Akkling
 open Application.PendingRequest
 open Application.Oracle
+open Application.PendingRequest
 
 type CreatePDBFromDumpParams = {
     Name: string
@@ -13,12 +14,11 @@ type CreatePDBFromDumpParams = {
     Schemas: string list
     TargetSchemas: (string * string) list
     Directory:string
-    Callback: Akka.Actor.IActorRef -> OraclePDBResult -> unit
 }
 
 type Command =
-| CreatePDBFromDump of CreatePDBFromDumpParams
-| ClosePDB of System.Guid * string
+| CreatePDBFromDump of WithRequestId<CreatePDBFromDumpParams>
+| ClosePDB of WithRequestId<string>
 | ImportPDB of System.Guid * string * string * string
 | SnapshotPDB of System.Guid * string * string * string
 | ExportPDB of System.Guid * string * string
@@ -29,9 +29,10 @@ let oracleLogTaskExecutorBody (ctx : Actor<Command>) =
     let rec loop () = actor {
         let! n = ctx.Receive()
         match n with
-        | CreatePDBFromDump parameters -> 
+        | CreatePDBFromDump (requestId, parameters) -> 
             let result : OraclePDBResult = Ok parameters.Name // TODO (inject OracleAPI)
-            result |> parameters.Callback (untyped (ctx.Sender()))
+            let response : WithRequestId<OraclePDBResult> = (requestId, result)
+            ctx.Sender() <! response
             return! loop ()
         | _ -> return! unhandled()
     }

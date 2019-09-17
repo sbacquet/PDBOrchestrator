@@ -9,6 +9,7 @@ open Domain.State
 open Domain.OrchestratorState
 open Application.OracleServerActor
 open Application.OrchestratorActor
+open Application.PendingRequest
 
 let domainState : Domain.State.State = { 
     MasterPDBs = [ Domain.PDB.newMasterPDB "test1" [ Domain.PDB.newSchema "user" "password" "FusionInvest" ] ]
@@ -51,6 +52,8 @@ let ``Synchronize state`` () = testDefault <| fun tck ->
 let ``Oracle server actor creates PDB`` () = testDefault <| fun tck ->
     let oracleActor = spawn tck "server1" <| props (oracleServerActorBody domainState)
 
+    let stateBefore : DTO.State = retype oracleActor <? Application.OracleServerActor.GetState |> Async.RunSynchronously
+
     let parameters = {
         Name = "test1"
         Dump = ""
@@ -59,7 +62,10 @@ let ``Oracle server actor creates PDB`` () = testDefault <| fun tck ->
         User = ""
         Comment = ""
     }
-    let res : Application.Oracle.OraclePDBResult = oracleActor <? CreateMasterPDB parameters |> Async.RunSynchronously
+    let res : MasterPDBCreationResult = retype oracleActor <? CreateMasterPDB (newRequestId(), parameters) |> Async.RunSynchronously
+
+    let stateAfter : DTO.State = retype oracleActor <? Application.OracleServerActor.GetState |> Async.RunSynchronously
+
     Some res
     //let expected : Application.Oracle.OraclePDBResult = Ok "test1"
     //expectMsg tck expected
