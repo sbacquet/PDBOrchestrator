@@ -5,6 +5,8 @@ open Application.Oracle
 open Application.OracleLongTaskExecutor
 open Application.PendingRequest
 open Domain
+open Domain.OracleInstanceState
+open Application.MasterPDBActor
 
 type CreateMasterPDBParams = {
     Name: string
@@ -49,13 +51,19 @@ let getNewState oldState newStateResult =
         System.Diagnostics.Debug.Print("Error: {0}\n", error.ToString()) |> ignore
         oldState
 
-let spawnChildActors oracleAPI (ctx : Actor<obj>) =
+//let masterPDBActorName pdb = sprintf "MasterPDB[%s]" pdb
+let masterPDBActorName = id
+
+let spawnChildActors oracleAPI (state : OracleInstanceState) (ctx : Actor<obj>) =
     spawn ctx "oracleLongTaskExecutor" <| props (oracleLongTaskExecutorBody oracleAPI) |> ignore
+    state.MasterPDBs |> List.iter (fun pdb -> 
+        spawn ctx (masterPDBActorName pdb.Name) <| props (masterPDBActorBody) |> ignore
+    )
     //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())
     //spawn ctx "oracleLongTaskExecutor" <| Props.From(p) |> ignore
 
 let oracleInstanceActorBody oracleAPI initialState (ctx : Actor<obj>) =
-    let rec loop (state : Domain.OracleInstanceState.OracleInstanceState) (requests : RequestMap<Command>) = actor {
+    let rec loop (state : OracleInstanceState) (requests : RequestMap<Command>) = actor {
         let! msg = ctx.Receive()
         match msg with
         | :? Command as command ->
@@ -125,6 +133,6 @@ let oracleInstanceActorBody oracleAPI initialState (ctx : Actor<obj>) =
                     return! loop state newRequests
         | _ -> return! loop state requests
     }
-    ctx |> spawnChildActors oracleAPI
+    ctx |> spawnChildActors oracleAPI initialState
     loop initialState Map.empty
 
