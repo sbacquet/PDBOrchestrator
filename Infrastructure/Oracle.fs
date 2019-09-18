@@ -1,16 +1,11 @@
 ﻿module Infrastructure.Oracle
 
-#if INTERACTIVE
-#load "CompensableAction.fsx"
-#r @"..\packages\FsSql.Core\lib\netstandard2.0\FsSql.dll"
-#r @"..\packages\Oracle.ManagedDataAccess.Core\lib\netstandard2.0\Oracle.ManagedDataAccess.dll"
-#endif
-
 open System
 open System.Data
 open Oracle.ManagedDataAccess.Client
 open Compensable
 open Application.Oracle
+open Microsoft.Extensions.Logging
 
 type PDBCompensableAction = CompensableAction<string, Oracle.ManagedDataAccess.Client.OracleException>
 
@@ -36,8 +31,8 @@ let (=>) a b = Sql.Parameter.make(a, b)
 let (>>=) r f = Result.bind f r
 let (>=>) f1 f2 = fun x -> f1 x >>= f2
 
-let createPDB adminUserName adminUserPassword dest keepOpen name : OraclePDBResult = 
-    printfn "Creating PDB %s" name
+let createPDB (logger:ILogger) adminUserName adminUserPassword dest keepOpen (name:string) : OraclePDBResult = 
+    logger.LogDebug("Creating PDB {PDB}", name)
     let closeSql = if (keepOpen) then "" else sprintf @"execute immediate 'alter pluggable database %s close immediate';" name
     sprintf 
         @"
@@ -61,8 +56,8 @@ END;
         name adminUserName adminUserPassword dest name closeSql name
     |> exec name connAsDBA
 
-let grantPDB name =
-    printfn "Granting PDB %s" name
+let grantPDB (logger:ILogger) (name:string) =
+    logger.LogDebug("Granting PDB {PDB}", name)
     @"
 BEGIN
     execute immediate 'GRANT execute ON sys.dbms_lock TO public';
@@ -74,24 +69,24 @@ END;
     |> exec name (connAsDBAIn name)
 
 
-let deletePDB name : OraclePDBResult = 
-    printfn "Deleting PDB %s" name
+let deletePDB (logger:ILogger) (name:string) : OraclePDBResult = 
+    logger.LogDebug("Deleting PDB {PDB}", name)
     sprintf @"DROP PLUGGABLE DATABASE %s INCLUDING DATAFILES" name
     |> exec name connAsDBA
 
-let createPDBCompensable adminUserName adminUserPassword dest keepOpen = 
+let createPDBCompensable (logger:ILogger) adminUserName adminUserPassword dest keepOpen = 
     compensable 
-        (createPDB adminUserName adminUserPassword dest keepOpen)
-        deletePDB
+        (createPDB logger adminUserName adminUserPassword dest keepOpen)
+        (deletePDB logger)
 
-let openPDB readWrite name : OraclePDBResult =
-    printfn "Opening PDB %s" name
+let openPDB (logger:ILogger) readWrite (name:string) : OraclePDBResult =
+    logger.LogDebug("Opening PDB {PDB}", name)
     let readMode = if readWrite then "READ WRITE" else "READ ONLY"
     sprintf @"ALTER PLUGGABLE DATABASE %s OPEN %s FORCE" name readMode
     |> exec name connAsDBA
 
-let closePDB name : OraclePDBResult = 
-    printfn "Closing PDB %s" name
+let closePDB (logger:ILogger) (name:string) : OraclePDBResult = 
+    logger.LogDebug("Closing PDB {PDB}", name)
     let result = 
         sprintf @"ALTER PLUGGABLE DATABASE %s CLOSE IMMEDIATE" name
         |> exec name connAsDBA
@@ -102,24 +97,24 @@ let closePDB name : OraclePDBResult =
         | 65020 -> Ok name // already closed -> ignore it
         | _ -> Error ex
 
-let openPDBCompensable readWrite = 
+let openPDBCompensable (logger:ILogger) readWrite = 
     compensable 
-        (openPDB readWrite) 
-        closePDB
+        (openPDB logger readWrite) 
+        (closePDB logger)
 
-let importSchemasInPDB (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) name : OraclePDBResult =
+let importSchemasInPDB (logger:ILogger) (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) name : OraclePDBResult =
     Ok name // TODO
 
-let createAndGrantPDB keepOpen adminUserName adminUserPassword dest = 
+let createAndGrantPDB (logger:ILogger) keepOpen adminUserName adminUserPassword dest = 
     [
-        createPDBCompensable adminUserName adminUserPassword dest true
-        notCompensable grantPDB
-        notCompensable (if keepOpen then Ok else closePDB)
-    ] |> compose
+        createPDBCompensable logger adminUserName adminUserPassword dest true
+        notCompensable (grantPDB logger)
+        notCompensable (if keepOpen then Ok else closePDB logger)
+    ] |> compose logger
 
-let exportPDB manifest =
-    let export pdb =
-        printfn "Exporting PDB %s" pdb
+let exportPDB (logger:ILogger) manifest =
+    let export (pdb:string) =
+        logger.LogDebug("Exporting PDB {PDB}", pdb)
         sprintf 
             @"
     BEGIN
@@ -130,19 +125,19 @@ let exportPDB manifest =
             pdb manifest pdb
         |> exec pdb connAsDBA
 
-    closePDB >=> export
+    closePDB logger >=> export
 
-let createManifestFromDump adminUserName adminUserPassword dest (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) (manifest:string) = 
+let createManifestFromDump (logger:ILogger) adminUserName adminUserPassword dest (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) (manifest:string) = 
     [
-        createPDBCompensable adminUserName adminUserPassword dest true
-        notCompensable grantPDB
-        notCompensable (importSchemasInPDB dumpPath schemas targetSchemas directory)
-        notCompensable closePDB
-        notCompensable (exportPDB manifest)
-    ] |> compose
+        createPDBCompensable logger adminUserName adminUserPassword dest true
+        notCompensable (grantPDB logger)
+        notCompensable (importSchemasInPDB logger dumpPath schemas targetSchemas directory)
+        notCompensable (closePDB logger)
+        notCompensable (exportPDB logger manifest)
+    ] |> compose logger
 
-let importPDB manifest dest name =
-    printfn "Importing PDB %s" name
+let importPDB (logger:ILogger) manifest dest (name:string) =
+    logger.LogDebug("Importing PDB {PDB}", name)
     sprintf 
         @"
 BEGIN
@@ -163,7 +158,7 @@ END;
         name manifest dest name
     |> exec name connAsDBA
 
-let snapshotPDB from dest name =
+let snapshotPDB (logger:ILogger) from dest name =
     sprintf 
         @"
 BEGIN
@@ -210,11 +205,12 @@ let pdbHasSnapshots name =
         []
     |> Option.get > 0M
 
-let oracleAPI : Application.Oracle.OracleAPI = {
-    NewPDBFromDump = createManifestFromDump
-    ClosePDB = closePDB
-    DeletePDB = deletePDB
-    ExportPDB = exportPDB
-    ImportPDB = importPDB
-    SnapshotPDB = snapshotPDB
-}
+type OracleAPI(loggerFactory : ILoggerFactory) = 
+    member this.Logger = loggerFactory.CreateLogger("Oracle API")
+    interface IOracleAPI with
+        member this.NewPDBFromDump a b c d e f g h i = createManifestFromDump this.Logger a b c d e f g h i
+        member this.ClosePDB name = closePDB this.Logger name
+        member this.DeletePDB name = deletePDB this.Logger name
+        member this.ExportPDB manifest name = exportPDB this.Logger manifest name
+        member this.ImportPDB manifest dest name = importPDB this.Logger manifest dest name
+        member this.SnapshotPDB from dest name = snapshotPDB this.Logger from dest name

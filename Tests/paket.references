@@ -6,3 +6,4 @@ unquote
 Akkling.TestKit
 Akka.Logger.Serilog
 Serilog.Sinks.Trace
+Serilog.Extensions.Logging

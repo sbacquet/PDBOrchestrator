@@ -1,4 +1,6 @@
-﻿module Compensable
+﻿module Infrastructure.Compensable
+
+open Microsoft.Extensions.Logging
 
 type Action<'T, 'E> = 'T -> Result<'T, 'E>
 type Compensation<'T> = 'T -> unit
@@ -9,7 +11,7 @@ let compensable action compensation : CompensableAction<'T, 'E> =
 
 let notCompensable action : CompensableAction<'T, 'E> = action, fun _ -> ()
 
-let compose (actions : CompensableAction<'T, 'E> list) = fun input ->
+let compose (logger:ILogger) (actions : CompensableAction<'T, 'E> list) = fun input ->
     let f (oldResult : Result<'T,'E> * (Compensation<'T> list)) (compAction : CompensableAction<'T, 'E>) : Result<'T,'E> * (Compensation<'T> list) =
         match oldResult with
         | Ok oldValue, comps ->
@@ -18,9 +20,9 @@ let compose (actions : CompensableAction<'T, 'E> list) = fun input ->
             match result with
             | Ok r -> (Ok r, comp :: comps)
             | Error e -> 
-                printfn "Error encountered, compensating"
+                logger.LogWarning("Error encountered, compensating")
                 comps |> List.iter (fun comp -> try comp oldValue with _ -> ())
-                printfn "Compensation done"
+                logger.LogWarning("Compensation done")
                 (Error e, [])
         | error -> error
     let result, _ = actions |> List.fold f (Ok input, [])

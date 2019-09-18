@@ -13,25 +13,10 @@ open Application.PendingRequest
 open Application.Oracle
 open Akka.Configuration
 open Serilog
-
-let instance1State : OracleInstanceState = { 
-    MasterPDBs = [ Domain.PDB.newMasterPDB "test1" [ Domain.PDB.newSchema "user" "password" "FusionInvest" ] ]
-    MasterPDBVersions = [ newPDBVersion "test1" 1 "me" "no comment" ]
-    LockedMasterPDBs = Map.empty
-    UnusedMasterPDBVersions = Set.empty
-}
-
-let fakeOracleAPI = {
-    NewPDBFromDump = fun _ _ _ _ _ _ _ _ name -> printfn "Creating new PDB %s..." name; Ok name
-    ClosePDB = fun name -> Ok name
-    DeletePDB = fun name -> Ok name
-    ExportPDB = fun _ name -> Ok name
-    ImportPDB = fun _ _ name -> Ok name
-    SnapshotPDB = fun _ _ name -> Ok name
-}
+open Microsoft.Extensions.Logging
 
 #if DEBUG
-let test, expectMsg =
+let test, expectMsg, (loggerFactory : ILoggerFactory) =
     if (System.Diagnostics.Debugger.IsAttached) then
         Serilog.Log.Logger <- (new LoggerConfiguration()).WriteTo.Trace().MinimumLevel.Debug().CreateLogger()
         let config = ConfigurationFactory.ParseString @"
@@ -48,12 +33,38 @@ let test, expectMsg =
                 default-timeout = 36000s
             }
         }"
-        Akkling.TestKit.test config, fun tck -> expectMsgWithin tck (System.TimeSpan.FromHours(10.))
+        Akkling.TestKit.test config, 
+        (fun tck -> expectMsgWithin tck (System.TimeSpan.FromHours(10.))), 
+        (new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory)
     else
-        testDefault, expectMsg
+        testDefault, 
+        expectMsg, 
+        (new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory() :> ILoggerFactory)
 #else
 let test = testDefault
+let (loggerFactory : ILoggerFactory) = new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory() :> ILoggerFactory
 #endif
+
+let instance1State : OracleInstanceState = { 
+    MasterPDBs = [ Domain.PDB.newMasterPDB "test1" [ Domain.PDB.newSchema "user" "password" "FusionInvest" ] ]
+    MasterPDBVersions = [ newPDBVersion "test1" 1 "me" "no comment" ]
+    LockedMasterPDBs = Map.empty
+    UnusedMasterPDBVersions = Set.empty
+}
+
+type FakeOracleAPI() = 
+    member this.Logger = loggerFactory.CreateLogger("Fake Oracle API")
+    interface IOracleAPI with
+        member this.NewPDBFromDump _ _ _ _ _ _ _ _ name = 
+            this.Logger.LogDebug("Creating new PDB {PDB}...", name)
+            Ok name
+        member this.ClosePDB name = Ok name
+        member this.DeletePDB name = Ok name
+        member this.ExportPDB _ name = Ok name
+        member this.ImportPDB _ _ name = Ok name
+        member this.SnapshotPDB _ _ name = Ok name
+
+let fakeOracleAPI = FakeOracleAPI()
 
 [<Fact>]
 let ``Test state transfer`` () = test <| fun tck ->

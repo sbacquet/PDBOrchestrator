@@ -27,7 +27,7 @@ type Command =
 let newManifestName (pdb:string) version =
     sprintf "%s_v%03d" (pdb.ToUpper()) version
 
-let oracleLongTaskExecutorBody (oracleAPI : OracleAPI) (ctx : Actor<Command>) =
+let oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
     let rec loop () = actor {
         let! n = ctx.Receive()
         match n with
