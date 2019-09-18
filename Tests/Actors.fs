@@ -112,7 +112,10 @@ let ``Oracle server actor creates PDB`` () = test <| fun tck ->
     }
     let res : MasterPDBCreationResult = retype oracleActor <? CreateMasterPDB (newRequestId(), parameters) |> Async.RunSynchronously
     match res with
-    | MasterPDBCreated _ -> ()
+    | MasterPDBCreated creationResponse -> 
+        match creationResponse with
+        | Ok _ -> ()
+        | Error ex -> failwithf "the creation of %s failed : %A" parameters.Name ex
     | InvalidRequest errors -> failwithf "the request is invalid : %A" errors
 
     let stateAfter : DTO.State = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously
