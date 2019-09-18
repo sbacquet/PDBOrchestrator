@@ -104,13 +104,16 @@ let ``Oracle server actor creates PDB`` () = test <| fun tck ->
 
     let parameters = {
         Name = "test2"
-        Dump = ""
-        Schemas = []
-        TargetSchemas = []
-        User = ""
-        Comment = ""
+        Dump = @"c:\windows\system.ini" // always exists
+        Schemas = [ "schema1" ]
+        TargetSchemas = [ "targetschema1", "pass1", "FusionInvest" ]
+        User = "me"
+        Comment = "yeah"
     }
     let res : MasterPDBCreationResult = retype oracleActor <? CreateMasterPDB (newRequestId(), parameters) |> Async.RunSynchronously
+    match res with
+    | MasterPDBCreated _ -> ()
+    | InvalidRequest errors -> failwithf "the request is invalid : %A" errors
 
     let stateAfter : DTO.State = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously
     ()

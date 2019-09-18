@@ -1,7 +1,7 @@
 ﻿module Domain.OracleInstanceState
 
-open Domain
 open Domain.Common
+open Domain.Common.Result
 
 type OracleInstanceState = {
     MasterPDBs: Domain.PDB.MasterPDB list

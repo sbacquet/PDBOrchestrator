@@ -7,6 +7,7 @@ open Application.PendingRequest
 open Domain
 open Domain.OracleInstanceState
 open Application.MasterPDBActor
+open Domain.Common.Validation
 
 type CreateMasterPDBParams = {
     Name: string
@@ -17,19 +18,54 @@ type CreateMasterPDBParams = {
     Comment: string
 }
 
-type CreateMasterPDBParamsValidation =
-| Valid
-| PDBAlreadyExists of string
+let newCreateMasterPDBParams name dump schemas targetSchemas user comment = 
+    { Name=name; Dump=dump; Schemas=schemas; TargetSchemas=targetSchemas; User=user; Comment=comment }
 
-let validationMessage validation =
-    match validation with
-    | Valid -> "parameters are valid"
-    | PDBAlreadyExists pdb -> sprintf "a PDB with name %s already exists" pdb
+type CreateMasterPDBParamsValidation = Validation<CreateMasterPDBParams, string>
 
-let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : Domain.OracleInstanceState.OracleInstanceState) =
-    match (state.MasterPDBs |> List.exists (fun x -> x.Name = parameters.Name)) with
-    | true -> PDBAlreadyExists parameters.Name
-    | false -> Valid
+let validatePDB state name =
+    match (state |> findMasterPDB name) with
+    | Ok _ -> Invalid [ sprintf "a PDB named \"%s\" already exists" name ]
+    | Error _ -> Valid name
+
+let validateDump dump =
+    if (System.IO.File.Exists(dump)) then
+        Valid dump
+    else
+        Invalid [ sprintf "the dump file \"%s\" does not exist" dump ]
+
+let validateSchemas schemas =
+    if schemas = [] then
+        Invalid [ "at least 1 schema must be provided" ]
+    else    
+        Valid schemas
+
+let validateTargetSchemas (schemas:_ list) (targetSchemas : _ list) =
+    if schemas.Length <> targetSchemas.Length then
+        Invalid [ "the number of target schemas must be equal to the number of source schemas" ]
+    else    
+        Valid targetSchemas
+
+let validateUser (user:string) =
+    if (user = "") then
+        Invalid [ "the user cannot be empty" ]
+    else
+        Valid user
+
+let validateComment (comment:string) =
+    if (comment = "") then
+        Invalid [ "the comment cannot be empty" ]
+    else
+        Valid comment
+
+let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : Domain.OracleInstanceState.OracleInstanceState) : CreateMasterPDBParamsValidation =
+    let pdb = validatePDB state parameters.Name
+    let dump = validateDump parameters.Dump
+    let schemas = validateSchemas parameters.Schemas
+    let targetSchemas = validateTargetSchemas parameters.Schemas parameters.TargetSchemas
+    let user = validateUser parameters.User
+    let comment = validateComment parameters.Comment
+    retn newCreateMasterPDBParams <*> pdb <*> dump <*> schemas <*> targetSchemas <*> user <*> comment
 
 type Command =
 | GetState
@@ -41,7 +77,7 @@ type StateSet = | StateSet of string
 
 type MasterPDBCreationResult = 
 | MasterPDBCreated of OraclePDBResult
-| InvalidRequest of string
+| InvalidRequest of string list
 
 
 let getNewState oldState newStateResult =
@@ -89,7 +125,7 @@ let oracleInstanceActorBody oracleAPI initialState (ctx : Actor<obj>) =
             | CreateMasterPDB (requestId, parameters) as command ->
                 let validation = validateCreateMasterPDBParams parameters state
                 match validation with
-                | Valid -> 
+                | Valid _ -> 
                     let oracleExecutor = 
                         (select ctx <| "oracleLongTaskExecutor").ResolveOne(System.TimeSpan.FromSeconds(1.))
                         |> Async.RunSynchronously 
@@ -105,8 +141,8 @@ let oracleInstanceActorBody oracleAPI initialState (ctx : Actor<obj>) =
                     }
                     oracleExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
                     return! loop state (requests |> registerRequest requestId command (retype (ctx.Sender())))
-                | error -> 
-                    ctx.Sender() <! InvalidRequest (validationMessage error)
+                | Invalid errors -> 
+                    ctx.Sender() <! InvalidRequest errors
                     return! loop state requests
         | :? WithRequestId<OraclePDBResult> as requestResponse ->
             let (requestId, result) = requestResponse
