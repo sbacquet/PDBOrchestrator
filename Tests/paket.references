@@ -4,3 +4,5 @@ xunit.runner.visualstudio
 FSharp.Core
 unquote
 Akkling.TestKit
+Akka.Logger.Serilog
+Serilog.Sinks.Trace

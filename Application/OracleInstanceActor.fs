@@ -69,7 +69,7 @@ let oracleInstanceActorBody oracleAPI initialState (ctx : Actor<obj>) =
         | :? Command as command ->
             match command with
             | GetState -> 
-                System.Diagnostics.Debug.Print("State: PDB count = {0}\n", state.MasterPDBs.Length) |> ignore
+                logDebugf ctx "State: PDB count = %d" state.MasterPDBs.Length
                 ctx.Sender() <! DTO.stateToDTO state
                 return! loop state requests
             | SetState newState -> 
@@ -112,12 +112,14 @@ let oracleInstanceActorBody oracleAPI initialState (ctx : Actor<obj>) =
             let (requestId, result) = requestResponse
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
             match requestMaybe with
-            | None -> return! loop state newRequests
+            | None -> 
+                logWarningf ctx "Request %s not found" <| requestId.ToString()
+                return! loop state newRequests
             | Some request ->
                 let parameters = match request.Command with | CreateMasterPDB command -> snd command | _ -> failwith "critical"
                 match result with
                 | Ok _ -> 
-                    printfn "PDB %s created" parameters.Name
+                    logDebugf ctx "PDB %s created successfully" parameters.Name
                     let newStateResult = 
                         state 
                         |> Domain.OracleInstanceState.addMasterPDBToState 
@@ -128,10 +130,10 @@ let oracleInstanceActorBody oracleAPI initialState (ctx : Actor<obj>) =
                     retype request.Requester <! MasterPDBCreated result
                     return! loop (getNewState state newStateResult) newRequests
                 | Error e -> 
-                    printfn "PDB %s failed to create with error %A" parameters.Name e
+                    logErrorf ctx "PDB %s failed to create with error %A" parameters.Name e
                     retype request.Requester <! MasterPDBCreated result
                     return! loop state newRequests
-        | _ -> return! loop state requests
+        | x -> return! loop state requests
     }
     ctx |> spawnChildActors oracleAPI initialState
     loop initialState Map.empty
