@@ -213,7 +213,7 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
     member this.ConnAsDBA = connAsDBA
     member this.ConnAsDBAIn = connAsDBAIn
     interface IOracleAPI with
-        member this.NewPDBFromDump a b c d e f g h i = createManifestFromDump this.Logger this.ConnAsDBA this.ConnAsDBAIn a b c d e f g h i
+        member this.NewPDBFromDump adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name = createManifestFromDump this.Logger this.ConnAsDBA this.ConnAsDBAIn adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name
         member this.ClosePDB name = closePDB this.Logger this.ConnAsDBA name
         member this.DeletePDB name = deletePDB this.Logger this.ConnAsDBA name
         member this.ExportPDB manifest name = exportPDB this.Logger this.ConnAsDBA manifest name
