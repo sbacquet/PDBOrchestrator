@@ -1,13 +1,6 @@
 ﻿module Domain.OrchestratorState
 
-type OracleInstance = {
-    Name: string
-    Server: string
-    DBAUser: string
-    DBAPassword: string
-}
-
 type OrchestratorState = {
-    OracleInstances : OracleInstance list
+    OracleInstanceNames : string list
     PrimaryServer : string
 }

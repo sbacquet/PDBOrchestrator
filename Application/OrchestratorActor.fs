@@ -12,12 +12,12 @@ let primaryServerActor (ctx : Actor<_>) name =
     (select ctx name).ResolveOne(System.TimeSpan.FromSeconds(1.))
     |> Async.RunSynchronously 
 
-let spawnChildActors oracleAPI state getInstanceState (ctx : Actor<_>) =
-    state.OracleInstances |> List.iter (fun instance ->
-        spawn ctx instance.Name <| props (oracleInstanceActorBody oracleAPI (getInstanceState instance.Name)) |> ignore
+let spawnChildActors getInstance getInstanceState getOracleAPI state (ctx : Actor<_>) =
+    state.OracleInstanceNames |> List.iter (fun instanceName ->
+        spawn ctx instanceName <| props (oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceName) |> ignore
     )
 
-let orchestratorActorBody oracleAPI initialState getInstanceState (ctx : Actor<_>) =
+let orchestratorActorBody getInstance getInstanceState getOracleAPI initialState (ctx : Actor<_>) =
     let rec loop (state : OrchestratorState) = actor {
         let! msg = ctx.Receive()
         match msg with
@@ -30,5 +30,5 @@ let orchestratorActorBody oracleAPI initialState getInstanceState (ctx : Actor<_
             return! loop state
             
     }
-    ctx |> spawnChildActors oracleAPI initialState getInstanceState
+    ctx |> spawnChildActors getInstance getInstanceState getOracleAPI initialState
     loop initialState

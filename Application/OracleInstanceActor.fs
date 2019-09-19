@@ -68,12 +68,12 @@ let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : 
     retn newCreateMasterPDBParams <*> pdb <*> dump <*> schemas <*> targetSchemas <*> user <*> comment
 
 type Command =
-| GetState
-| SetState of Domain.OracleInstanceState.OracleInstanceState
-| TransferState of string
-| CreateMasterPDB of WithRequestId<CreateMasterPDBParams>
+| GetState // returns Domain.OracleInstanceState.OracleInstanceState
+| SetState of Domain.OracleInstanceState.OracleInstanceState // returns (StateSet thisInstance)
+| TransferState of (* toInstance : *) string // returns (StateSet toInstance)
+| CreateMasterPDB of (* withParams : *) WithRequestId<CreateMasterPDBParams> // returns MasterPDBCreationResult
 
-type StateSet = | StateSet of string
+type StateSet = StateSet of string
 
 type MasterPDBCreationResult = 
 | MasterPDBCreated of OraclePDBResult
@@ -98,79 +98,86 @@ let spawnChildActors oracleAPI (state : OracleInstanceState) (ctx : Actor<obj>) 
     //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())
     //spawn ctx "oracleLongTaskExecutor" <| Props.From(p) |> ignore
 
-let oracleInstanceActorBody oracleAPI initialState (ctx : Actor<obj>) =
-    let rec loop (state : OracleInstanceState) (requests : RequestMap<Command>) = actor {
-        let! msg = ctx.Receive()
-        match msg with
-        | :? Command as command ->
-            match command with
-            | GetState -> 
-                logDebugf ctx "State: PDB count = %d" state.MasterPDBs.Length
-                ctx.Sender() <! DTO.stateToDTO state
-                return! loop state requests
-            | SetState newState -> 
-                ctx.Sender() <! StateSet ctx.Self.Path.Name
-                return! loop newState requests
-            //| MasterPDBVersionCreated (pdb, version, createdBy, comment) ->
-            //    let newStateResult =
-            //        state |> Domain.State.addMasterPDBVersionToState pdb version createdBy comment 
-            //    ctx.Sender() <! newStateResult
-            //    return! loop (getNewState state newStateResult)
-            | TransferState target ->
-                let targetActor = 
-                    (select ctx <| sprintf "../%s" target).ResolveOne(System.TimeSpan.FromSeconds(1.))
-                    |> Async.RunSynchronously 
-                targetActor <<! SetState state
-                return! loop state requests
-            | CreateMasterPDB (requestId, parameters) as command ->
-                let validation = validateCreateMasterPDBParams parameters state
-                match validation with
-                | Valid _ -> 
-                    let oracleExecutor = 
-                        (select ctx <| "oracleLongTaskExecutor").ResolveOne(System.TimeSpan.FromSeconds(1.))
-                        |> Async.RunSynchronously 
-                    let parameters2 = {
-                        Name = parameters.Name
-                        AdminUserName = "dbadmin"
-                        AdminUserPassword = "pass"
-                        Destination = "/u01/blabla"
-                        DumpPath = parameters.Dump
-                        Schemas = parameters.Schemas
-                        TargetSchemas = parameters.TargetSchemas |> List.map (fun (u, p, _) -> (u, p))
-                        Directory = "blabla"
-                    }
-                    oracleExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
-                    return! loop state (requests |> registerRequest requestId command (retype (ctx.Sender())))
-                | Invalid errors -> 
-                    ctx.Sender() <! InvalidRequest errors
+let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceName (ctx : Actor<obj>) =
+
+    let instanceMaybe, instanceStateMaybe = getInstance instanceName, getInstanceState instanceName
+    match instanceMaybe, instanceStateMaybe with
+    | Some instance, Some initialState ->
+        let oracleAPI = getOracleAPI instance
+        let rec loop (state : OracleInstanceState) (requests : RequestMap<Command>) = actor {
+            let! msg = ctx.Receive()
+            match msg with
+            | :? Command as command ->
+                match command with
+                | GetState -> 
+                    logDebugf ctx "State: PDB count = %d" state.MasterPDBs.Length
+                    ctx.Sender() <! state
                     return! loop state requests
-        | :? WithRequestId<OraclePDBResult> as requestResponse ->
-            let (requestId, result) = requestResponse
-            let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
-            match requestMaybe with
-            | None -> 
-                logWarningf ctx "Request %s not found" <| requestId.ToString()
-                return! loop state newRequests
-            | Some request ->
-                let parameters = match request.Command with | CreateMasterPDB command -> snd command | _ -> failwith "critical"
-                match result with
-                | Ok _ -> 
-                    logDebugf ctx "PDB %s created successfully" parameters.Name
-                    let newStateResult = 
-                        state 
-                        |> Domain.OracleInstanceState.addMasterPDBToState 
-                            parameters.Name 
-                            (parameters.TargetSchemas |> List.map (fun (user, password, t) -> Domain.PDB.newSchema user password t)) 
-                            parameters.User 
-                            parameters.Comment
-                    retype request.Requester <! MasterPDBCreated result
-                    return! loop (getNewState state newStateResult) newRequests
-                | Error e -> 
-                    logErrorf ctx "PDB %s failed to create with error %A" parameters.Name e
-                    retype request.Requester <! MasterPDBCreated result
+                | SetState newState -> 
+                    ctx.Sender() <! StateSet ctx.Self.Path.Name
+                    return! loop newState requests
+                //| MasterPDBVersionCreated (pdb, version, createdBy, comment) ->
+                //    let newStateResult =
+                //        state |> Domain.State.addMasterPDBVersionToState pdb version createdBy comment 
+                //    ctx.Sender() <! newStateResult
+                //    return! loop (getNewState state newStateResult)
+                | TransferState target ->
+                    let targetActor = 
+                        (select ctx <| sprintf "../%s" target).ResolveOne(System.TimeSpan.FromSeconds(1.))
+                        |> Async.RunSynchronously 
+                    targetActor <<! SetState state
+                    return! loop state requests
+                | CreateMasterPDB (requestId, parameters) as command ->
+                    let validation = validateCreateMasterPDBParams parameters state
+                    match validation with
+                    | Valid _ -> 
+                        let oracleExecutor = 
+                            (select ctx <| "oracleLongTaskExecutor").ResolveOne(System.TimeSpan.FromSeconds(1.))
+                            |> Async.RunSynchronously 
+                        let parameters2 = {
+                            Name = parameters.Name
+                            AdminUserName = instance.DBAUser
+                            AdminUserPassword = instance.DBAPassword
+                            Destination = instance.MasterPDBManifestsPath
+                            DumpPath = parameters.Dump
+                            Schemas = parameters.Schemas
+                            TargetSchemas = parameters.TargetSchemas |> List.map (fun (u, p, _) -> (u, p))
+                            Directory = instance.OracleDirectoryForDumps
+                        }
+                        oracleExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
+                        return! loop state (requests |> registerRequest requestId command (retype (ctx.Sender())))
+                    | Invalid errors -> 
+                        ctx.Sender() <! InvalidRequest errors
+                        return! loop state requests
+            | :? WithRequestId<OraclePDBResult> as requestResponse ->
+                let (requestId, result) = requestResponse
+                let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
+                match requestMaybe with
+                | None -> 
+                    logWarningf ctx "Request %s not found" <| requestId.ToString()
                     return! loop state newRequests
-        | x -> return! loop state requests
-    }
-    ctx |> spawnChildActors oracleAPI initialState
-    loop initialState Map.empty
+                | Some request ->
+                    let parameters = match request.Command with | CreateMasterPDB command -> snd command | _ -> failwith "critical"
+                    match result with
+                    | Ok _ -> 
+                        logDebugf ctx "PDB %s created successfully" parameters.Name
+                        let newStateResult = 
+                            state 
+                            |> Domain.OracleInstanceState.addMasterPDBToState 
+                                parameters.Name 
+                                (parameters.TargetSchemas |> List.map (fun (user, password, t) -> Domain.PDB.newSchema user password t)) 
+                                parameters.User 
+                                parameters.Comment
+                        retype request.Requester <! MasterPDBCreated result
+                        return! loop (getNewState state newStateResult) newRequests
+                    | Error e -> 
+                        logErrorf ctx "PDB %s failed to create with error %A" parameters.Name e
+                        retype request.Requester <! MasterPDBCreated result
+                        return! loop state newRequests
+            | x -> return! loop state requests
+        }
+        ctx |> spawnChildActors oracleAPI initialState
+        loop initialState Map.empty
+    | _ ->
+        failwithf "Oracle instance %s cannot be created" instanceName
 

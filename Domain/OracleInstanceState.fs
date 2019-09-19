@@ -3,6 +3,17 @@
 open Domain.Common
 open Domain.Common.Result
 
+type OracleInstance = {
+    Name: string
+    Server: string
+    Port: int option
+    DBAUser: string
+    DBAPassword: string
+    MasterPDBManifestsPath: string
+    TestPDBManifestsPath: string
+    OracleDirectoryForDumps: string
+}
+
 type OracleInstanceState = {
     MasterPDBs: Domain.PDB.MasterPDB list
     MasterPDBVersions: Domain.PDB.MasterPDBVersion list
