@@ -69,16 +69,17 @@ let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : 
 
 type Command =
 | GetState // returns Domain.OracleInstanceState.OracleInstanceState
-| SetState of OracleInstanceState // returns (StateSet thisInstance)
+| SetState of OracleInstanceState // returns StateSet
 | TransferState of (* toInstance : *) string // returns (StateSet toInstance)
 | CreateMasterPDB of (* withParams : *) CreateMasterPDBParams // returns MasterPDBCreationResult
 
-type StateSet = StateSet of OracleInstanceState
+type StateSet = Result<OracleInstanceState, string>
+let stateSetOk state : StateSet = Ok state
+let stateSetError error : StateSet = Error error
 
 type MasterPDBCreationResult = 
 | MasterPDBCreated of OraclePDBResult
 | InvalidRequest of string list
-
 
 let getNewState oldState newStateResult =
     match newStateResult with
@@ -86,8 +87,6 @@ let getNewState oldState newStateResult =
     | Error error -> 
         System.Diagnostics.Debug.Print("Error: {0}\n", error.ToString()) |> ignore
         oldState
-
-//let masterPDBActorName pdb = sprintf "MasterPDB[%s]" pdb
 
 let spawnChildActors oracleAPI (state : OracleInstanceState) (ctx : Actor<obj>) =
     ctx |> OracleLongTaskExecutor.spawn oracleAPI |> ignore
@@ -115,7 +114,7 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                     ctx.Sender() <! state
                     return! loop state requests
                 | SetState newState -> 
-                    ctx.Sender() <! StateSet newState
+                    ctx.Sender() <! stateSetOk newState
                     return! loop newState requests
                 //| MasterPDBVersionCreated (pdb, version, createdBy, comment) ->
                 //    let newStateResult =
@@ -123,27 +122,32 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                 //    ctx.Sender() <! newStateResult
                 //    return! loop (getNewState state newStateResult)
                 | TransferState target ->
-                    let targetActor = ctx |> Common.resolveSiblingActor (oracleInstanceActorName target)
-                    retype targetActor <<! SetState state
+                    let targetActorMaybe = ctx |> Common.resolveSiblingActor (oracleInstanceActorName target)
+                    match targetActorMaybe with
+                    | Ok targetActor -> targetActor <<! SetState state
+                    | Error error -> ctx.Sender() <! stateSetError error
                     return! loop state requests
                 | CreateMasterPDB parameters as command ->
                     let validation = validateCreateMasterPDBParams parameters state
                     match validation with
                     | Valid _ -> 
-                        let oracleExecutor = ctx |> getOracleLongTaskExecutor
-                        let parameters2 = {
-                            Name = parameters.Name
-                            AdminUserName = instance.DBAUser
-                            AdminUserPassword = instance.DBAPassword
-                            Destination = instance.MasterPDBManifestsPath
-                            DumpPath = parameters.Dump
-                            Schemas = parameters.Schemas
-                            TargetSchemas = parameters.TargetSchemas |> List.map (fun (u, p, _) -> (u, p))
-                            Directory = instance.OracleDirectoryForDumps
-                        }
-                        let requestId = newRequestId()
-                        oracleExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
-                        return! loop state <| registerRequest requestId command (retype (ctx.Sender())) requests
+                        let oracleExecutorMaybe = ctx |> getOracleLongTaskExecutor
+                        match oracleExecutorMaybe with
+                        | Ok oracleExecutor ->
+                            let parameters2 = {
+                                Name = parameters.Name
+                                AdminUserName = instance.DBAUser
+                                AdminUserPassword = instance.DBAPassword
+                                Destination = instance.MasterPDBManifestsPath
+                                DumpPath = parameters.Dump
+                                Schemas = parameters.Schemas
+                                TargetSchemas = parameters.TargetSchemas |> List.map (fun (u, p, _) -> (u, p))
+                                Directory = instance.OracleDirectoryForDumps
+                            }
+                            let requestId = newRequestId()
+                            oracleExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
+                            return! loop state <| registerRequest requestId command (retype (ctx.Sender())) requests
+                        | Error error -> ctx.Sender() <! InvalidRequest [ error ]
                     | Invalid errors -> 
                         ctx.Sender() <! InvalidRequest errors
                         return! loop state requests

@@ -20,19 +20,25 @@ let spawnChildActors getInstance getInstanceState getOracleAPI state (ctx : Acto
         ctx |> OracleInstanceActor.spawn getInstance getInstanceState getOracleAPI instanceName |> ignore
     )
 
+let createMasterPDBError error : MasterPDBCreationResult = InvalidRequest [ error ]
+
 let orchestratorActorBody getInstance getInstanceState getOracleAPI initialState (ctx : Actor<_>) =
     let rec loop (state : OrchestratorState) = actor {
-        let primaryInstance = lazy(ctx |> Common.resolveActor (oracleInstanceActorName state.PrimaryServer))
+        let primaryInstanceMaybe = lazy(ctx |> Common.resolveActor (oracleInstanceActorName state.PrimaryServer))
         let! msg = ctx.Receive()
         match msg with
         | Synchronize targetServer ->
-            primaryInstance.Value <<! TransferState targetServer
+            match primaryInstanceMaybe.Value with
+            | Ok primaryInstance -> primaryInstance <<! TransferState targetServer
+            | Error error -> ctx.Sender() <! stateSetError error
             return! loop state
         | GetState ->
             ctx.Sender() <! state
             return! loop state
         | CreateMasterPDB parameters ->
-            retype primaryInstance.Value <<! Application.OracleInstanceActor.CreateMasterPDB parameters
+            match primaryInstanceMaybe.Value with
+            | Ok primaryInstance -> primaryInstance <<! Application.OracleInstanceActor.CreateMasterPDB parameters
+            | Error error -> ctx.Sender() <! createMasterPDBError error
     }
     ctx |> spawnChildActors getInstance getInstanceState getOracleAPI initialState
     loop initialState

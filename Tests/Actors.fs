@@ -30,7 +30,7 @@ let test, (loggerFactory : ILoggerFactory) =
                 debug {
                     receive = on
                     unhandled = on
-                    lifecycle = off
+                    lifecycle = on
                 }
             }
             test {
@@ -108,7 +108,7 @@ let ``Test state transfer`` () = test <| fun tck ->
     let aref2 = tck |> OracleInstanceActor.spawn getInstance getInstanceState (fun _ -> fakeOracleAPI) "server2"
 
     let state : OracleInstanceActor.StateSet = retype aref1 <? OracleInstanceActor.TransferState "server2" |> Async.RunSynchronously
-
+    state |> Result.mapError (fun error -> failwith error) |> ignore
     ()
 
 let orchestratorState = {
@@ -119,9 +119,9 @@ let orchestratorState = {
 [<Fact>]
 let ``Synchronize state`` () = test <| fun tck ->
     let orchestrator = tck |> OrchestratorActor.spawn getInstance getInstanceState (fun _ -> fakeOracleAPI) orchestratorState
-
+    //monitor tck orchestrator
     let state : OracleInstanceActor.StateSet = retype orchestrator <? OrchestratorActor.Synchronize "server2" |> Async.RunSynchronously
-
+    state |> Result.mapError (fun error -> failwith error) |> ignore
     ()
 
 [<Fact>]

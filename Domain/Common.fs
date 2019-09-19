@@ -1,7 +1,5 @@
 ﻿module Domain.Common
 
-type Exceptional = Exception of exn
-
 let ofOption error = function Some s -> Ok s | None -> Error error
 
 let toOption = function Ok s -> Some s | Error _ -> None
@@ -43,6 +41,8 @@ module Result =
             __.Using(sequence.GetEnumerator(), fun enum -> __.While(enum.MoveNext, __.Delay(fun () -> body enum.Current)))
 
     let result = new ResultBuilder()
+
+    type Exceptional<'R> = Result<'R, exn>
 
 module Validation =
     type Validation<'T, 'E> =
