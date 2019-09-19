@@ -88,11 +88,18 @@ let getNewState oldState newStateResult =
         System.Diagnostics.Debug.Print("Error: {0}\n", error.ToString()) |> ignore
         oldState
 
-let spawnChildActors oracleAPI (state : OracleInstanceState) (ctx : Actor<obj>) =
-    ctx |> OracleLongTaskExecutor.spawn oracleAPI |> ignore
-    state.MasterPDBs |> List.iter (fun pdb -> 
-        ctx |> MasterPDBActor.spawn pdb.Name |> ignore
-    )
+type Collaborators = {
+    OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
+    MasterPDBActors: Map<string, IActorRef<Application.MasterPDBActor.Command>>
+}
+
+let spawnCollaborators oracleAPI (state : OracleInstanceState) (ctx : Actor<obj>) : Collaborators = {
+    OracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn oracleAPI
+    MasterPDBActors = 
+        state.MasterPDBs 
+        |> List.map (fun pdb -> (pdb.Name, ctx |> MasterPDBActor.spawn pdb.Name))
+        |> Map.ofList
+}
     //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())
     //spawn ctx "oracleLongTaskExecutor" <| Props.From(p) |> ignore
 
@@ -104,6 +111,7 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
     match instanceMaybe, instanceStateMaybe with
     | Some instance, Some initialState ->
         let oracleAPI = getOracleAPI instance
+        let collaborators = ctx |> spawnCollaborators oracleAPI initialState
         let rec loop (state : OracleInstanceState) (requests : RequestMap<Command>) = actor {
             let! msg = ctx.Receive()
             match msg with
@@ -131,23 +139,19 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                     let validation = validateCreateMasterPDBParams parameters state
                     match validation with
                     | Valid _ -> 
-                        let oracleExecutorMaybe = ctx |> getOracleLongTaskExecutor
-                        match oracleExecutorMaybe with
-                        | Ok oracleExecutor ->
-                            let parameters2 = {
-                                Name = parameters.Name
-                                AdminUserName = instance.DBAUser
-                                AdminUserPassword = instance.DBAPassword
-                                Destination = instance.MasterPDBManifestsPath
-                                DumpPath = parameters.Dump
-                                Schemas = parameters.Schemas
-                                TargetSchemas = parameters.TargetSchemas |> List.map (fun (u, p, _) -> (u, p))
-                                Directory = instance.OracleDirectoryForDumps
-                            }
-                            let requestId = newRequestId()
-                            oracleExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
-                            return! loop state <| registerRequest requestId command (retype (ctx.Sender())) requests
-                        | Error error -> ctx.Sender() <! InvalidRequest [ error ]
+                        let parameters2 = {
+                            Name = parameters.Name
+                            AdminUserName = instance.DBAUser
+                            AdminUserPassword = instance.DBAPassword
+                            Destination = instance.MasterPDBManifestsPath
+                            DumpPath = parameters.Dump
+                            Schemas = parameters.Schemas
+                            TargetSchemas = parameters.TargetSchemas |> List.map (fun (u, p, _) -> (u, p))
+                            Directory = instance.OracleDirectoryForDumps
+                        }
+                        let requestId = newRequestId()
+                        collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
+                        return! loop state <| registerRequest requestId command (retype (ctx.Sender())) requests
                     | Invalid errors -> 
                         ctx.Sender() <! InvalidRequest errors
                         return! loop state requests
@@ -180,7 +184,6 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                     | _ -> failwith "critical error"
             | x -> return! loop state requests
         }
-        ctx |> spawnChildActors oracleAPI initialState
         loop initialState Map.empty
     | _ ->
         failwithf "Oracle instance %s cannot be created" instanceName
