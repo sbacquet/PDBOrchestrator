@@ -185,7 +185,3 @@ let spawn getInstance getInstanceState getOracleAPI instanceName actorFactory =
     let (Common.ActorName actorName) = oracleInstanceActorName instanceName
     Akkling.Spawn.spawn actorFactory actorName <| props (oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceName)
 
-let getOracleInstanceActor (Common.ActorName name) (ctx : Actor<_>) =
-    (select ctx name).ResolveOne(System.TimeSpan.FromSeconds(1.))
-    |> Async.RunSynchronously 
-

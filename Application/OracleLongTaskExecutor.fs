@@ -63,6 +63,4 @@ let [<Literal>]cOracleLongTaskExecutorName = "OracleLongTaskExecutor"
 let spawn oracleAPI actorFactory =
     Akkling.Spawn.spawn actorFactory cOracleLongTaskExecutorName <| props (oracleLongTaskExecutorBody oracleAPI)
 
-let getOracleLongTaskExecutor (ctx : Actor<_>) =
-    (select ctx cOracleLongTaskExecutorName).ResolveOne(System.TimeSpan.FromSeconds(1.))
-    |> Async.RunSynchronously 
+let getOracleLongTaskExecutor (ctx : Actor<_>) = Common.resolveActor (Common.ActorName cOracleLongTaskExecutorName) ctx
