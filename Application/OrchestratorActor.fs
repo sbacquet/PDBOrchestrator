@@ -27,20 +27,20 @@ let orchestratorActorBody getInstance getInstanceState getOracleAPI initialState
     let rec loop (state : OrchestratorState) = actor {
         let! msg = ctx.Receive()
         match msg with
-        | Synchronize targetServer ->
-            let primaryInstanceMaybe = collaborators.TryFind(state.PrimaryServer)
-            match primaryInstanceMaybe with
-            | Some primaryInstance -> retype primaryInstance <<! TransferState targetServer
-            | None -> ctx.Sender() <! stateSetError (sprintf "cannot find actor of primary instance %s" state.PrimaryServer)
+        | Synchronize targetInstance ->
+            if (state.OracleInstanceNames |> List.contains targetInstance) then
+                let primaryInstance = collaborators.[state.PrimaryServer]
+                let target = collaborators.[targetInstance]
+                retype primaryInstance <<! TransferState target
+            else
+                ctx.Sender() <! stateSetError (sprintf "cannot find actor of instance %s" targetInstance)
             return! loop state
         | GetState ->
             ctx.Sender() <! state
             return! loop state
         | CreateMasterPDB parameters ->
-            let primaryInstanceMaybe = collaborators.TryFind(state.PrimaryServer)
-            match primaryInstanceMaybe with
-            | Some primaryInstance -> retype primaryInstance <<! Application.OracleInstanceActor.CreateMasterPDB parameters
-            | None -> ctx.Sender() <! createMasterPDBError (sprintf "cannot find actor of primary instance %s" state.PrimaryServer)
+            let primaryInstance = collaborators.[state.PrimaryServer]
+            retype primaryInstance <<! Application.OracleInstanceActor.CreateMasterPDB parameters
     }
     loop initialState
 

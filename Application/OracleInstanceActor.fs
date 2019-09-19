@@ -70,7 +70,7 @@ let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : 
 type Command =
 | GetState // returns Domain.OracleInstanceState.OracleInstanceState
 | SetState of OracleInstanceState // returns StateSet
-| TransferState of (* toInstance : *) string // returns (StateSet toInstance)
+| TransferState of (* toInstance : *) IActorRef<obj> // returns (StateSet state)
 | CreateMasterPDB of (* withParams : *) CreateMasterPDBParams // returns MasterPDBCreationResult
 
 type StateSet = Result<OracleInstanceState, string>
@@ -130,10 +130,7 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                 //    ctx.Sender() <! newStateResult
                 //    return! loop (getNewState state newStateResult)
                 | TransferState target ->
-                    let targetActorMaybe = ctx |> Common.resolveSiblingActor (oracleInstanceActorName target)
-                    match targetActorMaybe with
-                    | Ok targetActor -> targetActor <<! SetState state
-                    | Error error -> ctx.Sender() <! stateSetError error
+                    retype target <<! SetState state
                     return! loop state requests
                 | CreateMasterPDB parameters as command ->
                     let validation = validateCreateMasterPDBParams parameters state

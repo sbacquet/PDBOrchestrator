@@ -108,7 +108,7 @@ let ``Test state transfer`` () = test <| fun tck ->
     let aref1 = tck |> OracleInstanceActor.spawn getInstance getInstanceState (fun _ -> fakeOracleAPI) "server1"
     let aref2 = tck |> OracleInstanceActor.spawn getInstance getInstanceState (fun _ -> fakeOracleAPI) "server2"
 
-    let state : OracleInstanceActor.StateSet = retype aref1 <? OracleInstanceActor.TransferState "server2" |> Async.RunSynchronously
+    let state : OracleInstanceActor.StateSet = retype aref1 <? OracleInstanceActor.TransferState aref2 |> Async.RunSynchronously
     state |> Result.mapError (fun error -> failwith error) |> ignore
     ()
 
