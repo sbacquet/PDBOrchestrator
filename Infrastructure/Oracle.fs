@@ -8,6 +8,7 @@ open Application.Oracle
 open Microsoft.Extensions.Logging
 
 type PDBCompensableAction = CompensableAction<string, Oracle.ManagedDataAccess.Client.OracleException>
+type PDBCompensableAsyncAction = CompensableAsyncAction<string, Oracle.ManagedDataAccess.Client.OracleException>
 
 let openConn host port service user password sysdba = fun () ->
     let connectionString = 
@@ -26,15 +27,22 @@ let connAsDBAInFromInstance (instance:Domain.OracleInstance.OracleInstance) serv
 
 let connAsDBAFromInstance instance = connAsDBAInFromInstance instance instance.Name
 
-// partial application of various common functions, around the connection manager
 let exec result conn a = try Sql.execNonQuery conn a [] |> ignore; Ok result with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> Error ex
+let execAsync result conn a = async {
+    try 
+        let! _ = Sql.asyncExecNonQuery conn a []
+        return Ok result 
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return Error ex
+}
+
 let P = Sql.Parameter.make
 let (=>) a b = Sql.Parameter.make(a, b)
 
 let (>>=) r f = Result.bind f r
 let (>=>) f1 f2 = fun x -> f1 x >>= f2
 
-let createPDB (logger:ILogger) connAsDBA adminUserName adminUserPassword dest keepOpen (name:string) : OraclePDBResult = 
+let createPDB (logger:ILogger) connAsDBA adminUserName adminUserPassword dest keepOpen (name:string) = 
     logger.LogDebug("Creating PDB {PDB}", name)
     let closeSql = if (keepOpen) then "" else sprintf @"execute immediate 'alter pluggable database %s close immediate';" name
     sprintf 
@@ -57,7 +65,7 @@ BEGIN
 END;
 "
         name adminUserName adminUserPassword dest name closeSql name
-    |> exec name connAsDBA
+    |> execAsync name connAsDBA
 
 let grantPDB (logger:ILogger) connAsDBAIn (name:string) =
     logger.LogDebug("Granting PDB {PDB}", name)
@@ -69,53 +77,55 @@ BEGIN
     execute immediate 'alter profile DEFAULT limit password_life_time UNLIMITED';
 END;
 "
-    |> exec name (connAsDBAIn name)
+    |> execAsync name (connAsDBAIn name)
 
 
-let deletePDB (logger:ILogger) connAsDBA (name:string) : OraclePDBResult = 
+let deletePDB (logger:ILogger) connAsDBA (name:string) = 
     logger.LogDebug("Deleting PDB {PDB}", name)
     sprintf @"DROP PLUGGABLE DATABASE %s INCLUDING DATAFILES" name
-    |> exec name connAsDBA
+    |> execAsync name connAsDBA
 
 let createPDBCompensable (logger:ILogger) connAsDBA adminUserName adminUserPassword dest keepOpen = 
-    compensable 
+    compensableAsync
         (createPDB logger connAsDBA adminUserName adminUserPassword dest keepOpen)
         (deletePDB logger connAsDBA)
 
-let openPDB (logger:ILogger) connAsDBA readWrite (name:string) : OraclePDBResult =
+let openPDB (logger:ILogger) connAsDBA readWrite (name:string) =
     logger.LogDebug("Opening PDB {PDB}", name)
     let readMode = if readWrite then "READ WRITE" else "READ ONLY"
     sprintf @"ALTER PLUGGABLE DATABASE %s OPEN %s FORCE" name readMode
-    |> exec name connAsDBA
+    |> execAsync name connAsDBA
 
-let closePDB (logger:ILogger) connAsDBA (name:string) : OraclePDBResult = 
+let closePDB (logger:ILogger) connAsDBA (name:string) = async {
     logger.LogDebug("Closing PDB {PDB}", name)
-    let result = 
+    let! result = 
         sprintf @"ALTER PLUGGABLE DATABASE %s CLOSE IMMEDIATE" name
-        |> exec name connAsDBA
+        |> execAsync name connAsDBA
     match result with
-    | Ok result -> Ok result
+    | Ok result -> return Ok result
     | Error ex -> 
         match ex.Number with
-        | 65020 -> Ok name // already closed -> ignore it
-        | _ -> Error ex
+        | 65020 -> return Ok name // already closed -> ignore it
+        | _ -> return Error ex
+}
 
 let openPDBCompensable (logger:ILogger) connAsDBA readWrite = 
-    compensable 
+    compensableAsync 
         (openPDB logger connAsDBA readWrite) 
         (closePDB logger connAsDBA)
 
-let importSchemasInPDB (logger:ILogger) connAsDBA (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) name : OraclePDBResult =
-    Ok name // TODO
+let importSchemasInPDB (logger:ILogger) connAsDBA (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) name = async {
+    return Ok name // TODO
+}
 
 let createAndGrantPDB (logger:ILogger) connAsDBA connAsDBAIn keepOpen adminUserName adminUserPassword dest = 
     [
         createPDBCompensable logger connAsDBA adminUserName adminUserPassword dest true
-        notCompensable (grantPDB logger connAsDBAIn)
-        notCompensable (if keepOpen then Ok else closePDB logger connAsDBA)
-    ] |> compose logger
+        notCompensableAsync (grantPDB logger connAsDBAIn)
+        notCompensableAsync (if keepOpen then (fun name -> async { return Ok name }) else closePDB logger connAsDBA)
+    ] |> composeAsync logger
 
-let exportPDB (logger:ILogger) connAsDBA manifest =
+let exportPDB (logger:ILogger) connAsDBA manifest name = async {
     let export (pdb:string) =
         logger.LogDebug("Exporting PDB {PDB}", pdb)
         sprintf 
@@ -126,18 +136,22 @@ let exportPDB (logger:ILogger) connAsDBA manifest =
     END;
      "
             pdb manifest pdb
-        |> exec pdb connAsDBA
-
-    closePDB logger connAsDBA >=> export
+        |> execAsync pdb connAsDBA
+    
+    let! closeResult = closePDB logger connAsDBA name
+    match closeResult with
+    | Ok r -> return! export name
+    | error -> return error
+}
 
 let createManifestFromDump (logger:ILogger) connAsDBA connAsDBAIn adminUserName adminUserPassword dest (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) (manifest:string) = 
     [
         createPDBCompensable logger connAsDBA adminUserName adminUserPassword dest true
-        notCompensable (grantPDB logger connAsDBAIn)
-        notCompensable (importSchemasInPDB logger connAsDBA dumpPath schemas targetSchemas directory)
-        notCompensable (closePDB logger connAsDBA)
-        notCompensable (exportPDB logger connAsDBA manifest)
-    ] |> compose logger
+        notCompensableAsync (grantPDB logger connAsDBAIn)
+        notCompensableAsync (importSchemasInPDB logger connAsDBA dumpPath schemas targetSchemas directory)
+        notCompensableAsync (closePDB logger connAsDBA)
+        notCompensableAsync (exportPDB logger connAsDBA manifest)
+    ] |> composeAsync logger
 
 let importPDB (logger:ILogger) connAsDBA manifest dest (name:string) =
     logger.LogDebug("Importing PDB {PDB}", name)
@@ -159,7 +173,7 @@ BEGIN
 END;
 "
         name manifest dest name
-    |> exec name connAsDBA
+    |> execAsync name connAsDBA
 
 let snapshotPDB (logger:ILogger) connAsDBA from dest name =
     sprintf 
@@ -180,7 +194,7 @@ BEGIN
 END;
 "
         name from dest name
-    |> exec name connAsDBA
+    |> execAsync name connAsDBA
 
 type RawOraclePDB = {
     Id: decimal

@@ -79,14 +79,15 @@ let instance2 : OracleInstance = {
 type FakeOracleAPI() = 
     member this.Logger = loggerFactory.CreateLogger("Fake Oracle API")
     interface IOracleAPI with
-        member this.NewPDBFromDump _ _ _ _ _ _ _ _ name = 
+        member this.NewPDBFromDump _ _ _ _ _ _ _ _ name = async {
             this.Logger.LogDebug("Creating new PDB {PDB}...", name)
-            Ok name
-        member this.ClosePDB name = Ok name
-        member this.DeletePDB name = Ok name
-        member this.ExportPDB _ name = Ok name
-        member this.ImportPDB _ _ name = Ok name
-        member this.SnapshotPDB _ _ name = Ok name
+            return Ok name
+        }
+        member this.ClosePDB name = async { return Ok name }
+        member this.DeletePDB name = async { return Ok name }
+        member this.ExportPDB _ name = async { return Ok name }
+        member this.ImportPDB _ _ name = async { return Ok name }
+        member this.SnapshotPDB _ _ name = async { return Ok name }
 
 let fakeOracleAPI = FakeOracleAPI()
 
