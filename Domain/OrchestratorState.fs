@@ -1,4 +1,4 @@
-﻿module Domain.OrchestratorState
+﻿module Domain.Orchestrator
 
 type OrchestratorState = {
     OracleInstanceNames : string list

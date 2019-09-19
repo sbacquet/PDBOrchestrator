@@ -2,7 +2,7 @@
 
 open Akkling
 open Application.OracleInstanceActor
-open Domain.OrchestratorState
+open Domain.Orchestrator
 
 type Command =
 | Synchronize of string

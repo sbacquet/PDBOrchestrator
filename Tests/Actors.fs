@@ -6,7 +6,7 @@ open Xunit
 open Application
 open Domain.PDB
 open Domain.OracleInstance
-open Domain.OrchestratorState
+open Domain.Orchestrator
 open Application.OracleInstanceActor
 open Application.OrchestratorActor
 open Application.PendingRequest
