@@ -69,11 +69,11 @@ let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : 
 
 type Command =
 | GetState // returns Domain.OracleInstanceState.OracleInstanceState
-| SetState of Domain.OracleInstance.OracleInstanceState // returns (StateSet thisInstance)
+| SetState of OracleInstanceState // returns (StateSet thisInstance)
 | TransferState of (* toInstance : *) string // returns (StateSet toInstance)
 | CreateMasterPDB of (* withParams : *) CreateMasterPDBParams // returns MasterPDBCreationResult
 
-type StateSet = StateSet of string
+type StateSet = StateSet of OracleInstanceState
 
 type MasterPDBCreationResult = 
 | MasterPDBCreated of OraclePDBResult
@@ -88,15 +88,16 @@ let getNewState oldState newStateResult =
         oldState
 
 //let masterPDBActorName pdb = sprintf "MasterPDB[%s]" pdb
-let masterPDBActorName = id // TODO
 
 let spawnChildActors oracleAPI (state : OracleInstanceState) (ctx : Actor<obj>) =
-    spawn ctx "oracleLongTaskExecutor" <| props (oracleLongTaskExecutorBody oracleAPI) |> ignore
+    ctx |> OracleLongTaskExecutor.spawn oracleAPI |> ignore
     state.MasterPDBs |> List.iter (fun pdb -> 
-        spawn ctx (masterPDBActorName pdb.Name) <| props (masterPDBActorBody) |> ignore
+        ctx |> MasterPDBActor.spawn pdb.Name |> ignore
     )
     //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())
     //spawn ctx "oracleLongTaskExecutor" <| Props.From(p) |> ignore
+
+let oracleInstanceActorName (name:string) = Common.ActorName (sprintf "OracleInstance='%s'" (name.ToUpper() |> System.Uri.EscapeDataString))
 
 let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceName (ctx : Actor<obj>) =
 
@@ -114,7 +115,7 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                     ctx.Sender() <! state
                     return! loop state requests
                 | SetState newState -> 
-                    ctx.Sender() <! StateSet ctx.Self.Path.Name
+                    ctx.Sender() <! StateSet newState
                     return! loop newState requests
                 //| MasterPDBVersionCreated (pdb, version, createdBy, comment) ->
                 //    let newStateResult =
@@ -122,18 +123,14 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                 //    ctx.Sender() <! newStateResult
                 //    return! loop (getNewState state newStateResult)
                 | TransferState target ->
-                    let targetActor = 
-                        (select ctx <| sprintf "../%s" target).ResolveOne(System.TimeSpan.FromSeconds(1.))
-                        |> Async.RunSynchronously 
-                    targetActor <<! SetState state
+                    let targetActor = ctx |> Common.resolveSiblingActor (oracleInstanceActorName target)
+                    retype targetActor <<! SetState state
                     return! loop state requests
                 | CreateMasterPDB parameters as command ->
                     let validation = validateCreateMasterPDBParams parameters state
                     match validation with
                     | Valid _ -> 
-                        let oracleExecutor = 
-                            (select ctx <| "oracleLongTaskExecutor").ResolveOne(System.TimeSpan.FromSeconds(1.))
-                            |> Async.RunSynchronously 
+                        let oracleExecutor = ctx |> getOracleLongTaskExecutor
                         let parameters2 = {
                             Name = parameters.Name
                             AdminUserName = instance.DBAUser
@@ -183,4 +180,12 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
         loop initialState Map.empty
     | _ ->
         failwithf "Oracle instance %s cannot be created" instanceName
+
+let spawn getInstance getInstanceState getOracleAPI instanceName actorFactory =
+    let (Common.ActorName actorName) = oracleInstanceActorName instanceName
+    Akkling.Spawn.spawn actorFactory actorName <| props (oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceName)
+
+let getOracleInstanceActor (Common.ActorName name) (ctx : Actor<_>) =
+    (select ctx name).ResolveOne(System.TimeSpan.FromSeconds(1.))
+    |> Async.RunSynchronously 
 

@@ -7,8 +7,6 @@ open Application
 open Domain.PDB
 open Domain.OracleInstance
 open Domain.Orchestrator
-open Application.OracleInstanceActor
-open Application.OrchestratorActor
 open Application.PendingRequest
 open Application.Oracle
 open Akka.Configuration
@@ -16,7 +14,13 @@ open Serilog
 open Microsoft.Extensions.Logging
 
 #if DEBUG
-let test, expectMsg, (loggerFactory : ILoggerFactory) =
+let expectMsg tck =
+    if (System.Diagnostics.Debugger.IsAttached) then
+        expectMsgWithin tck (System.TimeSpan.FromHours(10.))
+    else
+        Akkling.TestKit.expectMsg tck
+
+let test, (loggerFactory : ILoggerFactory) =
     if (System.Diagnostics.Debugger.IsAttached) then
         Serilog.Log.Logger <- (new LoggerConfiguration()).WriteTo.Trace().MinimumLevel.Debug().CreateLogger()
         let config = ConfigurationFactory.ParseString @"
@@ -34,11 +38,9 @@ let test, expectMsg, (loggerFactory : ILoggerFactory) =
             }
         }"
         Akkling.TestKit.test config, 
-        (fun tck -> expectMsgWithin tck (System.TimeSpan.FromHours(10.))), 
         (new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory)
     else
         testDefault, 
-        expectMsg, 
         (new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory() :> ILoggerFactory)
 #else
 let test = testDefault
@@ -74,8 +76,6 @@ let instance2 : OracleInstance = {
     OracleDirectoryForDumps = ""
 }
 
-let instance2State = newState()
-
 type FakeOracleAPI() = 
     member this.Logger = loggerFactory.CreateLogger("Fake Oracle API")
     interface IOracleAPI with
@@ -99,17 +99,17 @@ let getInstance name =
 let getInstanceState name =
     match name with
     | "server1" -> Some instance1State
-    | "server2" -> Some instance2State
+    | "server2" -> Some (newState())
     | _ -> None
 
 [<Fact>]
 let ``Test state transfer`` () = test <| fun tck ->
-    let aref1 = spawn tck "oracleInstanceActor1" <| props (oracleInstanceActorBody getInstance getInstanceState (fun _ -> fakeOracleAPI) "server1")
-    let aref2 = spawn tck "oracleInstanceActor2" <| props (oracleInstanceActorBody getInstance getInstanceState (fun _ -> fakeOracleAPI) "server2")
+    let aref1 = tck |> OracleInstanceActor.spawn getInstance getInstanceState (fun _ -> fakeOracleAPI) "server1"
+    let aref2 = tck |> OracleInstanceActor.spawn getInstance getInstanceState (fun _ -> fakeOracleAPI) "server2"
 
-    (retype aref1) <! TransferState "oracleInstanceActor2"
+    let state : OracleInstanceActor.StateSet = retype aref1 <? OracleInstanceActor.TransferState "server2" |> Async.RunSynchronously
 
-    expectMsg tck (StateSet "oracleInstanceActor2") |> ignore
+    ()
 
 let orchestratorState = {
     OracleInstanceNames = [ "server1"; "server2" ]
@@ -118,20 +118,20 @@ let orchestratorState = {
 
 [<Fact>]
 let ``Synchronize state`` () = test <| fun tck ->
-    let orchestrator = spawn tck "orchestrator" <| props (orchestratorActorBody getInstance getInstanceState (fun _ -> fakeOracleAPI) orchestratorState)
+    let orchestrator = tck |> OrchestratorActor.spawn getInstance getInstanceState (fun _ -> fakeOracleAPI) orchestratorState
 
-    orchestrator <! Synchronize "server2"
+    let state : OracleInstanceActor.StateSet = retype orchestrator <? OrchestratorActor.Synchronize "server2" |> Async.RunSynchronously
 
-    expectMsg tck (StateSet "server2") |> ignore
+    ()
 
 [<Fact>]
 let ``Oracle server actor creates PDB`` () = test <| fun tck ->
-    let oracleActor = spawn tck "server1" <| props (oracleInstanceActorBody getInstance getInstanceState (fun _ -> fakeOracleAPI) "server1")
+    let oracleActor = tck |> OracleInstanceActor.spawn getInstance getInstanceState (fun _ -> fakeOracleAPI) "server1"
 
     let stateBefore = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously |> Application.DTO.stateToDTO
     Assert.Equal(1, stateBefore.MasterPDBs.Length)
 
-    let parameters = {
+    let parameters : OracleInstanceActor.CreateMasterPDBParams = {
         Name = "test2"
         Dump = @"c:\windows\system.ini" // always exists
         Schemas = [ "schema1" ]
@@ -139,14 +139,34 @@ let ``Oracle server actor creates PDB`` () = test <| fun tck ->
         User = "me"
         Comment = "yeah"
     }
-    let res : MasterPDBCreationResult = retype oracleActor <? CreateMasterPDB parameters |> Async.RunSynchronously
+    let res : OracleInstanceActor.MasterPDBCreationResult = retype oracleActor <? OracleInstanceActor.CreateMasterPDB parameters |> Async.RunSynchronously
     match res with
-    | MasterPDBCreated creationResponse -> 
+    | OracleInstanceActor.MasterPDBCreated creationResponse -> 
         match creationResponse with
         | Ok _ -> ()
         | Error ex -> failwithf "the creation of %s failed : %A" parameters.Name ex
-    | InvalidRequest errors -> failwithf "the request is invalid : %A" errors
+    | OracleInstanceActor.InvalidRequest errors -> failwithf "the request is invalid : %A" errors
 
     let stateAfter = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously |> Application.DTO.stateToDTO
     Assert.Equal(2, stateAfter.MasterPDBs.Length)
     ()
+
+[<Fact>]
+let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
+    let orchestratorActor = tck |> OrchestratorActor.spawn getInstance getInstanceState (fun _ -> fakeOracleAPI) orchestratorState
+
+    let parameters : OracleInstanceActor.CreateMasterPDBParams = {
+        Name = "test2"
+        Dump = @"c:\windows\system.ini" // always exists
+        Schemas = [ "schema1" ]
+        TargetSchemas = [ "targetschema1", "pass1", "FusionInvest" ]
+        User = "me"
+        Comment = "yeah"
+    }
+    let res : OracleInstanceActor.MasterPDBCreationResult = retype orchestratorActor <? OrchestratorActor.CreateMasterPDB parameters |> Async.RunSynchronously
+    match res with
+    | OracleInstanceActor.MasterPDBCreated creationResponse -> 
+        match creationResponse with
+        | Ok _ -> ()
+        | Error ex -> failwithf "the creation of %s failed : %A" parameters.Name ex
+    | OracleInstanceActor.InvalidRequest errors -> failwithf "the request is invalid : %A" errors

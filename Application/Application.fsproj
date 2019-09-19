@@ -4,6 +4,7 @@
     <TargetFramework>netcoreapp2.2</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Common.fs" />
     <Compile Include="PendingRequest.fs" />
     <Compile Include="OracleAPI.fs" />
     <Compile Include="DTO.fs" />

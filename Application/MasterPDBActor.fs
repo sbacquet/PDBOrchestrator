@@ -11,7 +11,7 @@ type Event =
 | MasterPDBCreated of string * (string * string * string) list * string * string
 | MasterPDBVersionCreated of string * int * string * string
 
-let masterPDBActorBody (ctx : Actor<Command>) =
+let masterPDBActorBody masterPDB (ctx : Actor<Command>) =
     let rec loop () = actor {
         let! msg = ctx.Receive()
         match msg with
@@ -23,3 +23,10 @@ let masterPDBActorBody (ctx : Actor<Command>) =
             return! loop ()
     }
     loop ()
+
+let masterPDBActorName (masterPDB:string) = Common.ActorName (sprintf "MasterPDB='%s'" (masterPDB.ToUpper() |> System.Uri.EscapeDataString))
+
+let spawn masterPDB actorFactory =
+    let (Common.ActorName actorName) = masterPDBActorName masterPDB
+    Akkling.Spawn.spawn actorFactory actorName <| props (masterPDBActorBody masterPDB)
+
