@@ -20,7 +20,7 @@ let openConn host port service user password sysdba = fun () ->
     conn.Open()
     conn :> IDbConnection
 
-let connAsDBAInFromInstance (instance:Domain.OracleInstanceState.OracleInstance) service =
+let connAsDBAInFromInstance (instance:Domain.OracleInstance.OracleInstance) service =
     let port = instance.Port |> Option.defaultValue 1521
     Sql.withNewConnection (openConn instance.Server port service instance.DBAUser instance.DBAPassword true)
 

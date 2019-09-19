@@ -1,4 +1,4 @@
-﻿module Domain.OracleInstanceState
+﻿module Domain.OracleInstance
 
 open Domain.Common
 open Domain.Common.Result

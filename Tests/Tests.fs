@@ -5,7 +5,7 @@ open Domain.PDB
 open Tests.PDBRepositoryGenericTests
 open Swensen.Unquote
 open Application
-open Domain.OracleInstanceState
+open Domain.OracleInstance
 
 [<Fact>]
 let ``Fake PDB repo in memory`` () =

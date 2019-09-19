@@ -5,7 +5,7 @@ open Akkling.TestKit
 open Xunit
 open Application
 open Domain.PDB
-open Domain.OracleInstanceState
+open Domain.OracleInstance
 open Domain.OrchestratorState
 open Application.OracleInstanceActor
 open Application.OrchestratorActor

@@ -5,7 +5,7 @@ open Application.Oracle
 open Application.OracleLongTaskExecutor
 open Application.PendingRequest
 open Domain
-open Domain.OracleInstanceState
+open Domain.OracleInstance
 open Application.MasterPDBActor
 open Domain.Common.Validation
 
@@ -58,7 +58,7 @@ let validateComment (comment:string) =
     else
         Valid comment
 
-let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : Domain.OracleInstanceState.OracleInstanceState) : CreateMasterPDBParamsValidation =
+let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : Domain.OracleInstance.OracleInstanceState) : CreateMasterPDBParamsValidation =
     let pdb = validatePDB state parameters.Name
     let dump = validateDump parameters.Dump
     let schemas = validateSchemas parameters.Schemas
@@ -69,7 +69,7 @@ let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : 
 
 type Command =
 | GetState // returns Domain.OracleInstanceState.OracleInstanceState
-| SetState of Domain.OracleInstanceState.OracleInstanceState // returns (StateSet thisInstance)
+| SetState of Domain.OracleInstance.OracleInstanceState // returns (StateSet thisInstance)
 | TransferState of (* toInstance : *) string // returns (StateSet toInstance)
 | CreateMasterPDB of (* withParams : *) WithRequestId<CreateMasterPDBParams> // returns MasterPDBCreationResult
 
@@ -165,7 +165,7 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                             logDebugf ctx "PDB %s created successfully" parameters.Name
                             let newStateResult = 
                                 state 
-                                |> Domain.OracleInstanceState.addMasterPDBToState 
+                                |> Domain.OracleInstance.addMasterPDBToState 
                                     parameters.Name 
                                     (parameters.TargetSchemas |> List.map (fun (user, password, t) -> Domain.PDB.newSchema user password t)) 
                                     parameters.User 
