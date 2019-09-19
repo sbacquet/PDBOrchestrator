@@ -22,7 +22,11 @@ let expectMsg tck =
 
 let test, (loggerFactory : ILoggerFactory) =
     if (System.Diagnostics.Debugger.IsAttached) then
-        Serilog.Log.Logger <- (new LoggerConfiguration()).WriteTo.Trace().MinimumLevel.Debug().CreateLogger()
+        Serilog.Log.Logger <- 
+            (new LoggerConfiguration()).
+                WriteTo.Trace(outputTemplate="[{SourceContext}] {Message}{NewLine}").
+                MinimumLevel.Debug().
+                CreateLogger()
         let config = ConfigurationFactory.ParseString @"
         akka { 
             loglevel=DEBUG,  loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] 

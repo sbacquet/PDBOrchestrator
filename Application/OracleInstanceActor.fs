@@ -81,16 +81,14 @@ type MasterPDBCreationResult =
 | MasterPDBCreated of OraclePDBResult
 | InvalidRequest of string list
 
-let getNewState oldState newStateResult =
-    match newStateResult with
-    | Ok state -> state
-    | Error error -> 
-        System.Diagnostics.Debug.Print("Error: {0}\n", error.ToString()) |> ignore
-        oldState
-
 type Collaborators = {
     OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
     MasterPDBActors: Map<string, IActorRef<Application.MasterPDBActor.Command>>
+}
+
+let addMasterPDBToCollaborators ctx pdb collaborators = 
+    logDebugf ctx "Adding MasterPDB %s to collaborators" pdb
+    { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(pdb, ctx |> MasterPDBActor.spawn pdb)
 }
 
 let spawnCollaborators oracleAPI (state : OracleInstanceState) (ctx : Actor<obj>) : Collaborators = {
@@ -111,8 +109,7 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
     match instanceMaybe, instanceStateMaybe with
     | Some instance, Some initialState ->
         let oracleAPI = getOracleAPI instance
-        let collaborators = ctx |> spawnCollaborators oracleAPI initialState
-        let rec loop (state : OracleInstanceState) (requests : RequestMap<Command>) = actor {
+        let rec loop collaborators (state : OracleInstanceState) (requests : RequestMap<Command>) = actor {
             let! msg = ctx.Receive()
             match msg with
             | :? Command as command ->
@@ -120,10 +117,10 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                 | GetState -> 
                     logDebugf ctx "State: PDB count = %d" state.MasterPDBs.Length
                     ctx.Sender() <! state
-                    return! loop state requests
+                    return! loop collaborators state requests
                 | SetState newState -> 
                     ctx.Sender() <! stateSetOk newState
-                    return! loop newState requests
+                    return! loop collaborators newState requests
                 //| MasterPDBVersionCreated (pdb, version, createdBy, comment) ->
                 //    let newStateResult =
                 //        state |> Domain.State.addMasterPDBVersionToState pdb version createdBy comment 
@@ -131,7 +128,7 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                 //    return! loop (getNewState state newStateResult)
                 | TransferState target ->
                     retype target <<! SetState state
-                    return! loop state requests
+                    return! loop collaborators state requests
                 | CreateMasterPDB parameters as command ->
                     let validation = validateCreateMasterPDBParams parameters state
                     match validation with
@@ -148,17 +145,17 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                         }
                         let requestId = newRequestId()
                         collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
-                        return! loop state <| registerRequest requestId command (retype (ctx.Sender())) requests
+                        return! loop collaborators state <| registerRequest requestId command (retype (ctx.Sender())) requests
                     | Invalid errors -> 
                         ctx.Sender() <! InvalidRequest errors
-                        return! loop state requests
+                        return! loop collaborators state requests
             | :? WithRequestId<OraclePDBResult> as requestResponse ->
                 let (requestId, result) = requestResponse
                 let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
                 match requestMaybe with
                 | None -> 
                     logWarningf ctx "Request %s not found" <| requestId.ToString()
-                    return! loop state newRequests
+                    return! loop collaborators state newRequests
                 | Some request ->
                     match request.Command with 
                     | CreateMasterPDB parameters ->
@@ -173,15 +170,22 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                                     parameters.User 
                                     parameters.Comment
                             retype request.Requester <! MasterPDBCreated result
-                            return! loop (getNewState state newStateResult) newRequests
+                            let newState, newCollabs = 
+                                match newStateResult with
+                                | Ok s -> s, (collaborators |> addMasterPDBToCollaborators ctx parameters.Name)
+                                | Error error -> 
+                                    logErrorf ctx "the new state is invalid : %s" <| buildStateErrorMessage error
+                                    state, collaborators
+                            return! loop newCollabs newState newRequests
                         | Error e -> 
                             logErrorf ctx "PDB %s failed to create with error %A" parameters.Name e
                             retype request.Requester <! MasterPDBCreated result
-                            return! loop state newRequests
+                            return! loop collaborators state newRequests
                     | _ -> failwith "critical error"
-            | x -> return! loop state requests
+            | x -> return! loop collaborators state requests
         }
-        loop initialState Map.empty
+        let collaborators = ctx |> spawnCollaborators oracleAPI initialState
+        loop collaborators initialState Map.empty
     | _ ->
         failwithf "Oracle instance %s cannot be created" instanceName
 

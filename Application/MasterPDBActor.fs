@@ -28,5 +28,6 @@ let masterPDBActorName (masterPDB:string) = Common.ActorName (sprintf "MasterPDB
 
 let spawn masterPDB actorFactory =
     let (Common.ActorName actorName) = masterPDBActorName masterPDB
+    logDebugf actorFactory "Spawning actor %s for master PDB %s" actorName masterPDB
     Akkling.Spawn.spawn actorFactory actorName <| props (masterPDBActorBody masterPDB)
 
