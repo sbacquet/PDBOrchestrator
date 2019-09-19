@@ -145,7 +145,7 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                             Directory = instance.OracleDirectoryForDumps
                         }
                         oracleExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
-                        return! loop state (requests |> registerRequest requestId command (retype (ctx.Sender())))
+                        return! loop state <| registerRequest requestId command (retype (ctx.Sender())) requests
                     | Invalid errors -> 
                         ctx.Sender() <! InvalidRequest errors
                         return! loop state requests
@@ -157,23 +157,26 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                     logWarningf ctx "Request %s not found" <| requestId.ToString()
                     return! loop state newRequests
                 | Some request ->
-                    let parameters = match request.Command with | CreateMasterPDB command -> snd command | _ -> failwith "critical"
-                    match result with
-                    | Ok _ -> 
-                        logDebugf ctx "PDB %s created successfully" parameters.Name
-                        let newStateResult = 
-                            state 
-                            |> Domain.OracleInstanceState.addMasterPDBToState 
-                                parameters.Name 
-                                (parameters.TargetSchemas |> List.map (fun (user, password, t) -> Domain.PDB.newSchema user password t)) 
-                                parameters.User 
-                                parameters.Comment
-                        retype request.Requester <! MasterPDBCreated result
-                        return! loop (getNewState state newStateResult) newRequests
-                    | Error e -> 
-                        logErrorf ctx "PDB %s failed to create with error %A" parameters.Name e
-                        retype request.Requester <! MasterPDBCreated result
-                        return! loop state newRequests
+                    match request.Command with 
+                    | CreateMasterPDB (reqId, parameters) ->
+                        if (reqId <> requestId) then failwith "critical error"
+                        match result with
+                        | Ok _ -> 
+                            logDebugf ctx "PDB %s created successfully" parameters.Name
+                            let newStateResult = 
+                                state 
+                                |> Domain.OracleInstanceState.addMasterPDBToState 
+                                    parameters.Name 
+                                    (parameters.TargetSchemas |> List.map (fun (user, password, t) -> Domain.PDB.newSchema user password t)) 
+                                    parameters.User 
+                                    parameters.Comment
+                            retype request.Requester <! MasterPDBCreated result
+                            return! loop (getNewState state newStateResult) newRequests
+                        | Error e -> 
+                            logErrorf ctx "PDB %s failed to create with error %A" parameters.Name e
+                            retype request.Requester <! MasterPDBCreated result
+                            return! loop state newRequests
+                    | _ -> failwith "critical error"
             | x -> return! loop state requests
         }
         ctx |> spawnChildActors oracleAPI initialState
