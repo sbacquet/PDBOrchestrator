@@ -139,7 +139,7 @@ let ``Oracle server actor creates PDB`` () = test <| fun tck ->
         User = "me"
         Comment = "yeah"
     }
-    let res : MasterPDBCreationResult = retype oracleActor <? CreateMasterPDB (newRequestId(), parameters) |> Async.RunSynchronously
+    let res : MasterPDBCreationResult = retype oracleActor <? CreateMasterPDB parameters |> Async.RunSynchronously
     match res with
     | MasterPDBCreated creationResponse -> 
         match creationResponse with

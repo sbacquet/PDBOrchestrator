@@ -71,7 +71,7 @@ type Command =
 | GetState // returns Domain.OracleInstanceState.OracleInstanceState
 | SetState of Domain.OracleInstance.OracleInstanceState // returns (StateSet thisInstance)
 | TransferState of (* toInstance : *) string // returns (StateSet toInstance)
-| CreateMasterPDB of (* withParams : *) WithRequestId<CreateMasterPDBParams> // returns MasterPDBCreationResult
+| CreateMasterPDB of (* withParams : *) CreateMasterPDBParams // returns MasterPDBCreationResult
 
 type StateSet = StateSet of string
 
@@ -88,7 +88,7 @@ let getNewState oldState newStateResult =
         oldState
 
 //let masterPDBActorName pdb = sprintf "MasterPDB[%s]" pdb
-let masterPDBActorName = id
+let masterPDBActorName = id // TODO
 
 let spawnChildActors oracleAPI (state : OracleInstanceState) (ctx : Actor<obj>) =
     spawn ctx "oracleLongTaskExecutor" <| props (oracleLongTaskExecutorBody oracleAPI) |> ignore
@@ -127,7 +127,7 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                         |> Async.RunSynchronously 
                     targetActor <<! SetState state
                     return! loop state requests
-                | CreateMasterPDB (requestId, parameters) as command ->
+                | CreateMasterPDB parameters as command ->
                     let validation = validateCreateMasterPDBParams parameters state
                     match validation with
                     | Valid _ -> 
@@ -144,6 +144,7 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                             TargetSchemas = parameters.TargetSchemas |> List.map (fun (u, p, _) -> (u, p))
                             Directory = instance.OracleDirectoryForDumps
                         }
+                        let requestId = newRequestId()
                         oracleExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
                         return! loop state <| registerRequest requestId command (retype (ctx.Sender())) requests
                     | Invalid errors -> 
@@ -158,8 +159,7 @@ let oracleInstanceActorBody getInstance getInstanceState getOracleAPI instanceNa
                     return! loop state newRequests
                 | Some request ->
                     match request.Command with 
-                    | CreateMasterPDB (reqId, parameters) ->
-                        if (reqId <> requestId) then failwith "critical error"
+                    | CreateMasterPDB parameters ->
                         match result with
                         | Ok _ -> 
                             logDebugf ctx "PDB %s created successfully" parameters.Name
