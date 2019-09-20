@@ -1,6 +1,6 @@
 ﻿module Domain.Orchestrator
 
-type OrchestratorState = {
+type Orchestrator = {
     OracleInstanceNames : string list
     PrimaryServer : string
 }

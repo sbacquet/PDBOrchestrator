@@ -3,7 +3,6 @@
 open Akkling
 open Application.OracleInstanceActor
 open Domain.Orchestrator
-open Akka.Actor
 
 type OnInstance<'C> = string * 'C
 
@@ -15,16 +14,18 @@ type Command =
 | CreateMasterPDB of (* withParams : *) CreateMasterPDBParams // returns MasterPDBCreationResult
 
 // TODO : try/catch ActorNotFoundException and return option
-let spawnCollaborators getInstance getInstanceState getOracleAPI state (ctx : Actor<_>) =
+let spawnCollaborators getOracleAPI getInstance getMasterPDB getMasterPDBVersion state (ctx : Actor<_>) =
     state.OracleInstanceNames 
-    |> List.map (fun instanceName -> instanceName, ctx |> OracleInstanceActor.spawn getInstance getInstanceState getOracleAPI instanceName)
+    |> List.map (fun instanceName -> 
+        instanceName,
+        ctx |> OracleInstanceActor.spawn getOracleAPI getMasterPDB getMasterPDBVersion (getInstance instanceName))
     |> Map.ofList
 
 let createMasterPDBError error : MasterPDBCreationResult = InvalidRequest [ error ]
 
-let orchestratorActorBody getInstance getInstanceState getOracleAPI initialState (ctx : Actor<_>) =
-    let collaborators = ctx |> spawnCollaborators getInstance getInstanceState getOracleAPI initialState
-    let rec loop (state : OrchestratorState) = actor {
+let orchestratorActorBody getOracleAPI getInstance getMasterPDB getMasterPDBVersion initialState (ctx : Actor<_>) =
+    let collaborators = ctx |> spawnCollaborators getOracleAPI getInstance getMasterPDB getMasterPDBVersion initialState
+    let rec loop (state : Orchestrator) = actor {
         let! msg = ctx.Receive()
         match msg with
         | Synchronize targetInstance ->
@@ -46,5 +47,5 @@ let orchestratorActorBody getInstance getInstanceState getOracleAPI initialState
 
 let [<Literal>]cOrchestratorActorName = "Orchestrator"
 
-let spawn getInstance getInstanceState getOracleAPI initialState actorFactory =
-    Akkling.Spawn.spawn actorFactory cOrchestratorActorName <| props (orchestratorActorBody getInstance getInstanceState getOracleAPI initialState)
+let spawn getOracleAPI getInstance getMasterPDB getMasterPDBVersion initialState actorFactory =
+    Akkling.Spawn.spawn actorFactory cOrchestratorActorName <| props (orchestratorActorBody getOracleAPI getInstance getMasterPDB getMasterPDBVersion initialState)

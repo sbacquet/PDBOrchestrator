@@ -5,7 +5,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Common.fs" />
-    <Compile Include="PDB.fs" />
+    <Compile Include="MasterPDBVersion.fs" />
+    <Compile Include="MasterPDB.fs" />
     <Compile Include="OracleInstance.fs" />
     <Compile Include="Orchestrator.fs" />
   </ItemGroup>
