@@ -1,4 +1,4 @@
-﻿module Application.DTO
+﻿module Application.DTO.OracleInstance
 
 open Domain
 open Domain.Common
@@ -30,7 +30,7 @@ type State = {
     MasterPDBs: MasterPDB list
 }
 
-let stateToDTO (state : Domain.OracleInstance.OracleInstanceState) : State =
+let domainStateToDTO (state : Domain.OracleInstance.OracleInstanceState) : State =
     let mapMasterPDB 
         (versions:Domain.PDB.MasterPDBVersion list) 
         (locks:Map<string, Domain.PDB.LockInfo>)

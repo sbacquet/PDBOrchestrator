@@ -7,7 +7,7 @@
     <Compile Include="Common.fs" />
     <Compile Include="PendingRequest.fs" />
     <Compile Include="OracleAPI.fs" />
-    <Compile Include="DTO.fs" />
+    <Compile Include="OracleInstanceDTO.fs" />
     <Compile Include="PDBRepository.fs" />
     <Compile Include="API.fs" />
     <Compile Include="MasterPDBVersionActor.fs" />

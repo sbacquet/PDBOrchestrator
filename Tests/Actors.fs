@@ -133,7 +133,7 @@ let ``Synchronize state`` () = test <| fun tck ->
 let ``Oracle server actor creates PDB`` () = test <| fun tck ->
     let oracleActor = tck |> OracleInstanceActor.spawn getInstance getInstanceState (fun _ -> fakeOracleAPI) "server1"
 
-    let stateBefore = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously |> Application.DTO.stateToDTO
+    let stateBefore = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously |> Application.DTO.OracleInstance.domainStateToDTO
     Assert.Equal(1, stateBefore.MasterPDBs.Length)
 
     let parameters : OracleInstanceActor.CreateMasterPDBParams = {
@@ -152,7 +152,7 @@ let ``Oracle server actor creates PDB`` () = test <| fun tck ->
         | Error ex -> failwithf "the creation of %s failed : %A" parameters.Name ex
     | OracleInstanceActor.InvalidRequest errors -> failwithf "the request is invalid : %A" errors
 
-    let stateAfter = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously |> Application.DTO.stateToDTO
+    let stateAfter = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously |> Application.DTO.OracleInstance.domainStateToDTO
     Assert.Equal(2, stateAfter.MasterPDBs.Length)
     ()
 

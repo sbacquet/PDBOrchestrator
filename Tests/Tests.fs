@@ -31,7 +31,7 @@ let instance1State = {
 
 [<Fact>]
 let ``Get state`` () =
-    let currentState = DTO.stateToDTO instance1State
+    let currentState = DTO.OracleInstance.domainStateToDTO instance1State
     test <@ currentState.MasterPDBs.Length = 1 @>
     test <@ currentState.MasterPDBs.[0].Name = "test1" @>
     test <@ currentState.MasterPDBs.[0].Versions.Length = 1 @>
