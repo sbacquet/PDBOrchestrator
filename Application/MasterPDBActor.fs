@@ -23,7 +23,7 @@ let masterPDBActorBody (initialMasterPDB : Domain.MasterPDB.MasterPDB) (ctx : Ac
         let! msg = ctx.Receive()
         match msg with
         | GetState -> 
-            ctx.Sender() <! masterPDB
+            ctx.Sender() <! (masterPDB |> Application.DTO.MasterPDB.toDTO)
             return! loop masterPDB
         | PrepareForModification -> // TODO
             return! loop masterPDB

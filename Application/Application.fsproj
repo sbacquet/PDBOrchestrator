@@ -5,18 +5,18 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Common.fs" />
-    <Compile Include="OracleInstanceDTO.fs" />
-    <Compile Include="OrchestratorDTO.fs" />
     <Compile Include="PendingRequest.fs" />
     <Compile Include="OracleAPI.fs" />
     <Compile Include="PDBRepository.fs" />
     <Compile Include="API.fs" />
     <Compile Include="MasterPDBVersionActor.fs" />
+    <Compile Include="MasterPDBDTO.fs" />
     <Compile Include="MasterPDBActor.fs" />
     <Compile Include="OracleDiskIntensiveActor.fs" />
     <Compile Include="OracleLongTaskExecutor.fs" />
-    <Compile Include="OracleInstanceState.fs" />
+    <Compile Include="OracleInstanceDTO.fs" />
     <Compile Include="OracleInstanceActor.fs" />
+    <Compile Include="OrchestratorDTO.fs" />
     <Compile Include="OrchestratorActor.fs" />
   </ItemGroup>
   <ItemGroup>

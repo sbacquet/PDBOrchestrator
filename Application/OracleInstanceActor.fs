@@ -136,9 +136,9 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
         match msg with
         | :? Command as command ->
             match command with
-            | GetState -> 
-                logDebugf ctx "State: PDB count = %d" instance.MasterPDBs.Length
-                ctx.Sender() <! instance
+            | GetState ->
+                let! state = instance |> Application.DTO.OracleInstance.toDTO collaborators.MasterPDBActors
+                ctx.Sender() <! state
                 return! loop collaborators instance requests masterPDBRepo
             | SetState newState -> 
                 ctx.Sender() <! stateSetOk newState

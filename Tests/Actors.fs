@@ -14,6 +14,8 @@ open Serilog
 open Microsoft.Extensions.Logging
 open System
 open Application.PDBRepository
+open Application.DTO.OracleInstance
+open Application.DTO.Orchestrator
 
 #if DEBUG
 let expectMsg tck =
@@ -143,7 +145,7 @@ let ``Synchronize state`` () = test <| fun tck ->
 let ``Oracle server actor creates PDB`` () = test <| fun tck ->
     let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
 
-    let stateBefore = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously
+    let stateBefore : OracleInstanceState = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously
     Assert.Equal(1, stateBefore.MasterPDBs.Length)
 
     let parameters : OracleInstanceActor.CreateMasterPDBParams = {
@@ -171,6 +173,9 @@ let ``Oracle server actor creates PDB`` () = test <| fun tck ->
 let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
 
+    let stateBefore : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> Async.RunSynchronously
+    Assert.Equal(1, stateBefore.OracleInstances.[0].MasterPDBs.Length)
+
     let parameters : OracleInstanceActor.CreateMasterPDBParams = {
         Name = "test2"
         Dump = @"c:\windows\system.ini" // always exists
@@ -187,3 +192,6 @@ let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
         | Ok _ -> ()
         | Error ex -> failwithf "the creation of %s failed : %A" parameters.Name ex
     | OracleInstanceActor.InvalidRequest errors -> failwithf "the request is invalid : %A" errors
+
+    let stateAfter : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> Async.RunSynchronously
+    Assert.Equal(2, stateAfter.OracleInstances.[0].MasterPDBs.Length)
