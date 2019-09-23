@@ -24,22 +24,27 @@ let consLockInfo locker date =
 
 type MasterPDB = {
     Name: string
+    Manifest: string
     Schemas: Schema list
     Versions: Map<MasterPDBVersion.VersionNumber, MasterPDBVersion.MasterPDBVersion>
     LockState : LockInfo option
 }
 
-let consMasterPDB name schemas versions deletedVersions lockState = 
+let consMasterPDB name manifest schemas versions deletedVersions lockState = 
     { 
         Name = name
+        Manifest = manifest
         Schemas = schemas 
         Versions = versions
         LockState = lockState
     }
 
+let masterPDBManifest = sprintf "%s_v%03d.xml"
+
 let newMasterPDB name schemas createdBy creationDate comment =
     { 
         Name = name
+        Manifest = masterPDBManifest name 1
         Schemas = schemas
         Versions = [ 1, MasterPDBVersion.newPDBVersion name createdBy creationDate comment ] |> Map.ofList
         LockState = None 
@@ -78,7 +83,7 @@ let deleteVersion versionNumber masterPDB =
           }
         | None -> Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name)
 
-let lock masterPDB user comment =
+let lock user comment masterPDB =
     match masterPDB.LockState with
     | Some lockInfo -> Error (sprintf "%s is already locked by %s" masterPDB.Name lockInfo.Locker)
     | None -> Ok { masterPDB with LockState = Some (consLockInfo user comment) }

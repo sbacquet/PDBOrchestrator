@@ -14,10 +14,10 @@ type OracleInstanceState = {
     MasterPDBs: MasterPDBState list
 }
 
-let toDTO (masterPDBActors:Map<string, IActorRef<MasterPDBActor.Command>>) (oracleInstance : Domain.OracleInstance.OracleInstance) = async {
+let toDTO (masterPDBActors:Map<string, IActorRef<obj>>) (oracleInstance : Domain.OracleInstance.OracleInstance) = async {
     let! masterPDBs = 
         oracleInstance.MasterPDBs 
-            |> List.map (fun name -> (masterPDBActors |> Map.find name) <? MasterPDBActor.GetState)
+            |> List.map (fun name -> retype (masterPDBActors |> Map.find name) <? MasterPDBActor.GetState)
             |> Async.Parallel
     return {
         Name = oracleInstance.Name

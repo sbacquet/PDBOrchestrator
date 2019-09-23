@@ -16,6 +16,7 @@ open System
 open Application.PDBRepository
 open Application.DTO.OracleInstance
 open Application.DTO.Orchestrator
+open Application.MasterPDBActor
 
 #if DEBUG
 let expectMsg tck =
@@ -23,6 +24,12 @@ let expectMsg tck =
         expectMsgWithin tck (System.TimeSpan.FromHours(10.))
     else
         Akkling.TestKit.expectMsg tck
+
+let expectMsgFilter tck =
+    if (System.Diagnostics.Debugger.IsAttached) then
+        expectMsgFilterWithin tck (System.TimeSpan.FromHours(10.))
+    else
+        Akkling.TestKit.expectMsgFilter tck
 
 let test, (loggerFactory : ILoggerFactory) =
     if (System.Diagnostics.Debugger.IsAttached) then
@@ -195,3 +202,45 @@ let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
 
     let stateAfter : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> Async.RunSynchronously
     Assert.Equal(2, stateAfter.OracleInstances.[0].MasterPDBs.Length)
+
+[<Fact>]
+let ``Lock master PDB`` () = test <| fun tck ->
+    let pdb1 = newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment1"
+    let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn fakeOracleAPI
+    let masterPDBActor = tck |> MasterPDBActor.spawn instance1 longTaskExecutor pdb1
+    
+    let requestId = System.Guid.NewGuid()
+    retype masterPDBActor <! MasterPDBActor.PrepareForModification (requestId, 1, "me")
+
+    let lockedMess = expectMsgFilter tck (fun (mess:obj) -> 
+        match mess with
+        | :? PrepareForModificationResult as result ->
+            match result with
+            | Locked _ -> true
+            | _ -> false
+        | _ -> false
+    )
+
+    let preparedMess = expectMsgFilter tck (fun (mess:obj) -> 
+        match mess with
+        | :? MasterPDBActor.PrepareForModificationResult as result -> 
+            match result with
+            | Prepared _ -> true
+            | _ -> false
+        | _ -> false
+    )
+
+    let requestId = System.Guid.NewGuid()
+    retype masterPDBActor <! MasterPDBActor.Rollback requestId
+    let x = expectMsgFilter tck (fun (mess:obj) -> 
+        match mess with
+        | :? MasterPDBActor.RollbackResult as result -> 
+            match result with
+            | RolledBack _ -> true
+            | _ -> false
+        | _ -> false
+    ) 
+
+
+
+    ()

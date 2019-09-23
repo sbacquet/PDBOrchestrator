@@ -6,7 +6,6 @@ open Application.OracleLongTaskExecutor
 open Application.PendingRequest
 open Domain
 open Domain.OracleInstance
-open Application.MasterPDBActor
 open Domain.Common.Validation
 open Domain.Common.Result
 open System
@@ -97,30 +96,31 @@ type MasterPDBCreationResult =
 
 type Collaborators = {
     OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
-    MasterPDBActors: Map<string, IActorRef<Application.MasterPDBActor.Command>>
+    MasterPDBActors: Map<string, IActorRef<obj>>
 }
 
-let addMasterPDBToCollaborators ctx (masterPDB:Domain.MasterPDB.MasterPDB) collaborators = 
+let addMasterPDBToCollaborators ctx (instance : OracleInstance) (masterPDB:Domain.MasterPDB.MasterPDB) collaborators = 
     logDebugf ctx "Adding MasterPDB %s to collaborators" masterPDB.Name
-    { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn masterPDB)
+    { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn instance collaborators.OracleLongTaskExecutor masterPDB)
 }
 
 // Spawn actor for a new master PDBs
-let addNewMasterPDB (ctx : Actor<obj>) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:MasterPDBRepo) (state:OracleInstance) = result {
+let addNewMasterPDB (ctx : Actor<obj>) (instance : OracleInstance) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:MasterPDBRepo) (state:OracleInstance) = result {
     let! newState = state |> OracleInstance.addMasterPDB masterPDB.Name
-    let newCollaborators = { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn masterPDB) }
     let newMasterPDBRepo = masterPDBRepo.Put masterPDB.Name masterPDB
+    let newCollaborators = { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn instance collaborators.OracleLongTaskExecutor masterPDB) }
     return newState, newCollaborators, newMasterPDBRepo
 }
 
 // Spawn actors for master PDBs that already exist
 let spawnCollaborators getOracleAPI (masterPDBRepo:MasterPDBRepo) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
     let oracleAPI = getOracleAPI instance
+    let oracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn oracleAPI
     {
-        OracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn oracleAPI
+        OracleLongTaskExecutor = oracleLongTaskExecutor
         MasterPDBActors = 
             instance.MasterPDBs 
-            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn (masterPDBRepo.Get pdb)))
+            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn instance oracleLongTaskExecutor (masterPDBRepo.Get pdb)))
             |> Map.ofList
     }
     //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())
@@ -162,7 +162,7 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                     }
                     let requestId = newRequestId()
                     collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
-                    return! loop collaborators instance (registerRequest requestId command (retype (ctx.Sender())) requests) masterPDBRepo
+                    return! loop collaborators instance (requests |> registerRequest requestId command (retype (ctx.Sender()))) masterPDBRepo
                 | Invalid errors -> 
                     ctx.Sender() <! InvalidRequest errors
                     return! loop collaborators instance requests masterPDBRepo
@@ -186,6 +186,7 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                         let newStateResult = 
                             addNewMasterPDB 
                                 ctx 
+                                instance
                                 collaborators 
                                 (newMasterPDB parameters.User parameters.Date parameters.Comment)
                                 masterPDBRepo
