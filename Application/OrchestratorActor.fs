@@ -14,6 +14,7 @@ type Command =
 | GetState // responds with Application.DTO.Orchestrator
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
+| RollbackMasterPDB of WithRequestId<string> // responds with WithRequestId<MasterPDBActor.RollbackResult>
 
 type Collaborators = {
     OracleInstanceActors: Map<string, IActorRef<obj>>
@@ -54,6 +55,9 @@ let orchestratorActorBody getOracleAPI getInstance getMasterPDBRepo initialState
         | PrepareMasterPDBForModification parameters ->
             let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
             retype primaryInstance <<! Application.OracleInstanceActor.PrepareMasterPDBForModification parameters
+        | RollbackMasterPDB parameters ->
+            let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
+            retype primaryInstance <<! Application.OracleInstanceActor.RollbackMasterPDB parameters
     }
     loop initialState
 

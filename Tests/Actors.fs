@@ -267,4 +267,16 @@ let ``Orchestrator locks master PDB`` () = test <| fun tck ->
             | _ -> false
         | _ -> false
     )
+
+    retype orchestrator <! OrchestratorActor.RollbackMasterPDB (newRequestId(), "test1")
+
+    let x = expectMsgFilter tck (fun (mess:obj) -> 
+        match mess with
+        | :? WithRequestId<MasterPDBActor.RollbackResult> as result -> 
+            match snd result with
+            | RolledBack _ -> true
+            | _ -> false
+        | _ -> false
+    )
+
     ()

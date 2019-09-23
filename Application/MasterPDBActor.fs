@@ -10,8 +10,8 @@ open Akka.Actor
 type Command =
 | GetState
 | PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
-| Commit of WithRequestId<string, string> // responds with WithRequestId<RollbackResult>
-| Rollback of RequestId
+| Commit of WithRequestId<string, string>
+| Rollback of RequestId // responds with WithRequestId<RollbackResult>
 
 type PrepareForModificationResult = 
 | Locked of MasterPDB

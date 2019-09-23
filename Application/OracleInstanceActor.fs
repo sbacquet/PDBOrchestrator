@@ -86,6 +86,7 @@ type Command =
 | TransferState of IActorRef<obj> // responds with (StateSet state)
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
+| RollbackMasterPDB of WithRequestId<string> // responds with WithRequestId<MasterPDBActor.RollbackResult>
 
 type StateSet = Result<OracleInstance, string>
 let stateSetOk state : StateSet = Ok state
@@ -181,11 +182,23 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                 let masterPDBActorMaybe = collaborators.MasterPDBActors |> Map.tryFind pdb
                 match masterPDBActorMaybe with
                 | None -> 
-                    sender <! (requestId, MasterPDBActor.PreparationFailure (sprintf "master PDB %s does not exist" pdb))
+                    sender <! (requestId, MasterPDBActor.PreparationFailure "internal error")
                     return! loop collaborators instance requests masterPDBRepo
                 | Some masterPDBActor -> 
                     let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
                     retype masterPDBActor <! MasterPDBActor.PrepareForModification (requestId, version, user)
+                    return! loop collaborators instance newRequests masterPDBRepo
+
+            | RollbackMasterPDB (requestId, pdb) ->
+                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.RollbackResult>>()
+                let masterPDBActorMaybe = collaborators.MasterPDBActors |> Map.tryFind pdb
+                match masterPDBActorMaybe with
+                | None -> 
+                    sender <! (requestId, MasterPDBActor.RollbackFailure "internal error")
+                    return! loop collaborators instance requests masterPDBRepo
+                | Some masterPDBActor -> 
+                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                    retype masterPDBActor <! MasterPDBActor.Rollback requestId
                     return! loop collaborators instance newRequests masterPDBRepo
 
         // Callback from Oracle executor
@@ -194,7 +207,7 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
             match requestMaybe with
             | None -> 
-                logWarningf ctx "Request %s not found" <| requestId.ToString()
+                logError ctx "internal error"
                 return! loop collaborators instance newRequests masterPDBRepo
             | Some request ->
                 match request.Command with 
@@ -247,7 +260,7 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                     retype request.Requester <! preparationResult
                     return! loop collaborators instance newRequests masterPDBRepo
                 | None -> 
-                    logWarningf ctx "Request %s not found" <| requestId.ToString()
+                    logError ctx "internal error"
                     return! loop collaborators instance newRequests masterPDBRepo
 
             | MasterPDBActor.PreparationFailure _ ->
@@ -257,8 +270,32 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                     retype request.Requester <! preparationResult
                     return! loop collaborators instance newRequests masterPDBRepo
                 | None -> 
-                    logWarningf ctx "Request %s not found" <| requestId.ToString()
+                    logError ctx "internal error"
                     return! loop collaborators instance newRequests masterPDBRepo
+
+        // Callback from Master PDB actor in response to PrepareMasterPDBForModification
+        | :? WithRequestId<MasterPDBActor.RollbackResult> as rollbackResult ->
+            let (requestId, result) = rollbackResult
+            let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
+            match result with
+            | MasterPDBActor.RolledBack unlockedMasterPDB -> 
+                // Persist the state of the PDB
+                let newMasterPDBRepo = masterPDBRepo.Put unlockedMasterPDB.Name unlockedMasterPDB
+                match requestMaybe with
+                | Some request -> 
+                    retype request.Requester <! rollbackResult
+                | None -> 
+                    logError ctx "internal error"
+                return! loop collaborators instance newRequests newMasterPDBRepo
+
+            | MasterPDBActor.RollbackFailure error ->
+                match requestMaybe with
+                | Some request -> 
+                    retype request.Requester <! rollbackResult
+                | None -> 
+                    logError ctx "internal error"
+                return! loop collaborators instance newRequests masterPDBRepo
+
         | _ -> return! loop collaborators instance requests masterPDBRepo
     }
     let collaborators = ctx |> spawnCollaborators getOracleAPI initialMasterPDBRepo initialInstance
