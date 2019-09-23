@@ -224,12 +224,10 @@ let pdbHasSnapshots connAsDBA name =
 
 type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager, connAsDBAIn : string -> Sql.ConnectionManager) = 
     member this.Logger = loggerFactory.CreateLogger("Oracle API")
-    member this.ConnAsDBA = connAsDBA
-    member this.ConnAsDBAIn = connAsDBAIn
     interface IOracleAPI with
-        member this.NewPDBFromDump adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name = createManifestFromDump this.Logger this.ConnAsDBA this.ConnAsDBAIn adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name
-        member this.ClosePDB name = closePDB this.Logger this.ConnAsDBA name
-        member this.DeletePDB name = deletePDB this.Logger this.ConnAsDBA name
-        member this.ExportPDB manifest name = exportPDB this.Logger this.ConnAsDBA manifest name
-        member this.ImportPDB manifest dest name = importPDB this.Logger this.ConnAsDBA manifest dest name
-        member this.SnapshotPDB from dest name = snapshotPDB this.Logger this.ConnAsDBA from dest name
+        member this.NewPDBFromDump adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name = createManifestFromDump this.Logger connAsDBA connAsDBAIn adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name
+        member this.ClosePDB name = closePDB this.Logger connAsDBA name
+        member this.DeletePDB name = deletePDB this.Logger connAsDBA name
+        member this.ExportPDB manifest name = exportPDB this.Logger connAsDBA manifest name
+        member this.ImportPDB manifest dest name = importPDB this.Logger connAsDBA manifest dest name
+        member this.SnapshotPDB from dest name = snapshotPDB this.Logger connAsDBA from dest name

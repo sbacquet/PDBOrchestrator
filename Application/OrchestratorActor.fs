@@ -14,17 +14,17 @@ type Command =
 | CreateMasterPDB of (* withParams : *) CreateMasterPDBParams // returns MasterPDBCreationResult
 
 // TODO : try/catch ActorNotFoundException and return option
-let spawnCollaborators getOracleAPI getInstance getMasterPDB state (ctx : Actor<_>) =
+let spawnCollaborators getOracleAPI getInstance getMasterPDBRepo state (ctx : Actor<_>) =
     state.OracleInstanceNames 
     |> List.map (fun instanceName -> 
         instanceName,
-        ctx |> OracleInstanceActor.spawn getOracleAPI getMasterPDB (getInstance instanceName))
+        ctx |> OracleInstanceActor.spawn getOracleAPI (getMasterPDBRepo instanceName) (getInstance instanceName))
     |> Map.ofList
 
 let createMasterPDBError error : MasterPDBCreationResult = InvalidRequest [ error ]
 
-let orchestratorActorBody getOracleAPI getInstance getMasterPDB initialState (ctx : Actor<_>) =
-    let collaborators = ctx |> spawnCollaborators getOracleAPI getInstance getMasterPDB initialState
+let orchestratorActorBody getOracleAPI getInstance getMasterPDBRepo initialState (ctx : Actor<_>) =
+    let collaborators = ctx |> spawnCollaborators getOracleAPI getInstance getMasterPDBRepo initialState
     let rec loop (state : Orchestrator) = actor {
         let! msg = ctx.Receive()
         match msg with
@@ -47,5 +47,5 @@ let orchestratorActorBody getOracleAPI getInstance getMasterPDB initialState (ct
 
 let [<Literal>]cOrchestratorActorName = "Orchestrator"
 
-let spawn getOracleAPI getInstance getMasterPDB initialState actorFactory =
-    Akkling.Spawn.spawn actorFactory cOrchestratorActorName <| props (orchestratorActorBody getOracleAPI getInstance getMasterPDB initialState)
+let spawn getOracleAPI getInstance getMasterPDBRepo initialState actorFactory =
+    Akkling.Spawn.spawn actorFactory cOrchestratorActorName <| props (orchestratorActorBody getOracleAPI getInstance getMasterPDBRepo initialState)

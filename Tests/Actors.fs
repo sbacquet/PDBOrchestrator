@@ -13,6 +13,7 @@ open Akka.Configuration
 open Serilog
 open Microsoft.Extensions.Logging
 open System
+open Application.PDBRepository
 
 #if DEBUG
 let expectMsg tck =
@@ -91,22 +92,30 @@ type FakeOracleAPI() =
 
 let fakeOracleAPI = FakeOracleAPI()
 
-let getInstance name =
-    match name with
+let getInstance = function
     | "server1" -> instance1
     | "server2" -> instance2
-    | _ -> failwithf "Oracle instance %s does not exist" name
+    | name -> failwithf "Oracle instance %s does not exist" name
 
-let getMasterPDB name =
-    match name with
-    | "test1" -> newMasterPDB name [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment1"
-    | "test2" -> newMasterPDB name [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment2"
-    | _ -> failwithf "master PDB %s does not exist" name
+type FakeMasterPDBRepo(map : Map<string, MasterPDB>) =
+    interface MasterPDBRepo with
+        member this.Get pdb = map |> Map.find pdb
+        member this.Put name pdb = FakeMasterPDBRepo (map.Add(name, pdb)) :> MasterPDBRepo
+
+let masterPDBMap1 =
+    [ 
+        "test1", (newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment1")
+    ] |> Map.ofList
+
+let masterPDBMap2 =
+    [ 
+        "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment2")
+    ] |> Map.ofList
 
 [<Fact>]
 let ``Test state transfer`` () = test <| fun tck ->
-    let aref1 = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) getMasterPDB instance1
-    let aref2 = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) getMasterPDB instance2
+    let aref1 = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
+    let aref2 = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap2) instance2
 
     let state : OracleInstanceActor.StateSet = retype aref1 <? OracleInstanceActor.TransferState aref2 |> Async.RunSynchronously
     state |> Result.mapError (fun error -> failwith error) |> ignore
@@ -117,9 +126,14 @@ let orchestratorState = {
     PrimaryServer = "server1"
 }
 
+let getMasterPDBRepo = function
+    | "server1" -> FakeMasterPDBRepo masterPDBMap1
+    | "server2" -> FakeMasterPDBRepo masterPDBMap2
+    | name -> failwithf "Oracle instance %s does not exist" name
+
 [<Fact>]
 let ``Synchronize state`` () = test <| fun tck ->
-    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDB orchestratorState
+    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
     //monitor tck orchestrator
     let state : OracleInstanceActor.StateSet = retype orchestrator <? OrchestratorActor.Synchronize "server2" |> Async.RunSynchronously
     state |> Result.mapError (fun error -> failwith error) |> ignore
@@ -127,7 +141,7 @@ let ``Synchronize state`` () = test <| fun tck ->
 
 [<Fact>]
 let ``Oracle server actor creates PDB`` () = test <| fun tck ->
-    let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) getMasterPDB instance1
+    let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
 
     let stateBefore = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously
     Assert.Equal(1, stateBefore.MasterPDBs.Length)
@@ -155,7 +169,7 @@ let ``Oracle server actor creates PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
-    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDB orchestratorState
+    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
 
     let parameters : OracleInstanceActor.CreateMasterPDBParams = {
         Name = "test2"

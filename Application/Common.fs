@@ -18,3 +18,7 @@ let resolveActor (ActorName name) (ctx:Actor<_>) =
     | _ -> Error (sprintf @"cannot find any actor with name ""%s"" under ""%s""" name ctx.Self.Path.Name)
 
 let resolveSiblingActor (ActorName name) = resolveActor (ActorName (sprintf "../%s" name))
+
+type Repository<'K, 'T> =
+    abstract member Get : 'K -> 'T
+    abstract member Put : 'K -> 'T -> Repository<'K, 'T>

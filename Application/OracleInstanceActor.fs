@@ -10,6 +10,7 @@ open Application.MasterPDBActor
 open Domain.Common.Validation
 open Domain.Common.Result
 open System
+open Application.PDBRepository
 
 type CreateMasterPDBParams = {
     Name: string
@@ -105,21 +106,21 @@ let addMasterPDBToCollaborators ctx (masterPDB:Domain.MasterPDB.MasterPDB) colla
 }
 
 // Spawn actor for a new master PDBs
-let addNewMasterPDB (ctx : Actor<obj>) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (state : OracleInstance) = result {
+let addNewMasterPDB (ctx : Actor<obj>) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:MasterPDBRepo) (state:OracleInstance) = result {
     let! newState = state |> OracleInstance.addMasterPDB masterPDB.Name
     let newCollaborators = { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn masterPDB) }
-    // TODO: store masterPDB, using a new putMasterPDB function
-    return newState, newCollaborators
+    let newMasterPDBRepo = masterPDBRepo.Put masterPDB.Name masterPDB
+    return newState, newCollaborators, newMasterPDBRepo
 }
 
 // Spawn actors for master PDBs that already exist
-let spawnCollaborators getOracleAPI getMasterPDB (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
+let spawnCollaborators getOracleAPI (masterPDBRepo:MasterPDBRepo) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
     let oracleAPI = getOracleAPI instance
     {
         OracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn oracleAPI
         MasterPDBActors = 
             instance.MasterPDBs 
-            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn (getMasterPDB pdb)))
+            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn (masterPDBRepo.Get pdb)))
             |> Map.ofList
     }
     //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())
@@ -129,8 +130,8 @@ let oracleInstanceActorName (instance : OracleInstance) =
     Common.ActorName 
         (sprintf "OracleInstance='%s'" (instance.Name.ToUpper() |> System.Uri.EscapeDataString))
 
-let oracleInstanceActorBody getOracleAPI getMasterPDB initialInstance (ctx : Actor<obj>) =
-    let rec loop collaborators (instance : OracleInstance) (requests : RequestMap<Command>) = actor {
+let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) initialInstance (ctx : Actor<obj>) =
+    let rec loop collaborators (instance : OracleInstance) (requests : RequestMap<Command>) (masterPDBRepo:MasterPDBRepo) = actor {
         let! msg = ctx.Receive()
         match msg with
         | :? Command as command ->
@@ -138,13 +139,13 @@ let oracleInstanceActorBody getOracleAPI getMasterPDB initialInstance (ctx : Act
             | GetState -> 
                 logDebugf ctx "State: PDB count = %d" instance.MasterPDBs.Length
                 ctx.Sender() <! instance
-                return! loop collaborators instance requests
+                return! loop collaborators instance requests masterPDBRepo
             | SetState newState -> 
                 ctx.Sender() <! stateSetOk newState
-                return! loop collaborators newState requests
+                return! loop collaborators newState requests masterPDBRepo
             | TransferState target ->
                 retype target <<! SetState instance
-                return! loop collaborators instance requests
+                return! loop collaborators instance requests masterPDBRepo
             | CreateMasterPDB parameters as command ->
                 let validation = validateCreateMasterPDBParams parameters instance
                 match validation with
@@ -161,17 +162,17 @@ let oracleInstanceActorBody getOracleAPI getMasterPDB initialInstance (ctx : Act
                     }
                     let requestId = newRequestId()
                     collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
-                    return! loop collaborators instance <| registerRequest requestId command (retype (ctx.Sender())) requests
+                    return! loop collaborators instance (registerRequest requestId command (retype (ctx.Sender())) requests) masterPDBRepo
                 | Invalid errors -> 
                     ctx.Sender() <! InvalidRequest errors
-                    return! loop collaborators instance requests
+                    return! loop collaborators instance requests masterPDBRepo
         | :? WithRequestId<OraclePDBResult> as requestResponse ->
             let (requestId, result) = requestResponse
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
             match requestMaybe with
             | None -> 
                 logWarningf ctx "Request %s not found" <| requestId.ToString()
-                return! loop collaborators instance newRequests
+                return! loop collaborators instance newRequests masterPDBRepo
             | Some request ->
                 match request.Command with 
                 | CreateMasterPDB parameters ->
@@ -187,27 +188,28 @@ let oracleInstanceActorBody getOracleAPI getMasterPDB initialInstance (ctx : Act
                                 ctx 
                                 collaborators 
                                 (newMasterPDB parameters.User parameters.Date parameters.Comment)
+                                masterPDBRepo
                                 instance
                         retype request.Requester <! MasterPDBCreated result
-                        let newState, newCollabs = 
+                        let newState, newCollabs, newMasterPDBRepo = 
                             match newStateResult with
                             | Ok s -> s
                             | Error error -> 
                                 logErrorf ctx "error when registering new master PDB %s : %s" parameters.Name error
-                                instance, collaborators
-                        return! loop newCollabs newState newRequests
+                                instance, collaborators, masterPDBRepo
+                        return! loop newCollabs newState newRequests newMasterPDBRepo
                     | Error e -> 
                         logErrorf ctx "PDB %s failed to create with error %A" parameters.Name e
                         retype request.Requester <! MasterPDBCreated result
-                        return! loop collaborators instance newRequests
+                        return! loop collaborators instance newRequests masterPDBRepo
                 | _ -> failwith "critical error"
-        | _ -> return! loop collaborators instance requests
+        | _ -> return! loop collaborators instance requests masterPDBRepo
     }
-    let collaborators = ctx |> spawnCollaborators getOracleAPI getMasterPDB initialInstance
-    loop collaborators initialInstance Map.empty
+    let collaborators = ctx |> spawnCollaborators getOracleAPI initialMasterPDBRepo initialInstance
+    loop collaborators initialInstance Map.empty initialMasterPDBRepo
 
-let spawn getOracleAPI getMasterPDB initialInstance actorFactory =
+let spawn getOracleAPI initialMasterPDBRepo initialInstance actorFactory =
     let (Common.ActorName actorName) = oracleInstanceActorName initialInstance
     Akkling.Spawn.spawn actorFactory actorName 
-    <| props (oracleInstanceActorBody getOracleAPI getMasterPDB initialInstance)
+    <| props (oracleInstanceActorBody getOracleAPI initialMasterPDBRepo initialInstance)
 
