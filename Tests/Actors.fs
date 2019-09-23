@@ -209,7 +209,7 @@ let ``Lock master PDB`` () = test <| fun tck ->
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn fakeOracleAPI
     let masterPDBActor = tck |> MasterPDBActor.spawn instance1 longTaskExecutor pdb1
     
-    let requestId = System.Guid.NewGuid()
+    let requestId = newRequestId()
     retype masterPDBActor <! MasterPDBActor.PrepareForModification (requestId, 1, "me")
 
     let lockedMess = expectMsgFilter tck (fun (mess:obj) -> 
@@ -240,7 +240,21 @@ let ``Lock master PDB`` () = test <| fun tck ->
             | _ -> false
         | _ -> false
     ) 
+    ()
 
+[<Fact>]
+let ``OracleInstance locks master PDB`` () = test <| fun tck ->
+    let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
 
+    let requestId = newRequestId()
+    retype oracleActor <! OracleInstanceActor.PrepareMasterPDBForModification (requestId, "test1", 1, "me")
 
+    let preparedMess = expectMsgFilter tck (fun (mess:obj) -> 
+        match mess with
+        | :? MasterPDBActor.PrepareForModificationResult as result -> 
+            match result with
+            | Prepared _ -> true
+            | _ -> false
+        | _ -> false
+    )
     ()

@@ -81,10 +81,11 @@ let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : 
     retn newCreateMasterPDBParams <*> pdb <*> dump <*> schemas <*> targetSchemas <*> user <*> date <*> comment
 
 type Command =
-| GetState // returns Domain.OracleInstanceState.OracleInstanceState
-| SetState of OracleInstance // returns StateSet
-| TransferState of (* toInstance : *) IActorRef<obj> // returns (StateSet state)
-| CreateMasterPDB of (* withParams : *) CreateMasterPDBParams // returns MasterPDBCreationResult
+| GetState // respond with Application.DTO.OracleInstance
+| SetState of OracleInstance // respond with StateSet
+| TransferState of (* toInstance : *) IActorRef<obj> // respond with (StateSet state)
+| CreateMasterPDB of (* withParams : *) CreateMasterPDBParams // respond with MasterPDBCreationResult
+| PrepareMasterPDBForModification of WithRequestId<string, int, string> // respond with MasterPDBActor.PrepareForModificationResult
 
 type StateSet = Result<OracleInstance, string>
 let stateSetOk state : StateSet = Ok state
@@ -131,8 +132,11 @@ let oracleInstanceActorName (instance : OracleInstance) =
         (sprintf "OracleInstance='%s'" (instance.Name.ToUpper() |> System.Uri.EscapeDataString))
 
 let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) initialInstance (ctx : Actor<obj>) =
+
     let rec loop collaborators (instance : OracleInstance) (requests : RequestMap<Command>) (masterPDBRepo:MasterPDBRepo) = actor {
+
         let! msg = ctx.Receive()
+
         match msg with
         | :? Command as command ->
             match command with
@@ -140,12 +144,15 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                 let! state = instance |> Application.DTO.OracleInstance.toDTO collaborators.MasterPDBActors
                 ctx.Sender() <! state
                 return! loop collaborators instance requests masterPDBRepo
+
             | SetState newState -> 
                 ctx.Sender() <! stateSetOk newState
                 return! loop collaborators newState requests masterPDBRepo
+
             | TransferState target ->
                 retype target <<! SetState instance
                 return! loop collaborators instance requests masterPDBRepo
+
             | CreateMasterPDB parameters as command ->
                 let validation = validateCreateMasterPDBParams parameters instance
                 match validation with
@@ -162,10 +169,25 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                     }
                     let requestId = newRequestId()
                     collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
-                    return! loop collaborators instance (requests |> registerRequest requestId command (retype (ctx.Sender()))) masterPDBRepo
+                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                    return! loop collaborators instance newRequests masterPDBRepo
                 | Invalid errors -> 
                     ctx.Sender() <! InvalidRequest errors
                     return! loop collaborators instance requests masterPDBRepo
+
+            | PrepareMasterPDBForModification (requestId, pdb, version, user) ->
+                let sender = ctx.Sender().Retype<MasterPDBActor.PrepareForModificationResult>()
+                let masterPDBActorMaybe = collaborators.MasterPDBActors |> Map.tryFind pdb
+                match masterPDBActorMaybe with
+                | None -> 
+                    sender <! MasterPDBActor.PreparationFailure (requestId, (sprintf "master PDB %s does not exist" pdb))
+                    return! loop collaborators instance requests masterPDBRepo
+                | Some masterPDBActor -> 
+                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                    retype masterPDBActor <! MasterPDBActor.PrepareForModification (requestId, version, user)
+                    return! loop collaborators instance newRequests masterPDBRepo
+
+        // Callback from Oracle executor
         | :? WithRequestId<OraclePDBResult> as requestResponse ->
             let (requestId, result) = requestResponse
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
@@ -204,6 +226,35 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                         retype request.Requester <! MasterPDBCreated result
                         return! loop collaborators instance newRequests masterPDBRepo
                 | _ -> failwith "critical error"
+
+        // Callback from Master PDB actor in response to PrepareMasterPDBForModification
+        | :? MasterPDBActor.PrepareForModificationResult as preparationResult ->
+            match preparationResult with
+            | MasterPDBActor.Locked (_, lockedMasterPDB) -> 
+                // Persist the state of the PDB
+                let newMasterPDBRepo = masterPDBRepo.Put lockedMasterPDB.Name lockedMasterPDB
+                // Keep the request in the map, because Prepared or PreparationFailure will come last
+                return! loop collaborators instance requests newMasterPDBRepo
+
+            | MasterPDBActor.Prepared (requestId, _) ->
+                let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
+                match requestMaybe with
+                | Some request -> 
+                    retype request.Requester <! preparationResult
+                    return! loop collaborators instance newRequests masterPDBRepo
+                | None -> 
+                    logWarningf ctx "Request %s not found" <| requestId.ToString()
+                    return! loop collaborators instance newRequests masterPDBRepo
+
+            | MasterPDBActor.PreparationFailure (requestId, _) ->
+                let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
+                match requestMaybe with
+                | Some request -> 
+                    retype request.Requester <! preparationResult
+                    return! loop collaborators instance newRequests masterPDBRepo
+                | None -> 
+                    logWarningf ctx "Request %s not found" <| requestId.ToString()
+                    return! loop collaborators instance newRequests masterPDBRepo
         | _ -> return! loop collaborators instance requests masterPDBRepo
     }
     let collaborators = ctx |> spawnCollaborators getOracleAPI initialMasterPDBRepo initialInstance

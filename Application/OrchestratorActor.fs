@@ -10,7 +10,7 @@ type InstanceResult<'R> = Result<'R, string>
 
 type Command =
 | Synchronize of string
-| GetState
+| GetState // respond with Application.DTO.Orchestrator
 | CreateMasterPDB of (* withParams : *) CreateMasterPDBParams // returns MasterPDBCreationResult
 
 type Collaborators = {
