@@ -9,18 +9,18 @@ open Akka.Actor
 
 type Command =
 | GetState
-| PrepareForModification of WithRequestId<int, string>
-| Commit of WithRequestId<string, string>
+| PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
+| Commit of WithRequestId<string, string> // responds with WithRequestId<RollbackResult>
 | Rollback of RequestId
 
 type PrepareForModificationResult = 
-| Locked of WithRequestId<MasterPDB>
-| Prepared of WithRequestId<MasterPDB>
-| PreparationFailure of WithRequestId<string>
+| Locked of MasterPDB
+| Prepared of MasterPDB
+| PreparationFailure of string
 
 type RollbackResult =
-| RolledBack of WithRequestId<MasterPDB>
-| RollbackFailure of WithRequestId<string>
+| RolledBack of MasterPDB
+| RollbackFailure of string
 
 type Collaborators = {
     MasterPDBVersionActors: Map<string, IActorRef<Command>>
@@ -44,23 +44,23 @@ let masterPDBActorBody (instance:OracleInstance) longTaskExecutor (initialMaster
                 ctx.Sender() <! (masterPDB |> Application.DTO.MasterPDB.toDTO)
                 return! loop masterPDB requests
             | PrepareForModification (requestId, version, locker) as command ->
-                let sender = ctx.Sender().Retype<PrepareForModificationResult>()
+                let sender = ctx.Sender().Retype<WithRequestId<PrepareForModificationResult>>()
                 let latestVersion = masterPDB |> getLatestAvailableVersion
-                if (latestVersion.Number <> version) then sender <! PreparationFailure (requestId, (sprintf "version %d is not the latest version (%d) of \"%s\"" version latestVersion.Number masterPDB.Name))
+                if (latestVersion.Number <> version) then sender <! (requestId, PreparationFailure (sprintf "version %d is not the latest version (%d) of \"%s\"" version latestVersion.Number masterPDB.Name))
                 let newMasterPDBMaybe = masterPDB |> lock locker System.DateTime.Now
                 match newMasterPDBMaybe with
                 | Ok newMasterPDB -> 
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
                     longTaskExecutor <! OracleLongTaskExecutor.ImportPDB (requestId, (manifestPath masterPDB.Manifest), instance.MasterPDBManifestsPath, masterPDB.Name)
-                    sender <! Locked (requestId, newMasterPDB)
+                    sender <! (requestId, Locked newMasterPDB)
                     return! loop newMasterPDB newRequests
                 | Error error -> 
-                    sender <! PreparationFailure (requestId, error)
+                    sender <! (requestId, PreparationFailure error)
                     return! loop masterPDB requests
             | Commit (requestId, user, comment) -> // TODO
                 return! loop masterPDB requests
             | Rollback requestId ->
-                let sender = ctx.Sender().Retype<RollbackResult>()
+                let sender = ctx.Sender().Retype<WithRequestId<RollbackResult>>()
                 let newMasterPDBMaybe = masterPDB |> unlock
                 match newMasterPDBMaybe with
                 | Ok _ ->
@@ -68,7 +68,7 @@ let masterPDBActorBody (instance:OracleInstance) longTaskExecutor (initialMaster
                     longTaskExecutor <! OracleLongTaskExecutor.DeletePDB (requestId, masterPDB.Name)
                     return! loop masterPDB newRequests
                 | Error error -> 
-                    sender <! RollbackFailure (requestId, error)
+                    sender <! (requestId, RollbackFailure error)
                     return! loop masterPDB requests
         | :? WithRequestId<OraclePDBResult> as requestResponse ->
             let (requestId, result) = requestResponse
@@ -80,23 +80,23 @@ let masterPDBActorBody (instance:OracleInstance) longTaskExecutor (initialMaster
             | Some request -> 
                 match request.Command with
                 | PrepareForModification _ -> 
-                    let sender = request.Requester.Retype<PrepareForModificationResult>()
+                    let sender = request.Requester.Retype<WithRequestId<PrepareForModificationResult>>()
                     match result with
                     | Ok _ ->
-                        sender <! Prepared (requestId, masterPDB)
+                        sender <! (requestId, Prepared masterPDB)
                     | Error error ->
-                        sender <! PreparationFailure (requestId, error.ToString())
+                        sender <! (requestId, PreparationFailure (error.ToString()))
                     return! loop masterPDB newRequests
                 | Rollback _ ->
-                    let sender = request.Requester.Retype<RollbackResult>()
+                    let sender = request.Requester.Retype<WithRequestId<RollbackResult>>()
                     let newMasterPDBMaybe = masterPDB |> unlock
                     match newMasterPDBMaybe with
                     | Ok newMasterPDB ->
                         match result with
                         | Ok _ ->
-                            sender <! RolledBack (requestId, newMasterPDB)
+                            sender <! (requestId, RolledBack newMasterPDB)
                         | Error error ->
-                            sender <! RollbackFailure (requestId, error.ToString())
+                            sender <! (requestId, RollbackFailure (error.ToString()))
                         return! loop newMasterPDB newRequests
                     | Error error -> failwithf "Fatal error"
                 | _ -> failwithf "Fatal error"

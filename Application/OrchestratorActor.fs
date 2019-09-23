@@ -3,6 +3,7 @@
 open Akkling
 open Application.OracleInstanceActor
 open Domain.Orchestrator
+open Application.PendingRequest
 
 type OnInstance<'C> = string * 'C
 
@@ -10,8 +11,9 @@ type InstanceResult<'R> = Result<'R, string>
 
 type Command =
 | Synchronize of string
-| GetState // respond with Application.DTO.Orchestrator
-| CreateMasterPDB of (* withParams : *) CreateMasterPDBParams // returns MasterPDBCreationResult
+| GetState // responds with Application.DTO.Orchestrator
+| CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
+| PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
 
 type Collaborators = {
     OracleInstanceActors: Map<string, IActorRef<obj>>
@@ -49,6 +51,9 @@ let orchestratorActorBody getOracleAPI getInstance getMasterPDBRepo initialState
         | CreateMasterPDB parameters ->
             let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
             retype primaryInstance <<! Application.OracleInstanceActor.CreateMasterPDB parameters
+        | PrepareMasterPDBForModification parameters ->
+            let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
+            retype primaryInstance <<! Application.OracleInstanceActor.PrepareMasterPDBForModification parameters
     }
     loop initialState
 

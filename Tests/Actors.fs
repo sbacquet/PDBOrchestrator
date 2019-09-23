@@ -164,12 +164,11 @@ let ``Oracle server actor creates PDB`` () = test <| fun tck ->
         Date = DateTime.Now
         Comment = "yeah"
     }
-    let res : OracleInstanceActor.MasterPDBCreationResult = retype oracleActor <? OracleInstanceActor.CreateMasterPDB parameters |> Async.RunSynchronously
+    let _, res : WithRequestId<OracleInstanceActor.MasterPDBCreationResult> = 
+        retype oracleActor <? OracleInstanceActor.CreateMasterPDB (newRequestId(), parameters) |> Async.RunSynchronously
     match res with
-    | OracleInstanceActor.MasterPDBCreated creationResponse -> 
-        match creationResponse with
-        | Ok _ -> ()
-        | Error ex -> failwithf "the creation of %s failed : %A" parameters.Name ex
+    | OracleInstanceActor.MasterPDBCreated creationResponse -> ()
+    | OracleInstanceActor.MasterPDBCreationFailure error -> failwithf "the creation of %s failed : %s" parameters.Name error
     | OracleInstanceActor.InvalidRequest errors -> failwithf "the request is invalid : %A" errors
 
     let stateAfter = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously
@@ -192,12 +191,10 @@ let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
         Date = DateTime.Now
         Comment = "yeah"
     }
-    let res : OracleInstanceActor.MasterPDBCreationResult = retype orchestrator <? OrchestratorActor.CreateMasterPDB parameters |> Async.RunSynchronously
+    let _, res : WithRequestId<OracleInstanceActor.MasterPDBCreationResult> = retype orchestrator <? OrchestratorActor.CreateMasterPDB (newRequestId(), parameters) |> Async.RunSynchronously
     match res with
-    | OracleInstanceActor.MasterPDBCreated creationResponse -> 
-        match creationResponse with
-        | Ok _ -> ()
-        | Error ex -> failwithf "the creation of %s failed : %A" parameters.Name ex
+    | OracleInstanceActor.MasterPDBCreated _ -> ()
+    | OracleInstanceActor.MasterPDBCreationFailure error -> failwithf "the creation of %s failed : %s" parameters.Name error
     | OracleInstanceActor.InvalidRequest errors -> failwithf "the request is invalid : %A" errors
 
     let stateAfter : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> Async.RunSynchronously
@@ -209,13 +206,12 @@ let ``Lock master PDB`` () = test <| fun tck ->
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn fakeOracleAPI
     let masterPDBActor = tck |> MasterPDBActor.spawn instance1 longTaskExecutor pdb1
     
-    let requestId = newRequestId()
-    retype masterPDBActor <! MasterPDBActor.PrepareForModification (requestId, 1, "me")
+    retype masterPDBActor <! MasterPDBActor.PrepareForModification (newRequestId(), 1, "me")
 
     let lockedMess = expectMsgFilter tck (fun (mess:obj) -> 
         match mess with
-        | :? PrepareForModificationResult as result ->
-            match result with
+        | :? WithRequestId<PrepareForModificationResult> as result ->
+            match snd result with
             | Locked _ -> true
             | _ -> false
         | _ -> false
@@ -223,19 +219,18 @@ let ``Lock master PDB`` () = test <| fun tck ->
 
     let preparedMess = expectMsgFilter tck (fun (mess:obj) -> 
         match mess with
-        | :? MasterPDBActor.PrepareForModificationResult as result -> 
-            match result with
+        | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as result -> 
+            match snd result with
             | Prepared _ -> true
             | _ -> false
         | _ -> false
     )
 
-    let requestId = System.Guid.NewGuid()
-    retype masterPDBActor <! MasterPDBActor.Rollback requestId
+    retype masterPDBActor <! MasterPDBActor.Rollback (newRequestId())
     let x = expectMsgFilter tck (fun (mess:obj) -> 
         match mess with
-        | :? MasterPDBActor.RollbackResult as result -> 
-            match result with
+        | :? WithRequestId<MasterPDBActor.RollbackResult> as result -> 
+            match snd result with
             | RolledBack _ -> true
             | _ -> false
         | _ -> false
@@ -246,13 +241,28 @@ let ``Lock master PDB`` () = test <| fun tck ->
 let ``OracleInstance locks master PDB`` () = test <| fun tck ->
     let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
 
-    let requestId = newRequestId()
-    retype oracleActor <! OracleInstanceActor.PrepareMasterPDBForModification (requestId, "test1", 1, "me")
+    retype oracleActor <! OracleInstanceActor.PrepareMasterPDBForModification (newRequestId(), "test1", 1, "me")
 
     let preparedMess = expectMsgFilter tck (fun (mess:obj) -> 
         match mess with
-        | :? MasterPDBActor.PrepareForModificationResult as result -> 
-            match result with
+        | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as result -> 
+            match snd result with
+            | Prepared _ -> true
+            | _ -> false
+        | _ -> false
+    )
+    ()
+
+[<Fact>]
+let ``Orchestrator locks master PDB`` () = test <| fun tck ->
+    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
+
+    retype orchestrator <! OrchestratorActor.PrepareMasterPDBForModification (newRequestId(), "test1", 1, "me")
+
+    let preparedMess = expectMsgFilter tck (fun (mess:obj) -> 
+        match mess with
+        | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as result -> 
+            match snd result with
             | Prepared _ -> true
             | _ -> false
         | _ -> false
