@@ -25,8 +25,7 @@ let consLockInfo locker date =
 type MasterPDB = {
     Name: string
     Schemas: Schema list
-    Versions : MasterPDBVersion.VersionNumber list
-    DeletedVersions: Set<MasterPDBVersion.VersionNumber>
+    Versions: Map<MasterPDBVersion.VersionNumber, MasterPDBVersion.MasterPDBVersion>
     LockState : LockInfo option
 }
 
@@ -35,54 +34,49 @@ let consMasterPDB name schemas versions deletedVersions lockState =
         Name = name
         Schemas = schemas 
         Versions = versions
-        DeletedVersions = deletedVersions
         LockState = lockState
     }
 
-let newMasterPDB name schemas =
+let newMasterPDB name schemas createdBy creationDate comment =
     { 
         Name = name
         Schemas = schemas
-        Versions = [ 1 ]
-        DeletedVersions = Set.empty
+        Versions = [ 1, MasterPDBVersion.newPDBVersion name createdBy creationDate comment ] |> Map.ofList
         LockState = None 
     }
 
-let addVersionToMasterPDB version createdBy comment masterPDB =
-    if (masterPDB.Versions |> List.contains version) || (masterPDB.DeletedVersions.Contains version) then
-        Error (sprintf "version %d is already used for PDB %s" version masterPDB.Name)
+let addVersionToMasterPDB (version:MasterPDBVersion.MasterPDBVersion) createdBy comment masterPDB =
+
+    if (masterPDB.Versions |> Map.tryFind version.Number |> Option.isSome) then
+        Error (sprintf "version %d is already used for PDB %s" version.Number masterPDB.Name)
     else
-        Ok { masterPDB with Versions = version :: masterPDB.Versions }
+        Ok { masterPDB with Versions = masterPDB.Versions.Add(version.Number, version) }
 
 let isVersionDeleted version masterPDB =
-    masterPDB.DeletedVersions |> Set.contains version
+    masterPDB.Versions |> Map.tryFind version |> Option.exists (fun v -> v.Deleted)
 
 let getLatestAvailableVersion masterPDB =
     masterPDB.Versions 
-    |> List.find (fun version -> not (masterPDB.DeletedVersions |> Set.contains version)) 
+    |> Map.toList
+    |> List.findBack (fun (_, version) -> not (version.Deleted)) 
+    |> snd
 
 let getNextAvailableVersion masterPDB =
-    let highestVersionUsed = [ masterPDB.Versions.[0]; masterPDB.DeletedVersions.MaximumElement ] |> List.max
-    highestVersionUsed + 1
+    let highestVersionUsed = masterPDB.Versions |> Map.toList |> List.last |> snd
+    highestVersionUsed.Number + 1
 
 let getCurrentVersion masterPDB = masterPDB.Versions.[0]
 
-let getPreviousAvailableVersion masterPDB = 
-    match masterPDB.Versions.Length with
-    | 1 -> None
-    | _ -> Some masterPDB.Versions.[1]
-
-let deleteVersion version masterPDB =
-    if (version = 1) 
+let deleteVersion versionNumber masterPDB =
+    if (versionNumber = 1) 
     then Error "version 1 cannot be deleted"
     else
-        if (not (masterPDB.Versions |> List.contains version))
-        then Error (sprintf "version %d does not exist" version)
-        else 
-            Ok { masterPDB with 
-                    Versions = masterPDB.Versions |> List.filter (fun v -> v <> version)
-                    DeletedVersions = masterPDB.DeletedVersions.Add version 
-               }
+        let versionMaybe = masterPDB.Versions |> Map.tryFind versionNumber
+        match versionMaybe with
+        | Some version -> Ok { 
+            masterPDB with Versions = masterPDB.Versions |> Map.map (fun number version -> if (number = versionNumber) then { version with Deleted = true } else version)
+          }
+        | None -> Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name)
 
 let lock masterPDB user comment =
     match masterPDB.LockState with

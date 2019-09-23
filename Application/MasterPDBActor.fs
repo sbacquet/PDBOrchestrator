@@ -18,7 +18,7 @@ type Collaborators = {
 }
 
 
-let masterPDBActorBody getVersion (initialMasterPDB : Domain.MasterPDB.MasterPDB) (ctx : Actor<Command>) =
+let masterPDBActorBody (initialMasterPDB : Domain.MasterPDB.MasterPDB) (ctx : Actor<Command>) =
     let rec loop masterPDB = actor {
         let! msg = ctx.Receive()
         match msg with
@@ -36,8 +36,8 @@ let masterPDBActorBody getVersion (initialMasterPDB : Domain.MasterPDB.MasterPDB
 
 let masterPDBActorName (masterPDB:string) = Common.ActorName (sprintf "MasterPDB='%s'" (masterPDB.ToUpper() |> System.Uri.EscapeDataString))
 
-let spawn getVersion (masterPDB : Domain.MasterPDB.MasterPDB) actorFactory =
+let spawn (masterPDB : Domain.MasterPDB.MasterPDB) actorFactory =
     let (Common.ActorName actorName) = masterPDBActorName masterPDB.Name
     logDebugf actorFactory "Spawning actor %s for master PDB %s" actorName masterPDB.Name
-    Akkling.Spawn.spawn actorFactory actorName <| props (masterPDBActorBody getVersion masterPDB)
+    Akkling.Spawn.spawn actorFactory actorName <| props (masterPDBActorBody masterPDB)
 

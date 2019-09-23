@@ -99,29 +99,27 @@ type Collaborators = {
     MasterPDBActors: Map<string, IActorRef<Application.MasterPDBActor.Command>>
 }
 
-let addMasterPDBToCollaborators ctx getMasterPDBVersion (masterPDB:Domain.MasterPDB.MasterPDB) collaborators = 
+let addMasterPDBToCollaborators ctx (masterPDB:Domain.MasterPDB.MasterPDB) collaborators = 
     logDebugf ctx "Adding MasterPDB %s to collaborators" masterPDB.Name
-    { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn getMasterPDBVersion masterPDB)
+    { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn masterPDB)
 }
 
 // Spawn actor for a new master PDBs
-let addNewMasterPDB (ctx : Actor<obj>) getMasterPDBVersion collaborators (masterPDB:Domain.MasterPDB.MasterPDB) user date comments (state : OracleInstance) = result {
+let addNewMasterPDB (ctx : Actor<obj>) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (state : OracleInstance) = result {
     let! newState = state |> OracleInstance.addMasterPDB masterPDB.Name
-    let version = Domain.MasterPDBVersion.newPDBVersion masterPDB.Name user date comments
-    // TODO: store version, using a new putMasterPDBVersion function
-    let newCollaborators = { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn getMasterPDBVersion masterPDB) }
+    let newCollaborators = { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn masterPDB) }
     // TODO: store masterPDB, using a new putMasterPDB function
     return newState, newCollaborators
 }
 
 // Spawn actors for master PDBs that already exist
-let spawnCollaborators getOracleAPI getMasterPDB getMasterPDBVersion (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
+let spawnCollaborators getOracleAPI getMasterPDB (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
     let oracleAPI = getOracleAPI instance
     {
         OracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn oracleAPI
         MasterPDBActors = 
             instance.MasterPDBs 
-            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn getMasterPDBVersion (getMasterPDB pdb)))
+            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn (getMasterPDB pdb)))
             |> Map.ofList
     }
     //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())
@@ -131,7 +129,7 @@ let oracleInstanceActorName (instance : OracleInstance) =
     Common.ActorName 
         (sprintf "OracleInstance='%s'" (instance.Name.ToUpper() |> System.Uri.EscapeDataString))
 
-let oracleInstanceActorBody getOracleAPI getMasterPDB getMasterPDBVersion initialInstance (ctx : Actor<obj>) =
+let oracleInstanceActorBody getOracleAPI getMasterPDB initialInstance (ctx : Actor<obj>) =
     let rec loop collaborators (instance : OracleInstance) (requests : RequestMap<Command>) = actor {
         let! msg = ctx.Receive()
         match msg with
@@ -187,12 +185,8 @@ let oracleInstanceActorBody getOracleAPI getMasterPDB getMasterPDBVersion initia
                         let newStateResult = 
                             addNewMasterPDB 
                                 ctx 
-                                getMasterPDBVersion 
                                 collaborators 
-                                newMasterPDB
-                                parameters.User 
-                                parameters.Date
-                                parameters.Comment
+                                (newMasterPDB parameters.User parameters.Date parameters.Comment)
                                 instance
                         retype request.Requester <! MasterPDBCreated result
                         let newState, newCollabs = 
@@ -209,11 +203,11 @@ let oracleInstanceActorBody getOracleAPI getMasterPDB getMasterPDBVersion initia
                 | _ -> failwith "critical error"
         | _ -> return! loop collaborators instance requests
     }
-    let collaborators = ctx |> spawnCollaborators getOracleAPI getMasterPDB getMasterPDBVersion initialInstance
+    let collaborators = ctx |> spawnCollaborators getOracleAPI getMasterPDB initialInstance
     loop collaborators initialInstance Map.empty
 
-let spawn getOracleAPI getMasterPDB getMasterPDBVersion initialInstance actorFactory =
+let spawn getOracleAPI getMasterPDB initialInstance actorFactory =
     let (Common.ActorName actorName) = oracleInstanceActorName initialInstance
     Akkling.Spawn.spawn actorFactory actorName 
-    <| props (oracleInstanceActorBody getOracleAPI getMasterPDB getMasterPDBVersion initialInstance)
+    <| props (oracleInstanceActorBody getOracleAPI getMasterPDB initialInstance)
 

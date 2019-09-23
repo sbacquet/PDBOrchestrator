@@ -10,17 +10,17 @@ type MasterPDBVersion = {
     CreatedBy: string
     CreationDate: DateTime
     Comment: string
-    Instanciated : bool
+    Deleted : bool
 }
 
-let consPDBVersion version instanciated name createdBy creationDate comment =
+let consPDBVersion version deleted name createdBy creationDate comment =
     { 
         MasterPDBName = name
         Number = version
         CreatedBy = createdBy
         CreationDate = creationDate
         Comment = comment 
-        Instanciated = instanciated
+        Deleted = deleted
     }
 
 let newPDBVersion = consPDBVersion 1 false
