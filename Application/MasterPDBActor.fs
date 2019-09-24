@@ -9,6 +9,7 @@ open Akka.Actor
 
 type Command =
 | GetState
+| GetInternalState // responds with MasterPDB
 | SetInternalState of MasterPDB
 | PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
 | Commit of WithRequestId<string, string>
@@ -45,6 +46,10 @@ let masterPDBActorBody (instance:OracleInstance) longTaskExecutor (initialMaster
             match command with
             | GetState -> 
                 ctx.Sender() <! (masterPDB |> Application.DTO.MasterPDB.toDTO)
+                return! loop masterPDB requests
+
+            | GetInternalState ->
+                ctx.Sender() <! masterPDB
                 return! loop masterPDB requests
 
             | SetInternalState state ->
