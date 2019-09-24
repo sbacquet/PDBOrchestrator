@@ -7,9 +7,6 @@ open Application.Oracle
 type Command =
 | ImportPDB of WithRequestId<string, string, string>
 
-type Event =
-| PDBImported of string
-
 let oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
     let rec loop () = actor {
         let! n = ctx.Receive()

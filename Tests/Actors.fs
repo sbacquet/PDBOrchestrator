@@ -98,6 +98,8 @@ type FakeOracleAPI() =
         member this.ExportPDB _ name = async { return Ok name }
         member this.ImportPDB _ _ name = async { return Ok name }
         member this.SnapshotPDB _ _ name = async { return Ok name }
+        member this.PDBHasSnapshots _ = async { return false }
+        member this.PDBExists _ = async { return false }
 
 let fakeOracleAPI = FakeOracleAPI()
 

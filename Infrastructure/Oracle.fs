@@ -176,6 +176,7 @@ END;
     |> execAsync name connAsDBA
 
 let snapshotPDB (logger:ILogger) connAsDBA from dest name =
+    logger.LogDebug("Snapshoting PDB {PDB} to {snapshot}", from, name)
     sprintf 
         @"
 BEGIN
@@ -204,23 +205,37 @@ type RawOraclePDB = {
     SnapId: decimal option
 }
 
-let getPDBsOnServer connAsDBA =
-    Sql.execReader connAsDBA "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs" [] 
-    |> Sql.map (Sql.asRecord<RawOraclePDB> "")
+let getPDBsOnServer connAsDBA = async {
+    let! result = Sql.asyncExecReader connAsDBA "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs" [] 
+    return result |> Sql.map (Sql.asRecord<RawOraclePDB> "")
+}
 
-let getPDBOnServer connAsDBA (name:string) =
-    Sql.execReader 
-        connAsDBA 
-        (sprintf "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs where upper(Name)='%s'" (name.ToUpper()))
-        [] 
-    |> Sql.mapFirst (Sql.asRecord<RawOraclePDB> "")
+let getPDBOnServer connAsDBA (name:string) = async {
+    let! result = 
+        Sql.asyncExecReader 
+            connAsDBA 
+            (sprintf "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs where upper(Name)='%s'" (name.ToUpper()))
+            [] 
+    return result |> Sql.mapFirst (Sql.asRecord<RawOraclePDB> "")
+}
 
-let pdbHasSnapshots connAsDBA name =
-    Sql.execScalar
-        connAsDBA
-        (sprintf @"select count(*) from v$pdbs where SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where name='%s')" name)
-        []
-    |> Option.get > 0M
+let PDBExistsOnServer connAsDBA (name:string) = async {
+    let! result = 
+        Sql.asyncExecScalar 
+            connAsDBA 
+            (sprintf "select count(*) from v$pdbs where upper(Name)='%s'" (name.ToUpper()))
+            [] 
+    return result |> Option.get > 0M
+}
+
+let pdbHasSnapshots connAsDBA (name:string) = async {
+    let! result = 
+        Sql.asyncExecScalar
+            connAsDBA
+            (sprintf @"select count(*) from v$pdbs where SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where upper(name)='%s')" (name.ToUpper()))
+            []
+    return result |> Option.get > 0M
+}
 
 type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager, connAsDBAIn : string -> Sql.ConnectionManager) = 
     member this.Logger = loggerFactory.CreateLogger("Oracle API")
@@ -231,3 +246,5 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
         member this.ExportPDB manifest name = exportPDB this.Logger connAsDBA manifest name
         member this.ImportPDB manifest dest name = importPDB this.Logger connAsDBA manifest dest name
         member this.SnapshotPDB from dest name = snapshotPDB this.Logger connAsDBA from dest name
+        member this.PDBHasSnapshots name = pdbHasSnapshots connAsDBA name
+        member this.PDBExists name = PDBExistsOnServer connAsDBA name
