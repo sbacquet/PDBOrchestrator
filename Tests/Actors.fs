@@ -315,6 +315,22 @@ let ``Snapshot PDB`` () = test <| fun tck ->
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn fakeOracleAPI
     let masterPDBActor = tck |> MasterPDBActor.spawn fakeOracleAPI instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor pdb1
     
-    let response:WithRequestId<SnapshotResult> = retype masterPDBActor <? MasterPDBActor.SnapshotVersion (newRequestId(), 1, "snapshot") |> Async.RunSynchronously
+    let (_, result):WithRequestId<SnapshotResult> = retype masterPDBActor <? MasterPDBActor.SnapshotVersion (newRequestId(), 1, "snapshot") |> Async.RunSynchronously
+
+    ()
+
+[<Fact>]
+let ``OracleInstance snapshots PDB`` () = test <| fun tck ->
+    let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
+
+    let (_, result):WithRequestId<SnapshotResult> = retype oracleActor <? OracleInstanceActor.SnapshotMasterPDBVersion (newRequestId(), "test1", 1, "snapshot") |> Async.RunSynchronously
+
+    ()
+
+[<Fact>]
+let ``Orchestrator snapshots PDB`` () = test <| fun tck ->
+    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
+
+    let (_, result):WithRequestId<SnapshotResult> = retype orchestrator <? OrchestratorActor.SnapshotMasterPDBVersion (newRequestId(), "server1", "test1", 1, "snapshot") |> Async.RunSynchronously
 
     ()

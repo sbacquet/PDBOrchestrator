@@ -101,6 +101,7 @@ type Command =
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
 | RollbackMasterPDB of WithRequestId<string> // responds with WithRequestId<MasterPDBActor.RollbackResult>
+| SnapshotMasterPDBVersion of WithRequestId<string, int, string> // responds with WithRequest<MasterPDBActor.SnapshotResult>
 
 type StateSet = Result<Application.DTO.OracleInstance.OracleInstanceState, string>
 let stateSetOk state : StateSet = Ok state
@@ -305,6 +306,17 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                     let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
                     retype masterPDBActor <! MasterPDBActor.Rollback requestId
                     return! loop collaborators instance newRequests masterPDBRepo
+
+            | SnapshotMasterPDBVersion (requestId, masterPDBName, versionNumber, snapshotName) ->
+                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.SnapshotResult>>()
+                let masterPDBActorMaybe = collaborators.MasterPDBActors |> Map.tryFind masterPDBName
+                match masterPDBActorMaybe with
+                | None -> 
+                    sender <! (requestId, MasterPDBActor.SnapshotFailure "internal error")
+                    return! loop collaborators instance requests masterPDBRepo
+                | Some masterPDBActor -> 
+                    retype masterPDBActor <<! MasterPDBActor.SnapshotVersion (requestId, versionNumber, snapshotName)
+                    return! loop collaborators instance requests masterPDBRepo
 
         // Callback from Oracle executor
         | :? WithRequestId<OraclePDBResult> as requestResponse ->

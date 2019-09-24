@@ -15,6 +15,7 @@ type Command =
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
 | RollbackMasterPDB of WithRequestId<string> // responds with WithRequestId<MasterPDBActor.RollbackResult>
+| SnapshotMasterPDBVersion of WithRequestId<string, string, int, string> // responds with WithRequest<MasterPDBActor.SnapshotResult>
 
 type Collaborators = {
     OracleInstanceActors: Map<string, IActorRef<obj>>
@@ -52,12 +53,23 @@ let orchestratorActorBody getOracleAPI getInstance getMasterPDBRepo initialState
         | CreateMasterPDB parameters ->
             let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
             retype primaryInstance <<! Application.OracleInstanceActor.CreateMasterPDB parameters
+            return! loop orchestrator
         | PrepareMasterPDBForModification parameters ->
             let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
             retype primaryInstance <<! Application.OracleInstanceActor.PrepareMasterPDBForModification parameters
+            return! loop orchestrator
         | RollbackMasterPDB parameters ->
             let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
             retype primaryInstance <<! Application.OracleInstanceActor.RollbackMasterPDB parameters
+            return! loop orchestrator
+        | SnapshotMasterPDBVersion (requestId, instanceName, masterPDBName, versionNumber, snapshotName) ->
+            let sender = ctx.Sender().Retype<WithRequestId<Application.MasterPDBActor.SnapshotResult>>()
+            let instanceMaybe = collaborators.OracleInstanceActors |> Map.tryFind instanceName
+            match instanceMaybe with
+            | None -> sender <! (requestId, Application.MasterPDBActor.SnapshotFailure (sprintf "cannot find Oracle instance %s" instanceName))
+            | Some instance ->
+                retype instance <<! Application.OracleInstanceActor.SnapshotMasterPDBVersion (requestId, masterPDBName, versionNumber, snapshotName)
+            return! loop orchestrator
     }
     loop initialState
 
