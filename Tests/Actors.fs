@@ -69,7 +69,9 @@ let instance1 : OracleInstance = {
     DBAUser = "sys"
     DBAPassword = "syspwd8"
     MasterPDBManifestsPath = ""
-    TestPDBManifestsPath = ""
+    MasterPDBDestPath = ""
+    SnapshotPDBDestPath = ""
+    SnapshotSourcePDBDestPath = ""
     OracleDirectoryForDumps = ""
     MasterPDBs = [ "test1"; "test2" ]
 }
@@ -81,7 +83,9 @@ let instance2 : OracleInstance = {
     Server = "xxx"
     Port = None
     MasterPDBManifestsPath = ""
-    TestPDBManifestsPath = ""
+    MasterPDBDestPath = ""
+    SnapshotPDBDestPath = ""
+    SnapshotSourcePDBDestPath = ""
     OracleDirectoryForDumps = ""
     MasterPDBs = [ "test2" ]
 }
@@ -93,13 +97,32 @@ type FakeOracleAPI() =
             this.Logger.LogDebug("Creating new PDB {PDB}...", name)
             return Ok name
         }
-        member this.ClosePDB name = async { return Ok name }
-        member this.DeletePDB name = async { return Ok name }
-        member this.ExportPDB _ name = async { return Ok name }
-        member this.ImportPDB _ _ name = async { return Ok name }
-        member this.SnapshotPDB _ _ name = async { return Ok name }
-        member this.PDBHasSnapshots _ = async { return false }
-        member this.PDBExists _ = async { return false }
+        member this.ClosePDB name = async { 
+            this.Logger.LogDebug("Closing PDB {PDB}...", name)
+            return Ok name 
+        }
+        member this.DeletePDB name = async { 
+            this.Logger.LogDebug("Deleting PDB {PDB}...", name)
+            return Ok name 
+        }
+        member this.ExportPDB _ name = async { 
+            this.Logger.LogDebug("Exporting PDB {PDB}...", name)
+            return Ok name 
+        }
+        member this.ImportPDB _ _ name = async { 
+            this.Logger.LogDebug("Importing PDB {PDB}...", name)
+            return Ok name 
+        }
+        member this.SnapshotPDB _ _ name = async { 
+            this.Logger.LogDebug("Snapshoting PDB {PDB}...", name)
+            return Ok name 
+        }
+        member this.PDBHasSnapshots _ = async { 
+            return false
+        }
+        member this.PDBExists _ = async { 
+            return true
+        }
 
 let fakeOracleAPI = FakeOracleAPI()
 
@@ -282,5 +305,16 @@ let ``Orchestrator locks master PDB`` () = test <| fun tck ->
             | _ -> false
         | _ -> false
     )
+
+    ()
+
+[<Fact>]
+let ``Snapshot PDB`` () = test <| fun tck ->
+    let pdb1 = newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment1"
+    let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn fakeOracleAPI
+    let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn fakeOracleAPI
+    let masterPDBActor = tck |> MasterPDBActor.spawn fakeOracleAPI instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor pdb1
+    
+    let response:WithRequestId<SnapshotResult> = retype masterPDBActor <? MasterPDBActor.SnapshotVersion (newRequestId(), 1, "snapshot") |> Async.RunSynchronously
 
     ()

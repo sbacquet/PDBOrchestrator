@@ -11,7 +11,7 @@ open Domain.OracleInstance
 open Application.Oracle
 
 type Command =
-| Snapshot of WithRequestId<string, string>
+| Snapshot of WithRequestId<string, string, string, string> // responds with WithRequestId<OraclePDBResult>
 | DeleteSnapshot of WithRequestId<string>
 
 let getSnapshotSourceName (masterPDBVersion:MasterPDBVersion) = sprintf "%s_v%03d" (masterPDBVersion.MasterPDBName.ToUpper()) masterPDBVersion.Number
@@ -20,8 +20,6 @@ let masterPDBVersionActorBody
     (oracleAPI:#Application.Oracle.IOracleAPI) 
     (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 
     (oracleDiskIntensiveTaskExecutor:IActorRef<OracleDiskIntensiveActor.Command>) 
-    (oracleInstance:OracleInstance)
-    (masterPDB:MasterPDB) 
     (masterPDBVersion:MasterPDBVersion) 
     (ctx : Actor<_>) =
 
@@ -29,30 +27,32 @@ let masterPDBVersionActorBody
         let! msg = ctx.Receive();
 
         match msg with
-        | Snapshot (requestId, snapshotName, dest) -> 
+        | Snapshot (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotName, snapshotDest) -> 
             let snapshotSourceName = getSnapshotSourceName masterPDBVersion
-            let! snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName
+            let snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName |> Async.RunSynchronously
             if (not snapshotSourceExists) then
-                let (importResult:OraclePDBResult) = 
-                    oracleDiskIntensiveTaskExecutor <? ImportPDB (requestId, masterPDB.Manifest, "" (* TODO *), snapshotSourceName)
+                let importResult:WithRequestId<OraclePDBResult> = 
+                    oracleDiskIntensiveTaskExecutor <? ImportPDB (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotSourceName)
                     |> Async.RunSynchronously
-                match importResult with
-                | Error error -> 
+                match snd importResult with
+                | Error _ -> 
                     ctx.Sender() <! importResult
-                    return loop ()
-                | Ok result -> ()
-            oracleLongTaskExecutor <<! SnapshotPDB (requestId, snapshotSourceName, dest, snapshotName)
+                    return! loop ()
+                | Ok _ -> ()
+            else
+                logDebugf ctx "Snapshot source PDB %s already exists" snapshotSourceName
+            oracleLongTaskExecutor <<! SnapshotPDB (requestId, snapshotSourceName, snapshotDest, snapshotName)
+            return! loop ()
 
-        | DeleteSnapshot (requestId, snapshotName) -> () // TODO
-            
-        return loop ()
+        | DeleteSnapshot (requestId, snapshotName) ->
+            return! loop ()
     }
 
     loop ()
 
 let masterPDBVersionActorName (versionNumber:int) = Common.ActorName (sprintf "Version=%d" versionNumber)
 
-let spawn (oracleAPI:#Application.Oracle.IOracleAPI) (oracleInstance:OracleInstance) longTaskExecutor oracleDiskIntensiveTaskExecutor masterPDB (masterPDBVersion:MasterPDBVersion) (actorFactory:IActorRefFactory) =
+let spawn (oracleAPI:#Application.Oracle.IOracleAPI) longTaskExecutor oracleDiskIntensiveTaskExecutor (masterPDBVersion:MasterPDBVersion) (actorFactory:IActorRefFactory) =
 
     let (Common.ActorName actorName) = masterPDBVersionActorName masterPDBVersion.Number
     
@@ -62,8 +62,6 @@ let spawn (oracleAPI:#Application.Oracle.IOracleAPI) (oracleInstance:OracleInsta
                 oracleAPI
                 longTaskExecutor 
                 oracleDiskIntensiveTaskExecutor 
-                oracleInstance
-                masterPDB
                 masterPDBVersion
         )
 

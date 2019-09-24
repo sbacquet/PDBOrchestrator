@@ -87,7 +87,9 @@ type OracleInstanceExpanded = {
     DBAUser: string
     DBAPassword: string
     MasterPDBManifestsPath: string
-    TestPDBManifestsPath: string
+    MasterPDBDestPath: string
+    SnapshotSourcePDBDestPath: string
+    SnapshotPDBDestPath: string
     OracleDirectoryForDumps: string
     MasterPDBs: Domain.MasterPDB.MasterPDB list
 }
@@ -162,7 +164,9 @@ let expand (masterPDBActors: Map<string, IActorRef<obj>>) (instance:OracleInstan
         DBAUser = instance.DBAUser
         DBAPassword = instance.DBAPassword
         MasterPDBManifestsPath = instance.MasterPDBManifestsPath
-        TestPDBManifestsPath = instance.TestPDBManifestsPath
+        MasterPDBDestPath = instance.MasterPDBDestPath
+        SnapshotPDBDestPath = instance.SnapshotPDBDestPath
+        SnapshotSourcePDBDestPath = instance.SnapshotSourcePDBDestPath
         OracleDirectoryForDumps = instance.OracleDirectoryForDumps
         MasterPDBs = masterPDBs |> List.ofArray
     }
@@ -175,7 +179,9 @@ let collapse (expandedInstance:OracleInstanceExpanded) : OracleInstance = {
     DBAUser = expandedInstance.DBAUser
     DBAPassword = expandedInstance.DBAPassword
     MasterPDBManifestsPath = expandedInstance.MasterPDBManifestsPath
-    TestPDBManifestsPath = expandedInstance.TestPDBManifestsPath
+    MasterPDBDestPath = expandedInstance.MasterPDBDestPath
+    SnapshotPDBDestPath = expandedInstance.SnapshotPDBDestPath
+    SnapshotSourcePDBDestPath = expandedInstance.SnapshotSourcePDBDestPath
     OracleDirectoryForDumps = expandedInstance.OracleDirectoryForDumps
     MasterPDBs = expandedInstance.MasterPDBs |> List.map (fun pdb -> pdb.Name)
 }
@@ -263,7 +269,7 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                         Name = parameters.Name
                         AdminUserName = instance.DBAUser
                         AdminUserPassword = instance.DBAPassword
-                        Destination = instance.MasterPDBManifestsPath
+                        Destination = instance.MasterPDBDestPath
                         DumpPath = parameters.Dump
                         Schemas = parameters.Schemas
                         TargetSchemas = parameters.TargetSchemas |> List.map (fun (u, p, _) -> (u, p))

@@ -184,6 +184,7 @@ BEGIN
 		shared_mem_alloc_failed EXCEPTION;
 		PRAGMA EXCEPTION_INIT (shared_mem_alloc_failed, -4031);
 	BEGIN
+        execute immediate 'ALTER PLUGGABLE DATABASE %s OPEN READ ONLY FORCE';
 		execute immediate 'CREATE PLUGGABLE DATABASE %s FROM %s SNAPSHOT COPY NOLOGGING CREATE_FILE_DEST=''%s''';
 	EXCEPTION
 		WHEN shared_mem_alloc_failed THEN
@@ -194,7 +195,7 @@ BEGIN
 	END;
 END;
 "
-        name from dest name
+        from name from dest name
     |> execAsync name connAsDBA
 
 type RawOraclePDB = {

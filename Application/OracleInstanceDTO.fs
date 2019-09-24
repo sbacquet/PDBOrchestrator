@@ -24,7 +24,7 @@ let toDTO (masterPDBActors:Map<string, IActorRef<obj>>) (oracleInstance : Domain
         Server = oracleInstance.Server
         Port = oracleInstance.Port
         MasterPDBManifestsPath = oracleInstance.MasterPDBManifestsPath
-        TestPDBManifestsPath = oracleInstance.TestPDBManifestsPath
+        TestPDBManifestsPath = oracleInstance.SnapshotPDBDestPath
         OracleDirectoryForDumps = oracleInstance.OracleDirectoryForDumps
         MasterPDBs = masterPDBs |> Array.toList
     }

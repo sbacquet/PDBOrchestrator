@@ -15,7 +15,7 @@ type Command =
 | PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
 | Commit of WithRequestId<string, string>
 | Rollback of RequestId // responds with WithRequestId<RollbackResult>
-| SnapshotVersion of WithRequestId<int, string, string>
+| SnapshotVersion of WithRequestId<int, string> // responds with WithRequest<SnapshotResult>
 
 type PrepareForModificationResult = 
 | Locked of MasterPDB
@@ -37,7 +37,7 @@ type Collaborators = {
     OracleDiskIntensiveTaskExecutor : IActorRef<OracleDiskIntensiveActor.Command>
 }
 
-let getOrSpawnVersionActor instance masterPDB (version:MasterPDBVersion) collaborators ctx =
+let getOrSpawnVersionActor (version:MasterPDBVersion) collaborators ctx =
     let versionActorMaybe = collaborators.MasterPDBVersionActors |> Map.tryFind version.Number
     match versionActorMaybe with
     | Some versionActor -> collaborators, versionActor
@@ -45,10 +45,8 @@ let getOrSpawnVersionActor instance masterPDB (version:MasterPDBVersion) collabo
         let versionActor = 
             ctx |> MasterPDBVersionActor.spawn 
                 collaborators.OracleAPI
-                instance
                 collaborators.OracleLongTaskExecutor
                 collaborators.OracleDiskIntensiveTaskExecutor
-                masterPDB
                 version
         
         { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Add(version.Number, versionActor) }, 
@@ -84,7 +82,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                 match newMasterPDBMaybe with
                 | Ok newMasterPDB -> 
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (requestId, (manifestPath masterPDB.Manifest), instance.MasterPDBManifestsPath, masterPDB.Name)
+                    oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (requestId, (manifestPath masterPDB.Manifest), instance.MasterPDBDestPath, masterPDB.Name)
                     sender <! (requestId, Locked newMasterPDB)
                     return! loop newMasterPDB newRequests collaborators
                 | Error error -> 
@@ -106,7 +104,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                     sender <! (requestId, RollbackFailure error)
                     return! loop masterPDB requests collaborators
             
-            | SnapshotVersion (requestId, versionNumber, snapshotName, dest) ->
+            | SnapshotVersion (requestId, versionNumber, snapshotName) ->
                 let sender = ctx.Sender().Retype<WithRequestId<SnapshotResult>>()
                 let versionMaybe = masterPDB.Versions.TryFind(versionNumber)
                 match versionMaybe with
@@ -114,9 +112,9 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                     sender <! (requestId, SnapshotFailure (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name))
                     return! loop masterPDB requests collaborators
                 | Some version -> 
-                    let newCollabs, versionActor = getOrSpawnVersionActor instance masterPDB version collaborators ctx
+                    let newCollabs, versionActor = getOrSpawnVersionActor version collaborators ctx
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    versionActor <! MasterPDBVersionActor.Snapshot (requestId, snapshotName, dest)
+                    versionActor <! MasterPDBVersionActor.Snapshot (requestId, masterPDB.Manifest, instance.SnapshotSourcePDBDestPath, snapshotName, instance.SnapshotPDBDestPath)
                     return! loop masterPDB newRequests newCollabs
 
         | :? WithRequestId<OraclePDBResult> as requestResponse ->
@@ -153,7 +151,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                         return! loop newMasterPDB newRequests collaborators
                     | Error error -> failwithf "Fatal error"
 
-                | SnapshotVersion (_, versionNumber, snapshotName, _) ->
+                | SnapshotVersion (_, versionNumber, snapshotName) ->
                     let sender = request.Requester.Retype<WithRequestId<SnapshotResult>>()
                     match result with
                     | Ok _ ->

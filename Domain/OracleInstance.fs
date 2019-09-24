@@ -7,12 +7,14 @@ type OracleInstance = {
     DBAUser: string
     DBAPassword: string
     MasterPDBManifestsPath: string
-    TestPDBManifestsPath: string
+    MasterPDBDestPath: string
+    SnapshotSourcePDBDestPath: string
+    SnapshotPDBDestPath: string
     OracleDirectoryForDumps: string
     MasterPDBs: string list
 }
 
-let consOracleInstance masterPDBs name server port dbaUser dbaPassword mPath tPath directory = 
+let consOracleInstance masterPDBs name server port dbaUser dbaPassword mPath mdPath tdPath ssdPath directory = 
     { 
         Name = name
         Server = server
@@ -20,7 +22,9 @@ let consOracleInstance masterPDBs name server port dbaUser dbaPassword mPath tPa
         DBAUser = dbaUser
         DBAPassword = dbaPassword
         MasterPDBManifestsPath = mPath
-        TestPDBManifestsPath = tPath
+        MasterPDBDestPath = mdPath
+        SnapshotPDBDestPath = tdPath
+        SnapshotSourcePDBDestPath = ssdPath
         OracleDirectoryForDumps = directory
         MasterPDBs = masterPDBs 
     }
