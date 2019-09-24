@@ -126,7 +126,7 @@ let ``Test state transfer`` () = test <| fun tck ->
     let aref1 = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
     let aref2 = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap2) instance2
 
-    let state : OracleInstanceActor.StateSet = retype aref1 <? OracleInstanceActor.TransferState aref2 |> Async.RunSynchronously
+    let state : OracleInstanceActor.StateSet = retype aref1 <? OracleInstanceActor.TransferInternalState aref2 |> Async.RunSynchronously
     state |> Result.mapError (fun error -> failwith error) |> ignore
     ()
 

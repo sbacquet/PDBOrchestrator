@@ -41,7 +41,7 @@ let orchestratorActorBody getOracleAPI getInstance getMasterPDBRepo initialState
             if (orchestrator.OracleInstanceNames |> List.contains targetInstance) then
                 let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
                 let target = collaborators.OracleInstanceActors.[targetInstance]
-                retype primaryInstance <<! TransferState target
+                retype primaryInstance <<! TransferInternalState target
             else
                 ctx.Sender() <! stateSetError (sprintf "cannot find actor of instance %s" targetInstance)
             return! loop orchestrator

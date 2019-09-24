@@ -9,6 +9,7 @@ open Akka.Actor
 
 type Command =
 | GetState
+| SetInternalState of MasterPDB
 | PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
 | Commit of WithRequestId<string, string>
 | Rollback of RequestId // responds with WithRequestId<RollbackResult>
@@ -36,13 +37,19 @@ let masterPDBActorBody (instance:OracleInstance) longTaskExecutor (initialMaster
     let manifestPath = sprintf "%s/%s" instance.MasterPDBManifestsPath
 
     let rec loop masterPDB (requests : RequestMap<Command>) = actor {
+
         let! (msg:obj) = ctx.Receive()
+        
         match msg with
         | :? Command as command -> 
             match command with
             | GetState -> 
                 ctx.Sender() <! (masterPDB |> Application.DTO.MasterPDB.toDTO)
                 return! loop masterPDB requests
+
+            | SetInternalState state ->
+                return! loop state requests
+
             | PrepareForModification (requestId, version, locker) as command ->
                 let sender = ctx.Sender().Retype<WithRequestId<PrepareForModificationResult>>()
                 let latestVersion = masterPDB |> getLatestAvailableVersion
@@ -57,8 +64,10 @@ let masterPDBActorBody (instance:OracleInstance) longTaskExecutor (initialMaster
                 | Error error -> 
                     sender <! (requestId, PreparationFailure error)
                     return! loop masterPDB requests
+
             | Commit (requestId, user, comment) -> // TODO
                 return! loop masterPDB requests
+
             | Rollback requestId ->
                 let sender = ctx.Sender().Retype<WithRequestId<RollbackResult>>()
                 let newMasterPDBMaybe = masterPDB |> unlock
@@ -70,13 +79,17 @@ let masterPDBActorBody (instance:OracleInstance) longTaskExecutor (initialMaster
                 | Error error -> 
                     sender <! (requestId, RollbackFailure error)
                     return! loop masterPDB requests
+
         | :? WithRequestId<OraclePDBResult> as requestResponse ->
+
             let (requestId, result) = requestResponse
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
+
             match requestMaybe with
             | None -> 
                 logWarningf ctx "Request %s not found" <| requestId.ToString()
                 return! loop masterPDB requests
+
             | Some request -> 
                 match request.Command with
                 | PrepareForModification _ -> 
@@ -100,8 +113,10 @@ let masterPDBActorBody (instance:OracleInstance) longTaskExecutor (initialMaster
                         return! loop newMasterPDB newRequests
                     | Error error -> failwithf "Fatal error"
                 | _ -> failwithf "Fatal error"
+
         | _ -> return! loop masterPDB requests
     }
+
     loop initialMasterPDB Map.empty
 
 let masterPDBActorName (masterPDB:string) = Common.ActorName (sprintf "MasterPDB='%s'" (masterPDB.ToUpper() |> System.Uri.EscapeDataString))

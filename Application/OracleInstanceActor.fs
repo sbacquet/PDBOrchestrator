@@ -80,10 +80,22 @@ let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : 
     let comment = validateComment parameters.Comment
     retn newCreateMasterPDBParams <*> pdb <*> dump <*> schemas <*> targetSchemas <*> user <*> date <*> comment
 
+type OracleInstanceExpanded = {
+    Name: string
+    Server: string
+    Port: int option
+    DBAUser: string
+    DBAPassword: string
+    MasterPDBManifestsPath: string
+    TestPDBManifestsPath: string
+    OracleDirectoryForDumps: string
+    MasterPDBs: Domain.MasterPDB.MasterPDB list
+}
+
 type Command =
 | GetState // responds with Application.DTO.OracleInstance
-| SetState of OracleInstance // responds with StateSet
-| TransferState of IActorRef<obj> // responds with (StateSet state)
+| SetInternalState of OracleInstanceExpanded // responds with StateSet
+| TransferInternalState of IActorRef<obj> // responds with (StateSet state)
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
 | RollbackMasterPDB of WithRequestId<string> // responds with WithRequestId<MasterPDBActor.RollbackResult>
@@ -108,12 +120,37 @@ let addMasterPDBToCollaborators ctx (instance : OracleInstance) (masterPDB:Domai
 }
 
 // Spawn actor for a new master PDBs
-let addNewMasterPDB (ctx : Actor<obj>) (instance : OracleInstance) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:MasterPDBRepo) (state:OracleInstance) = result {
-    let! newState = state |> OracleInstance.addMasterPDB masterPDB.Name
+let addNewMasterPDB (ctx : Actor<obj>) (instance : OracleInstance) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:MasterPDBRepo) = result {
+    let! newState = instance |> OracleInstance.addMasterPDB masterPDB.Name
     let newMasterPDBRepo = masterPDBRepo.Put masterPDB.Name masterPDB
     let newCollaborators = { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn instance collaborators.OracleLongTaskExecutor masterPDB) }
     return newState, newCollaborators, newMasterPDBRepo
 }
+
+let expand (instance:OracleInstance) : OracleInstanceExpanded = () // TODO
+let collapse (expandedInstance:OracleInstanceExpanded) : OracleInstance = () // TODO
+
+let updateMasterPDBs (ctx : Actor<obj>) (instance : OracleInstanceExpanded) (collaborators:Collaborators) (masterPDBRepo:MasterPDBRepo) =
+    let masterPDBs = instance.MasterPDBs
+    let existingMasterPDBs = collaborators.MasterPDBActors |> Map.toSeq |> Seq.map (fun (name, _) -> name) |> Set.ofSeq
+    let newMasterPDBs = masterPDBs |> List.map (fun pdb -> pdb.Name) |> Set.ofList
+    let masterPDBsToAdd = Set.difference newMasterPDBs existingMasterPDBs
+
+    let masterPDBMap = masterPDBs |> List.map (fun pdb -> (pdb.Name, pdb)) |> Map.ofList
+
+    let folder result pdb = 
+        result |> Result.bind (fun (inst, collabs, repo) -> addNewMasterPDB ctx inst collabs masterPDBMap.[pdb] repo)
+        
+    let x = masterPDBsToAdd |> Set.fold folder (Ok (collapse instance, collaborators, masterPDBRepo))
+
+    let masterPDBsToUpdate = Set.intersect existingMasterPDBs newMasterPDBs
+    let folder2 result pdb = 
+        result |> Result.bind (fun (inst, collabs, (repo:MasterPDBRepo)) -> 
+            retype collabs.MasterPDBActors.[pdb] <! Application.MasterPDBActor.SetInternalState masterPDBMap.[pdb]
+            Ok (inst, collabs, (repo.Put pdb masterPDBMap.[pdb]))
+        )
+    masterPDBsToUpdate |> Set.fold folder2 x
+
 
 // Spawn actors for master PDBs that already exist
 let spawnCollaborators getOracleAPI (masterPDBRepo:MasterPDBRepo) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
@@ -147,12 +184,18 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                 ctx.Sender() <! state
                 return! loop collaborators instance requests masterPDBRepo
 
-            | SetState newState -> 
-                ctx.Sender() <! stateSetOk newState
-                return! loop collaborators newState requests masterPDBRepo
+            | SetInternalState newState -> 
+                let updateResult = updateMasterPDBs ctx newState collaborators masterPDBRepo
+                match updateResult with
+                | Ok (inst, collabs, repo) ->
+                    ctx.Sender() <! stateSetOk inst
+                    return! loop collabs inst requests repo
+                | Error error ->
+                    ctx.Sender() <! stateSetError error
+                    return! loop collaborators instance requests masterPDBRepo
 
-            | TransferState target ->
-                retype target <<! SetState instance
+            | TransferInternalState target ->
+                retype target <<! SetInternalState (expand instance)
                 return! loop collaborators instance requests masterPDBRepo
 
             | CreateMasterPDB (requestId, parameters) as command ->
@@ -228,7 +271,6 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                                 collaborators 
                                 masterPDB
                                 masterPDBRepo
-                                instance
                         requester <! (requestId, MasterPDBCreated masterPDB)
                         let newState, newCollabs, newMasterPDBRepo = 
                             match newStateResult with
