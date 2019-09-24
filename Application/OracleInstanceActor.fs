@@ -110,20 +110,43 @@ type MasterPDBCreationResult =
 | MasterPDBCreationFailure of string
 
 type Collaborators = {
+    OracleAPI: IOracleAPI
     OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
+    OracleDiskIntensiveTaskExecutor : IActorRef<Application.OracleDiskIntensiveActor.Command>
     MasterPDBActors: Map<string, IActorRef<obj>>
 }
 
 let addMasterPDBToCollaborators ctx (instance : OracleInstance) (masterPDB:Domain.MasterPDB.MasterPDB) collaborators = 
     logDebugf ctx "Adding MasterPDB %s to collaborators" masterPDB.Name
-    { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn instance collaborators.OracleLongTaskExecutor masterPDB)
-}
+    { collaborators with 
+        MasterPDBActors = 
+            collaborators.MasterPDBActors.Add(
+                masterPDB.Name, 
+                ctx |> MasterPDBActor.spawn 
+                    collaborators.OracleAPI
+                    instance 
+                    collaborators.OracleLongTaskExecutor 
+                    collaborators.OracleDiskIntensiveTaskExecutor 
+                    masterPDB
+            )
+    }
 
 // Spawn actor for a new master PDBs
 let addNewMasterPDB (ctx : Actor<obj>) (instance : OracleInstance) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:MasterPDBRepo) = result {
     let! newState = instance |> OracleInstance.addMasterPDB masterPDB.Name
     let newMasterPDBRepo = masterPDBRepo.Put masterPDB.Name masterPDB
-    let newCollaborators = { collaborators with MasterPDBActors = collaborators.MasterPDBActors.Add(masterPDB.Name, ctx |> MasterPDBActor.spawn instance collaborators.OracleLongTaskExecutor masterPDB) }
+    let newCollaborators = 
+        { collaborators with 
+            MasterPDBActors = 
+                collaborators.MasterPDBActors.Add(
+                    masterPDB.Name, 
+                    ctx |> MasterPDBActor.spawn 
+                        collaborators.OracleAPI
+                        instance 
+                        collaborators.OracleLongTaskExecutor 
+                        collaborators.OracleDiskIntensiveTaskExecutor 
+                        masterPDB) 
+        }
     return newState, newCollaborators, newMasterPDBRepo
 }
 
@@ -184,11 +207,14 @@ let updateMasterPDBs (ctx : Actor<obj>) (instanceToImport : OracleInstanceExpand
 let spawnCollaborators getOracleAPI (masterPDBRepo:MasterPDBRepo) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
     let oracleAPI = getOracleAPI instance
     let oracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn oracleAPI
+    let oracleDiskIntensiveTaskExecutor = ctx |> Application.OracleDiskIntensiveActor.spawn oracleAPI
     {
+        OracleAPI = oracleAPI
         OracleLongTaskExecutor = oracleLongTaskExecutor
+        OracleDiskIntensiveTaskExecutor = oracleDiskIntensiveTaskExecutor
         MasterPDBActors = 
             instance.MasterPDBs 
-            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn instance oracleLongTaskExecutor (masterPDBRepo.Get pdb)))
+            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn oracleAPI instance oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor (masterPDBRepo.Get pdb)))
             |> Map.ofList
     }
     //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())

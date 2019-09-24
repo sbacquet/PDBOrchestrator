@@ -3,7 +3,6 @@
 open Akkling
 open Application.PendingRequest
 open Application.Oracle
-open Application.PendingRequest
 
 type CreatePDBFromDumpParams = {
     Name: string
@@ -19,7 +18,6 @@ type CreatePDBFromDumpParams = {
 type Command =
 | CreatePDBFromDump of WithRequestId<CreatePDBFromDumpParams>
 | ClosePDB of WithRequestId<string>
-| ImportPDB of WithRequestId<string, string, string>
 | SnapshotPDB of WithRequestId<string, string, string>
 | ExportPDB of WithRequestId<string, string>
 | DeletePDB of WithRequestId<string>
@@ -37,10 +35,6 @@ let oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
             return! loop ()
         | ClosePDB (requestId, name) -> 
             let! result = oracleAPI.ClosePDB name
-            ctx.Sender() <! (requestId, result)
-            return! loop ()
-        | ImportPDB (requestId, manifest, dest, name) -> 
-            let! result = oracleAPI.ImportPDB manifest dest name
             ctx.Sender() <! (requestId, result)
             return! loop ()
         | SnapshotPDB (requestId, from, dest, name) -> 

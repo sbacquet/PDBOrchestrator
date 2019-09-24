@@ -71,7 +71,7 @@ let instance1 : OracleInstance = {
     MasterPDBManifestsPath = ""
     TestPDBManifestsPath = ""
     OracleDirectoryForDumps = ""
-    MasterPDBs = [ "test1" ]
+    MasterPDBs = [ "test1"; "test2" ]
 }
 
 let instance2 : OracleInstance = {
@@ -114,6 +114,7 @@ type FakeMasterPDBRepo(map : Map<string, MasterPDB>) =
 let masterPDBMap1 =
     [ 
         "test1", (newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment1")
+        "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "new comment2")
     ] |> Map.ofList
 
 let masterPDBMap2 =
@@ -150,13 +151,13 @@ let ``Synchronize state`` () = test <| fun tck ->
 
 [<Fact>]
 let ``Oracle server actor creates PDB`` () = test <| fun tck ->
-    let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
+    let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap2) instance2
 
     let stateBefore : OracleInstanceState = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously
     Assert.Equal(1, stateBefore.MasterPDBs.Length)
 
     let parameters : OracleInstanceActor.CreateMasterPDBParams = {
-        Name = "test2"
+        Name = "test3"
         Dump = @"c:\windows\system.ini" // always exists
         Schemas = [ "schema1" ]
         TargetSchemas = [ "targetschema1", "pass1", "Invest" ]
@@ -180,10 +181,10 @@ let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
 
     let stateBefore : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> Async.RunSynchronously
-    Assert.Equal(1, stateBefore.OracleInstances.[0].MasterPDBs.Length)
+    Assert.Equal(2, stateBefore.OracleInstances.[0].MasterPDBs.Length)
 
     let parameters : OracleInstanceActor.CreateMasterPDBParams = {
-        Name = "test2"
+        Name = "test3"
         Dump = @"c:\windows\system.ini" // always exists
         Schemas = [ "schema1" ]
         TargetSchemas = [ "targetschema1", "pass1", "FusionInvest" ]
@@ -198,13 +199,14 @@ let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
     | OracleInstanceActor.InvalidRequest errors -> failwithf "the request is invalid : %A" errors
 
     let stateAfter : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> Async.RunSynchronously
-    Assert.Equal(2, stateAfter.OracleInstances.[0].MasterPDBs.Length)
+    Assert.Equal(3, stateAfter.OracleInstances.[0].MasterPDBs.Length)
 
 [<Fact>]
 let ``Lock master PDB`` () = test <| fun tck ->
     let pdb1 = newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment1"
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn fakeOracleAPI
-    let masterPDBActor = tck |> MasterPDBActor.spawn instance1 longTaskExecutor pdb1
+    let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn fakeOracleAPI
+    let masterPDBActor = tck |> MasterPDBActor.spawn fakeOracleAPI instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor pdb1
     
     retype masterPDBActor <! MasterPDBActor.PrepareForModification (newRequestId(), 1, "me")
 
