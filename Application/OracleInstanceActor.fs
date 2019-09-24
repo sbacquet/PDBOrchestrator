@@ -309,12 +309,13 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
 
             | SnapshotMasterPDBVersion (requestId, masterPDBName, versionNumber, snapshotName) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.SnapshotResult>>()
-                let masterPDBActorMaybe = collaborators.MasterPDBActors |> Map.tryFind masterPDBName
-                match masterPDBActorMaybe with
-                | None -> 
-                    sender <! (requestId, MasterPDBActor.SnapshotFailure "internal error")
+                let masterPDBOk = instance.MasterPDBs |> List.contains masterPDBName
+                match masterPDBOk with
+                | false -> 
+                    sender <! (requestId, MasterPDBActor.SnapshotFailure (sprintf "cannot find master PDB %s" masterPDBName))
                     return! loop collaborators instance requests masterPDBRepo
-                | Some masterPDBActor -> 
+                | true -> 
+                    let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
                     retype masterPDBActor <<! MasterPDBActor.SnapshotVersion (requestId, versionNumber, snapshotName)
                     return! loop collaborators instance requests masterPDBRepo
 
