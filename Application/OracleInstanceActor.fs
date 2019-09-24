@@ -243,7 +243,7 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                         return! loop collaborators instance newRequests masterPDBRepo
                 | _ -> failwith "critical error"
 
-        // Callback from Master PDB actor in response to PrepareMasterPDBForModification
+        // Callback from Master PDB actor in response to PrepareForModification
         | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as preparationResult ->
             let (requestId, result) = preparationResult
             match result with
@@ -273,7 +273,7 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                     logError ctx "internal error"
                     return! loop collaborators instance newRequests masterPDBRepo
 
-        // Callback from Master PDB actor in response to PrepareMasterPDBForModification
+        // Callback from Master PDB actor in response to Rollback
         | :? WithRequestId<MasterPDBActor.RollbackResult> as rollbackResult ->
             let (requestId, result) = rollbackResult
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
