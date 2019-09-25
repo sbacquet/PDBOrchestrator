@@ -54,6 +54,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
 
     let rec loop masterPDB (requests : RequestMap<Command>) collaborators = actor {
 
+        logDebugf ctx "Number of pending requests : %d" requests.Count
         let! (msg:obj) = ctx.Receive()
         
         match msg with

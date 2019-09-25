@@ -22,3 +22,11 @@ let resolveSiblingActor (ActorName name) = resolveActor (ActorName (sprintf "../
 type Repository<'K, 'T> =
     abstract member Get : 'K -> 'T
     abstract member Put : 'K -> 'T -> Repository<'K, 'T>
+
+let runWithinElseTimeoutException timeout cont = Async.RunSynchronously(cont, timeout)
+
+let runWithin timeout cont = 
+    try
+        Ok (cont |> runWithinElseTimeoutException timeout)
+    with
+    | :? System.TimeoutException -> Error "operation timed out"

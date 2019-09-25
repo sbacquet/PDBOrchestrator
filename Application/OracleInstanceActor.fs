@@ -235,6 +235,7 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
 
     let rec loop collaborators (instance : OracleInstance) (requests : RequestMap<Command>) (masterPDBRepo:MasterPDBRepo) = actor {
 
+        logDebugf ctx "Number of pending requests : %d" requests.Count
         let! msg = ctx.Receive()
 
         match msg with

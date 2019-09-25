@@ -6,6 +6,7 @@
   <ItemGroup>
     <Compile Include="Common.fs" />
     <Compile Include="PendingRequest.fs" />
+    <Compile Include="UserPendingRequest.fs" />
     <Compile Include="OracleAPI.fs" />
     <Compile Include="PDBRepository.fs" />
     <Compile Include="API.fs" />

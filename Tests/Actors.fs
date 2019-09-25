@@ -17,8 +17,13 @@ open Application.PDBRepository
 open Application.DTO.OracleInstance
 open Application.DTO.Orchestrator
 open Application.MasterPDBActor
+open Application.OrchestratorActor
+open Domain.Common.Validation
+open Application.Common
 
 #if DEBUG
+let run cont = runWithinElseTimeoutException -1 cont
+
 let expectMsg tck =
     if (System.Diagnostics.Debugger.IsAttached) then
         expectMsgWithin tck (System.TimeSpan.FromHours(10.))
@@ -58,6 +63,7 @@ let test, (loggerFactory : ILoggerFactory) =
         Akkling.TestKit.test (ConfigurationFactory.ParseString @"akka { actor { ask-timeout = 1s } }"), 
         (new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory() :> ILoggerFactory)
 #else
+let run cont = runWithinElseTimeoutException 5000 cont
 let test = Akkling.TestKit.test (ConfigurationFactory.ParseString @"akka { actor { ask-timeout = 1s } }")
 let (loggerFactory : ILoggerFactory) = new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory() :> ILoggerFactory
 #endif
@@ -95,6 +101,7 @@ type FakeOracleAPI() =
     interface IOracleAPI with
         member this.NewPDBFromDump _ _ _ _ _ _ _ _ name = async {
             this.Logger.LogDebug("Creating new PDB {PDB}...", name)
+            //do! Async.Sleep 10000
             return Ok name
         }
         member this.ClosePDB name = async { 
@@ -152,7 +159,7 @@ let ``Test state transfer`` () = test <| fun tck ->
     let aref1 = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
     let aref2 = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap2) instance2
 
-    let state : OracleInstanceActor.StateSet = retype aref1 <? OracleInstanceActor.TransferInternalState aref2 |> Async.RunSynchronously
+    let state : OracleInstanceActor.StateSet = retype aref1 <? OracleInstanceActor.TransferInternalState aref2 |> run
     state |> Result.mapError (fun error -> failwith error) |> ignore
     ()
 
@@ -170,7 +177,7 @@ let getMasterPDBRepo = function
 let ``Synchronize state`` () = test <| fun tck ->
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
     //monitor tck orchestrator
-    let state : OracleInstanceActor.StateSet = retype orchestrator <? OrchestratorActor.Synchronize "server2" |> Async.RunSynchronously
+    let state : OracleInstanceActor.StateSet = retype orchestrator <? OrchestratorActor.Synchronize "server2" |> run
     state |> Result.mapError (fun error -> failwith error) |> ignore
     ()
 
@@ -178,7 +185,7 @@ let ``Synchronize state`` () = test <| fun tck ->
 let ``Oracle server actor creates PDB`` () = test <| fun tck ->
     let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap2) instance2
 
-    let stateBefore : OracleInstanceState = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously
+    let stateBefore : OracleInstanceState = retype oracleActor <? OracleInstanceActor.GetState |> run
     Assert.Equal(1, stateBefore.MasterPDBs.Length)
 
     let parameters : OracleInstanceActor.CreateMasterPDBParams = {
@@ -191,21 +198,46 @@ let ``Oracle server actor creates PDB`` () = test <| fun tck ->
         Comment = "yeah"
     }
     let _, res : WithRequestId<OracleInstanceActor.MasterPDBCreationResult> = 
-        retype oracleActor <? OracleInstanceActor.CreateMasterPDB (newRequestId(), parameters) |> Async.RunSynchronously
+        retype oracleActor <? OracleInstanceActor.CreateMasterPDB (newRequestId(), parameters) |> run
     match res with
     | OracleInstanceActor.MasterPDBCreated creationResponse -> ()
     | OracleInstanceActor.MasterPDBCreationFailure error -> failwithf "the creation of %s failed : %s" parameters.Name error
     | OracleInstanceActor.InvalidRequest errors -> failwithf "the request is invalid : %A" errors
 
-    let stateAfter = retype oracleActor <? OracleInstanceActor.GetState |> Async.RunSynchronously
+    let stateAfter = retype oracleActor <? OracleInstanceActor.GetState |> run
     Assert.Equal(2, stateAfter.MasterPDBs.Length)
     ()
+
+let pollRequestStatus (tck:Tck) orchestrator requestId =
+    let rec requestStatus () = async {
+        let status : WithRequestId<RequestStatus> = orchestrator <? OrchestratorActor.GetRequest requestId |> run
+        match snd status with
+        | Pending -> 
+            tck.Log.Log(Akka.Event.LogLevel.InfoLevel, "The request {RequestId} is pending, waiting...", requestId)
+#if DEBUG
+            do! Async.Sleep 1000
+#else
+            do! Async.Sleep 10
+#endif
+            return! requestStatus ()
+        | s -> return s
+    }
+    requestStatus() |> run
+
+let throwIfRequestNotCompletedOk tck orchestrator request =
+    match request with
+    | Invalid errors -> failwith (System.String.Join("; ", errors))
+    | Valid requestId ->
+        let status = requestId |> pollRequestStatus tck orchestrator
+        match status with
+        | CompletedOk _ -> ()
+        | _ -> failwith "operation not completed successfully"
 
 [<Fact>]
 let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
 
-    let stateBefore : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> Async.RunSynchronously
+    let stateBefore : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> run
     Assert.Equal(2, stateBefore.OracleInstances.[0].MasterPDBs.Length)
 
     let parameters : OracleInstanceActor.CreateMasterPDBParams = {
@@ -217,13 +249,12 @@ let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
         Date = DateTime.Now
         Comment = "yeah"
     }
-    let _, res : WithRequestId<OracleInstanceActor.MasterPDBCreationResult> = retype orchestrator <? OrchestratorActor.CreateMasterPDB (newRequestId(), parameters) |> Async.RunSynchronously
-    match res with
-    | OracleInstanceActor.MasterPDBCreated _ -> ()
-    | OracleInstanceActor.MasterPDBCreationFailure error -> failwithf "the creation of %s failed : %s" parameters.Name error
-    | OracleInstanceActor.InvalidRequest errors -> failwithf "the request is invalid : %A" errors
+    let request : RequestValidation = 
+        orchestrator <? OrchestratorActor.CreateMasterPDB ("me", parameters) |> run
 
-    let stateAfter : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> Async.RunSynchronously
+    request |> throwIfRequestNotCompletedOk tck orchestrator
+
+    let stateAfter : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> run
     Assert.Equal(3, stateAfter.OracleInstances.[0].MasterPDBs.Length)
 
 [<Fact>]
@@ -254,47 +285,35 @@ let ``Lock master PDB`` () = test <| fun tck ->
     )
 
     let (_, result) : WithRequestId<MasterPDBActor.RollbackResult> = 
-        retype masterPDBActor <? MasterPDBActor.Rollback (newRequestId())
-        |> Async.RunSynchronously
+        retype masterPDBActor <? MasterPDBActor.Rollback (newRequestId()) |> run
 
     result |> Result.mapError (fun error -> failwith error) |> ignore
-    ()
 
 [<Fact>]
 let ``OracleInstance locks master PDB`` () = test <| fun tck ->
     let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
 
     let (_, result) : WithRequestId<MasterPDBActor.PrepareForModificationResult> = 
-        retype oracleActor <? OracleInstanceActor.PrepareMasterPDBForModification (newRequestId(), "test1", 1, "me")
-        |> Async.RunSynchronously
+        retype oracleActor <? OracleInstanceActor.PrepareMasterPDBForModification (newRequestId(), "test1", 1, "me") |> run
 
     match result with
     | Prepared _ -> ()
     | Locked _ -> failwith "this Locked event shoud not be recevied by orchestrator"
     | PreparationFailure error -> failwith error
-
-    ()
 
 [<Fact>]
 let ``Orchestrator locks master PDB`` () = test <| fun tck ->
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
 
-    let (_, result) : WithRequestId<MasterPDBActor.PrepareForModificationResult> = 
-        retype orchestrator <? OrchestratorActor.PrepareMasterPDBForModification (newRequestId(), "test1", 1, "me")
-        |> Async.RunSynchronously
+    let request : RequestValidation = 
+        orchestrator <? OrchestratorActor.PrepareMasterPDBForModification ("me", "test1", 1) |> run
 
-    match result with
-    | Prepared _ -> ()
-    | Locked _ -> failwith "this Locked event shoud not be recevied by orchestrator"
-    | PreparationFailure error -> failwith error
+    request |> throwIfRequestNotCompletedOk tck orchestrator
 
-    let (_, result) : WithRequestId<MasterPDBActor.RollbackResult> = 
-        retype orchestrator <? OrchestratorActor.RollbackMasterPDB (newRequestId(), "test1") 
-        |> Async.RunSynchronously
+    let request : RequestValidation = 
+        orchestrator <? OrchestratorActor.RollbackMasterPDB ("me", "test1") |> run
     
-    result |> Result.mapError (fun error -> failwith error) |> ignore
-
-    ()
+    request |> throwIfRequestNotCompletedOk tck orchestrator
 
 [<Fact>]
 let ``Snapshot PDB`` () = test <| fun tck ->
@@ -303,25 +322,21 @@ let ``Snapshot PDB`` () = test <| fun tck ->
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn fakeOracleAPI
     let masterPDBActor = tck |> MasterPDBActor.spawn fakeOracleAPI instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor pdb1
     
-    let (_, result):WithRequestId<SnapshotResult> = retype masterPDBActor <? MasterPDBActor.SnapshotVersion (newRequestId(), 1, "snapshot") |> Async.RunSynchronously
+    let (_, result):WithRequestId<SnapshotResult> = retype masterPDBActor <? MasterPDBActor.SnapshotVersion (newRequestId(), 1, "snapshot") |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
-
-    ()
 
 [<Fact>]
 let ``OracleInstance snapshots PDB`` () = test <| fun tck ->
     let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
 
-    let (_, result):WithRequestId<SnapshotResult> = retype oracleActor <? OracleInstanceActor.SnapshotMasterPDBVersion (newRequestId(), "test1", 1, "snapshot") |> Async.RunSynchronously
+    let (_, result):WithRequestId<SnapshotResult> = retype oracleActor <? OracleInstanceActor.SnapshotMasterPDBVersion (newRequestId(), "test1", 1, "snapshot") |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
-
-    ()
 
 [<Fact>]
 let ``Orchestrator snapshots PDB`` () = test <| fun tck ->
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
 
-    let (_, result):WithRequestId<SnapshotResult> = retype orchestrator <? OrchestratorActor.SnapshotMasterPDBVersion (newRequestId(), "server1", "test1", 1, "snapshot") |> Async.RunSynchronously
-    result |> Result.mapError (fun error -> failwith error) |> ignore
+    let request : RequestValidation = 
+        orchestrator <? OrchestratorActor.SnapshotMasterPDBVersion ("me", "server1", "test1", 1, "snapshot") |> run
 
-    ()
+    request |> throwIfRequestNotCompletedOk tck orchestrator

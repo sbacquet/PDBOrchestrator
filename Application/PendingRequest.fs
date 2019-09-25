@@ -7,7 +7,7 @@ type RequestId = System.Guid
 let newRequestId () = System.Guid.NewGuid()
 
 type PendingRequest<'C> = {
-    Id: System.Guid 
+    Id: RequestId 
     Command: 'C
     Requester: IActorRef<obj>
 }
@@ -16,6 +16,7 @@ type WithRequestId<'T> = RequestId * 'T
 type WithRequestId<'T1, 'T2> = RequestId * 'T1 * 'T2
 type WithRequestId<'T1, 'T2, 'T3> = RequestId * 'T1 * 'T2 * 'T3
 type WithRequestId<'T1, 'T2, 'T3, 'T4> = RequestId * 'T1 * 'T2 * 'T3 * 'T4
+type WithRequestId<'T1, 'T2, 'T3, 'T4, 'T5> = RequestId * 'T1 * 'T2 * 'T3 * 'T4 * 'T5
 
 type RequestMap<'C> = Map<RequestId, PendingRequest<'C>>
 
