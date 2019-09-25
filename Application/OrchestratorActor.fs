@@ -66,7 +66,7 @@ let orchestratorActorBody getOracleAPI getInstance getMasterPDBRepo initialState
             let sender = ctx.Sender().Retype<WithRequestId<Application.MasterPDBActor.SnapshotResult>>()
             let instanceMaybe = collaborators.OracleInstanceActors |> Map.tryFind instanceName
             match instanceMaybe with
-            | None -> sender <! (requestId, Application.MasterPDBActor.SnapshotFailure (sprintf "cannot find Oracle instance %s" instanceName))
+            | None -> sender <! (requestId, Error (sprintf "cannot find Oracle instance %s" instanceName))
             | Some instance ->
                 retype instance <<! Application.OracleInstanceActor.SnapshotMasterPDBVersion (requestId, masterPDBName, versionNumber, snapshotName)
             return! loop orchestrator

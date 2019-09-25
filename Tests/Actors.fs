@@ -253,58 +253,46 @@ let ``Lock master PDB`` () = test <| fun tck ->
         | _ -> false
     )
 
-    retype masterPDBActor <! MasterPDBActor.Rollback (newRequestId())
-    let x = expectMsgFilter tck (fun (mess:obj) -> 
-        match mess with
-        | :? WithRequestId<MasterPDBActor.RollbackResult> as result -> 
-            match snd result with
-            | RolledBack _ -> true
-            | _ -> false
-        | _ -> false
-    ) 
+    let (_, result) : WithRequestId<MasterPDBActor.RollbackResult> = 
+        retype masterPDBActor <? MasterPDBActor.Rollback (newRequestId())
+        |> Async.RunSynchronously
+
+    result |> Result.mapError (fun error -> failwith error) |> ignore
     ()
 
 [<Fact>]
 let ``OracleInstance locks master PDB`` () = test <| fun tck ->
     let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
 
-    retype oracleActor <! OracleInstanceActor.PrepareMasterPDBForModification (newRequestId(), "test1", 1, "me")
+    let (_, result) : WithRequestId<MasterPDBActor.PrepareForModificationResult> = 
+        retype oracleActor <? OracleInstanceActor.PrepareMasterPDBForModification (newRequestId(), "test1", 1, "me")
+        |> Async.RunSynchronously
 
-    let preparedMess = expectMsgFilter tck (fun (mess:obj) -> 
-        match mess with
-        | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as result -> 
-            match snd result with
-            | Prepared _ -> true
-            | _ -> false
-        | _ -> false
-    )
+    match result with
+    | Prepared _ -> ()
+    | Locked _ -> failwith "this Locked event shoud not be recevied by orchestrator"
+    | PreparationFailure error -> failwith error
+
     ()
 
 [<Fact>]
 let ``Orchestrator locks master PDB`` () = test <| fun tck ->
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
 
-    retype orchestrator <! OrchestratorActor.PrepareMasterPDBForModification (newRequestId(), "test1", 1, "me")
+    let (_, result) : WithRequestId<MasterPDBActor.PrepareForModificationResult> = 
+        retype orchestrator <? OrchestratorActor.PrepareMasterPDBForModification (newRequestId(), "test1", 1, "me")
+        |> Async.RunSynchronously
 
-    let preparedMess = expectMsgFilter tck (fun (mess:obj) -> 
-        match mess with
-        | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as result -> 
-            match snd result with
-            | Prepared _ -> true
-            | _ -> false
-        | _ -> false
-    )
+    match result with
+    | Prepared _ -> ()
+    | Locked _ -> failwith "this Locked event shoud not be recevied by orchestrator"
+    | PreparationFailure error -> failwith error
 
-    retype orchestrator <! OrchestratorActor.RollbackMasterPDB (newRequestId(), "test1")
-
-    let x = expectMsgFilter tck (fun (mess:obj) -> 
-        match mess with
-        | :? WithRequestId<MasterPDBActor.RollbackResult> as result -> 
-            match snd result with
-            | RolledBack _ -> true
-            | _ -> false
-        | _ -> false
-    )
+    let (_, result) : WithRequestId<MasterPDBActor.RollbackResult> = 
+        retype orchestrator <? OrchestratorActor.RollbackMasterPDB (newRequestId(), "test1") 
+        |> Async.RunSynchronously
+    
+    result |> Result.mapError (fun error -> failwith error) |> ignore
 
     ()
 
@@ -316,6 +304,7 @@ let ``Snapshot PDB`` () = test <| fun tck ->
     let masterPDBActor = tck |> MasterPDBActor.spawn fakeOracleAPI instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor pdb1
     
     let (_, result):WithRequestId<SnapshotResult> = retype masterPDBActor <? MasterPDBActor.SnapshotVersion (newRequestId(), 1, "snapshot") |> Async.RunSynchronously
+    result |> Result.mapError (fun error -> failwith error) |> ignore
 
     ()
 
@@ -324,6 +313,7 @@ let ``OracleInstance snapshots PDB`` () = test <| fun tck ->
     let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
 
     let (_, result):WithRequestId<SnapshotResult> = retype oracleActor <? OracleInstanceActor.SnapshotMasterPDBVersion (newRequestId(), "test1", 1, "snapshot") |> Async.RunSynchronously
+    result |> Result.mapError (fun error -> failwith error) |> ignore
 
     ()
 
@@ -332,5 +322,6 @@ let ``Orchestrator snapshots PDB`` () = test <| fun tck ->
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
 
     let (_, result):WithRequestId<SnapshotResult> = retype orchestrator <? OrchestratorActor.SnapshotMasterPDBVersion (newRequestId(), "server1", "test1", 1, "snapshot") |> Async.RunSynchronously
+    result |> Result.mapError (fun error -> failwith error) |> ignore
 
     ()

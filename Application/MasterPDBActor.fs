@@ -22,13 +22,9 @@ type PrepareForModificationResult =
 | Prepared of MasterPDB
 | PreparationFailure of string
 
-type RollbackResult =
-| RolledBack of MasterPDB
-| RollbackFailure of string
+type RollbackResult = Result<MasterPDB, string>
 
-type SnapshotResult =
-| Snapshot of int * string
-| SnapshotFailure of string
+type SnapshotResult = Result<int * string, string>
 
 type Collaborators = {
     OracleAPI: IOracleAPI
@@ -101,7 +97,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                     oracleLongTaskExecutor <! OracleLongTaskExecutor.DeletePDB (requestId, masterPDB.Name)
                     return! loop masterPDB newRequests collaborators
                 | Error error -> 
-                    sender <! (requestId, RollbackFailure error)
+                    sender <! (requestId, Error error)
                     return! loop masterPDB requests collaborators
             
             | SnapshotVersion (requestId, versionNumber, snapshotName) ->
@@ -109,7 +105,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                 let versionMaybe = masterPDB.Versions.TryFind(versionNumber)
                 match versionMaybe with
                 | None -> 
-                    sender <! (requestId, SnapshotFailure (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name))
+                    sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name))
                     return! loop masterPDB requests collaborators
                 | Some version -> 
                     let newCollabs, versionActor = getOrSpawnVersionActor version collaborators ctx
@@ -124,7 +120,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
 
             match requestMaybe with
             | None -> 
-                logWarningf ctx "Request %s not found" <| requestId.ToString()
+                logWarningf ctx "internal error : request %s not found" <| requestId.ToString()
                 return! loop masterPDB requests collaborators
 
             | Some request -> 
@@ -145,9 +141,9 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                     | Ok newMasterPDB ->
                         match result with
                         | Ok _ ->
-                            sender <! (requestId, RolledBack newMasterPDB)
+                            sender <! (requestId, Ok newMasterPDB)
                         | Error error ->
-                            sender <! (requestId, RollbackFailure (error.ToString()))
+                            sender <! (requestId, Error (error.ToString()))
                         return! loop newMasterPDB newRequests collaborators
                     | Error error -> failwithf "Fatal error"
 
@@ -155,9 +151,9 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                     let sender = request.Requester.Retype<WithRequestId<SnapshotResult>>()
                     match result with
                     | Ok _ ->
-                        sender <! (requestId, Snapshot (versionNumber, snapshotName))
+                        sender <! (requestId, Ok (versionNumber, snapshotName))
                     | Error error ->
-                        sender <! (requestId, SnapshotFailure (error.ToString()))
+                        sender <! (requestId, Error (error.ToString()))
                     return! loop masterPDB newRequests collaborators
 
                 | _ -> failwithf "Fatal error"
