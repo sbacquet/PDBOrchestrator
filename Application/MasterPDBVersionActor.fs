@@ -9,12 +9,17 @@ open Application.OracleLongTaskExecutor
 open Application.OracleDiskIntensiveActor
 open Domain.OracleInstance
 open Application.Oracle
+open Application.Common
+open System
 
 type Command =
 | Snapshot of WithRequestId<string, string, string, string> // responds with WithRequestId<OraclePDBResult>
 | DeleteSnapshot of WithRequestId<string>
 
 let getSnapshotSourceName (masterPDBVersion:MasterPDBVersion) = sprintf "%s_v%03d" (masterPDBVersion.MasterPDBName.ToUpper()) masterPDBVersion.Number
+
+let cDefaultTimeout = 5000
+let cImportTimeout = int(Math.Round(TimeSpan.FromMinutes(20.).TotalMilliseconds)) // TODO
 
 let masterPDBVersionActorBody 
     (oracleAPI:#Application.Oracle.IOracleAPI) 
@@ -29,11 +34,11 @@ let masterPDBVersionActorBody
         match msg with
         | Snapshot (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotName, snapshotDest) -> 
             let snapshotSourceName = getSnapshotSourceName masterPDBVersion
-            let snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName |> Async.RunSynchronously
+            let snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName |> runWithinElseDefault cDefaultTimeout false
             if (not snapshotSourceExists) then
                 let importResult:WithRequestId<OraclePDBResult> = 
                     oracleDiskIntensiveTaskExecutor <? ImportPDB (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotSourceName)
-                    |> Async.RunSynchronously
+                    |> runWithin cImportTimeout id (fun () -> (requestId, Error (exn (sprintf "timeout reached while importing %s" snapshotSourceName))))
                 match snd importResult with
                 | Error _ -> 
                     ctx.Sender() <! importResult

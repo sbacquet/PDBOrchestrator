@@ -10,6 +10,7 @@ open Domain.Common.Validation
 open Domain.Common.Result
 open System
 open Application.PDBRepository
+open Application.Common
 
 type CreateMasterPDBParams = {
     Name: string
@@ -154,10 +155,11 @@ let addNewMasterPDB (ctx : Actor<obj>) (instance : OracleInstance) collaborators
 }
 
 let expand (masterPDBActors: Map<string, IActorRef<obj>>) (instance:OracleInstance) = 
-    let masterPDBs = 
+    let masterPDBsMaybe = 
         instance.MasterPDBs 
         |> List.map (fun pdb -> retype masterPDBActors.[pdb] <? MasterPDBActor.GetInternalState)
-        |> Async.Parallel |> Async.RunSynchronously
+        |> Async.Parallel |> runWithinElseDefaultError 1000 // TODO
+    masterPDBsMaybe |> Result.map (fun masterPDBs ->
     {
         Name = instance.Name
         Server = instance.Server
@@ -170,7 +172,7 @@ let expand (masterPDBActors: Map<string, IActorRef<obj>>) (instance:OracleInstan
         SnapshotSourcePDBDestPath = instance.SnapshotSourcePDBDestPath
         OracleDirectoryForDumps = instance.OracleDirectoryForDumps
         MasterPDBs = masterPDBs |> List.ofArray
-    }
+    })
 
     
 let collapse (expandedInstance:OracleInstanceExpanded) : OracleInstance = {
@@ -258,8 +260,10 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) in
                     return! loop collaborators instance requests masterPDBRepo
 
             | TransferInternalState target ->
-                let expandedInstance = instance |> expand collaborators.MasterPDBActors
-                retype target <<! SetInternalState expandedInstance
+                let expandedInstanceMaybe = instance |> expand collaborators.MasterPDBActors
+                match expandedInstanceMaybe with
+                | Ok expandedInstance -> retype target <<! SetInternalState expandedInstance
+                | Error error -> ctx.Sender() <! stateSetError error
                 return! loop collaborators instance requests masterPDBRepo
 
             | CreateMasterPDB (requestId, parameters) as command ->

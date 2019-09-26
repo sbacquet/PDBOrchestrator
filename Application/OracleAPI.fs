@@ -1,7 +1,6 @@
 ﻿module Application.Oracle
 
-type OracleResult<'T> = Result<'T, Oracle.ManagedDataAccess.Client.OracleException>
-type OraclePDBResult = OracleResult<string>
+type OraclePDBResult = Domain.Common.Result.Exceptional<string>
 
 type IOracleAPI =
     //inherit System.IDisposable

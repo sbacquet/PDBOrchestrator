@@ -53,14 +53,11 @@ let test, (loggerFactory : ILoggerFactory) =
                     lifecycle = on
                 }
             }
-            test {
-                default-timeout = 36000s
-            }
         }"
         Akkling.TestKit.test config, 
         (new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory)
     else
-        Akkling.TestKit.test (ConfigurationFactory.ParseString @"akka { actor { ask-timeout = 1s } }"), 
+        Akkling.TestKit.testDefault,
         (new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory() :> ILoggerFactory)
 #else
 let run cont = runWithinElseTimeoutException 5000 cont
@@ -101,7 +98,9 @@ type FakeOracleAPI() =
     interface IOracleAPI with
         member this.NewPDBFromDump _ _ _ _ _ _ _ _ name = async {
             this.Logger.LogDebug("Creating new PDB {PDB}...", name)
-            //do! Async.Sleep 10000
+#if DEBUG
+            do! Async.Sleep 3000
+#endif
             return Ok name
         }
         member this.ClosePDB name = async { 

@@ -238,14 +238,33 @@ let pdbHasSnapshots connAsDBA (name:string) = async {
     return result |> Option.get > 0M
 }
 
+let toOraclePDBResult result = async {
+    let! r = result
+    return r |> Result.mapError (fun error -> error :> exn)
+}
+
 type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager, connAsDBAIn : string -> Sql.ConnectionManager) = 
     member this.Logger = loggerFactory.CreateLogger("Oracle API")
     interface IOracleAPI with
-        member this.NewPDBFromDump adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name = createManifestFromDump this.Logger connAsDBA connAsDBAIn adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name
-        member this.ClosePDB name = closePDB this.Logger connAsDBA name
-        member this.DeletePDB name = deletePDB this.Logger connAsDBA name
-        member this.ExportPDB manifest name = exportPDB this.Logger connAsDBA manifest name
-        member this.ImportPDB manifest dest name = importPDB this.Logger connAsDBA manifest dest name
-        member this.SnapshotPDB from dest name = snapshotPDB this.Logger connAsDBA from dest name
-        member this.PDBHasSnapshots name = pdbHasSnapshots connAsDBA name
-        member this.PDBExists name = PDBExistsOnServer connAsDBA name
+        member this.NewPDBFromDump adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name =
+            createManifestFromDump this.Logger connAsDBA connAsDBAIn adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name
+            |> toOraclePDBResult
+        member this.ClosePDB name =
+            closePDB this.Logger connAsDBA name
+            |> toOraclePDBResult
+        member this.DeletePDB name = 
+            deletePDB this.Logger connAsDBA name
+            |> toOraclePDBResult
+        member this.ExportPDB manifest name = 
+            exportPDB this.Logger connAsDBA manifest name
+            |> toOraclePDBResult
+        member this.ImportPDB manifest dest name = 
+            importPDB this.Logger connAsDBA manifest dest name
+            |> toOraclePDBResult
+        member this.SnapshotPDB from dest name = 
+            snapshotPDB this.Logger connAsDBA from dest name
+            |> toOraclePDBResult
+        member this.PDBHasSnapshots name = 
+            pdbHasSnapshots connAsDBA name
+        member this.PDBExists name = 
+            PDBExistsOnServer connAsDBA name
