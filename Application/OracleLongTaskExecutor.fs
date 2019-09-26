@@ -3,6 +3,7 @@
 open Akkling
 open Application.PendingRequest
 open Application.Oracle
+open Akka.Routing
 
 type CreatePDBFromDumpParams = {
     Name: string
@@ -23,7 +24,7 @@ type Command =
 | DeletePDB of WithRequestId<string>
 
 let newManifestName (pdb:string) version =
-    sprintf "%s_v%03d" (pdb.ToUpper()) version
+    sprintf "%s_V%03d.XML" (pdb.ToUpper()) version
 
 let oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
     let rec loop () = actor {
@@ -53,8 +54,10 @@ let oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
     loop ()
 
 let [<Literal>]cOracleLongTaskExecutorName = "OracleLongTaskExecutor"
+let numberOfOracleLongTaskExecutors = 3 // TODO : config
 
 let spawn oracleAPI actorFactory =
-    Akkling.Spawn.spawn actorFactory cOracleLongTaskExecutorName <| props (oracleLongTaskExecutorBody oracleAPI)
+    Akkling.Spawn.spawn actorFactory cOracleLongTaskExecutorName 
+    <| { props (oracleLongTaskExecutorBody oracleAPI) with Router = Some (upcast SmallestMailboxPool(numberOfOracleLongTaskExecutors)) }
 
 let getOracleLongTaskExecutor (ctx : Actor<_>) = Common.resolveActor (Common.ActorName cOracleLongTaskExecutorName) ctx

@@ -36,9 +36,10 @@ let exec result conn a =
 
 let execAsync result conn a = async {
     try 
-        use! reader = Sql.asyncExecReader conn a []
-        let r = reader |> List.ofDataReader
+        // Buggy : throws ObjectDisposedException
         //let! _ = Sql.asyncExecNonQuery conn a []
+        use! reader = Sql.asyncExecReader conn a []
+        reader |> List.ofDataReader |> ignore
         return Ok result 
     with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
         return Error ex

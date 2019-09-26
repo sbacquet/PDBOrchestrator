@@ -226,8 +226,6 @@ let spawnCollaborators getOracleAPI (masterPDBRepo:MasterPDBRepo) (instance : Or
             |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn oracleAPI instance oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor (masterPDBRepo.Get pdb)))
             |> Map.ofList
     }
-    //let p = Akka.Actor.Props.Create(typeof<FunActor<'M>>, [ oracleLogTaskExecutorBody ]).WithRouter(Akka.Routing.FromConfig())
-    //spawn ctx "oracleLongTaskExecutor" <| Props.From(p) |> ignore
 
 let oracleInstanceActorName (instance : OracleInstance) = 
     Common.ActorName 
