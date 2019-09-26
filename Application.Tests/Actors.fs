@@ -1,4 +1,4 @@
-﻿module Tests.Actors
+﻿module Application.Tests.Actors
 
 open Akkling
 open Akkling.TestKit

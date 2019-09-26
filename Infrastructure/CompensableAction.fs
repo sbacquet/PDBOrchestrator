@@ -52,7 +52,7 @@ let composeAsync (logger:ILogger) (actions : CompensableAsyncAction<'T, 'E> list
             | Error e -> 
                 logger.LogWarning("Error encountered, compensating")
                 let runCompensation comp = async { try do! comp oldValue with _ -> (); return () }
-                comps |> List.map runCompensation |> Async.Sequential |> ignore
+                let! _ = comps |> List.map runCompensation |> Async.Sequential
                 logger.LogWarning("Compensation done")
                 return (Error e, [])
         | error -> return error

@@ -27,10 +27,18 @@ let connAsDBAInFromInstance (instance:Domain.OracleInstance.OracleInstance) serv
 
 let connAsDBAFromInstance instance = connAsDBAInFromInstance instance instance.Name
 
-let exec result conn a = try Sql.execNonQuery conn a [] |> ignore; Ok result with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> Error ex
+let exec result conn a = 
+    try 
+        Sql.execNonQuery conn a [] |> ignore
+        Ok result 
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        Error ex
+
 let execAsync result conn a = async {
     try 
-        let! _ = Sql.asyncExecNonQuery conn a []
+        use! reader = Sql.asyncExecReader conn a []
+        let r = reader |> List.ofDataReader
+        //let! _ = Sql.asyncExecNonQuery conn a []
         return Ok result 
     with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
         return Error ex
@@ -80,22 +88,6 @@ END;
     |> execAsync name (connAsDBAIn name)
 
 
-let deletePDB (logger:ILogger) connAsDBA (name:string) = 
-    logger.LogDebug("Deleting PDB {PDB}", name)
-    sprintf @"DROP PLUGGABLE DATABASE %s INCLUDING DATAFILES" name
-    |> execAsync name connAsDBA
-
-let createPDBCompensable (logger:ILogger) connAsDBA adminUserName adminUserPassword dest keepOpen = 
-    compensableAsync
-        (createPDB logger connAsDBA adminUserName adminUserPassword dest keepOpen)
-        (deletePDB logger connAsDBA)
-
-let openPDB (logger:ILogger) connAsDBA readWrite (name:string) =
-    logger.LogDebug("Opening PDB {PDB}", name)
-    let readMode = if readWrite then "READ WRITE" else "READ ONLY"
-    sprintf @"ALTER PLUGGABLE DATABASE %s OPEN %s FORCE" name readMode
-    |> execAsync name connAsDBA
-
 let closePDB (logger:ILogger) connAsDBA (name:string) = async {
     logger.LogDebug("Closing PDB {PDB}", name)
     let! result = 
@@ -108,6 +100,27 @@ let closePDB (logger:ILogger) connAsDBA (name:string) = async {
         | 65020 -> return Ok name // already closed -> ignore it
         | _ -> return Error ex
 }
+
+// Warning! Does not check existence of snapshots
+let deletePDB (logger:ILogger) connAsDBA closeIfOpen (name:string) = async {
+    logger.LogDebug("Deleting PDB {PDB}", name)
+    let! closeResult = if (closeIfOpen) then closePDB logger connAsDBA name else async { return Ok name }
+    match closeResult with
+    | Ok _ ->
+        return! sprintf @"DROP PLUGGABLE DATABASE %s INCLUDING DATAFILES" name |> execAsync name connAsDBA
+    | Error _ -> return closeResult
+}
+
+let createPDBCompensable (logger:ILogger) connAsDBA adminUserName adminUserPassword dest keepOpen = 
+    compensableAsync
+        (createPDB logger connAsDBA adminUserName adminUserPassword dest keepOpen)
+        (deletePDB logger connAsDBA true)
+
+let openPDB (logger:ILogger) connAsDBA readWrite (name:string) =
+    logger.LogDebug("Opening PDB {PDB}", name)
+    let readMode = if readWrite then "READ WRITE" else "READ ONLY"
+    sprintf @"ALTER PLUGGABLE DATABASE %s OPEN %s FORCE" name readMode
+    |> execAsync name connAsDBA
 
 let openPDBCompensable (logger:ILogger) connAsDBA readWrite = 
     compensableAsync 
@@ -175,6 +188,17 @@ END;
         name manifest dest name
     |> execAsync name connAsDBA
 
+let importPDBCompensable (logger:ILogger) connAsDBA manifest dest = 
+    compensableAsync 
+        (importPDB logger connAsDBA manifest dest) 
+        (deletePDB logger connAsDBA true)
+
+let importAndOpen (logger:ILogger) connAsDBA manifest dest =
+    [
+        importPDBCompensable logger connAsDBA manifest dest
+        openPDBCompensable logger connAsDBA true
+    ] |> composeAsync logger
+
 let snapshotPDB (logger:ILogger) connAsDBA from dest name =
     logger.LogDebug("Snapshoting PDB {PDB} to {snapshot}", from, name)
     sprintf 
@@ -197,6 +221,17 @@ END;
 "
         from name from dest name
     |> execAsync name connAsDBA
+
+let snapshotPDBCompensable (logger:ILogger) connAsDBA manifest dest = 
+    compensableAsync 
+        (snapshotPDB logger connAsDBA manifest dest) 
+        (deletePDB logger connAsDBA true)
+
+let snapshotAndOpenPDB (logger:ILogger) connAsDBA manifest dest =
+    [
+        snapshotPDBCompensable logger connAsDBA manifest dest
+        openPDBCompensable logger connAsDBA true
+    ] |> composeAsync logger
 
 type RawOraclePDB = {
     Id: decimal
@@ -252,17 +287,20 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
         member this.ClosePDB name =
             closePDB this.Logger connAsDBA name
             |> toOraclePDBResult
-        member this.DeletePDB name = 
-            deletePDB this.Logger connAsDBA name
-            |> toOraclePDBResult
+        member this.DeletePDB name = async {
+            let! hasSnapshots = pdbHasSnapshots connAsDBA name
+            match hasSnapshots with
+            | false -> return! deletePDB this.Logger connAsDBA true name |> toOraclePDBResult
+            | true -> return Error (exn "PDB cannot be deleted because open snapshots have been created from it")
+        }
         member this.ExportPDB manifest name = 
             exportPDB this.Logger connAsDBA manifest name
             |> toOraclePDBResult
         member this.ImportPDB manifest dest name = 
-            importPDB this.Logger connAsDBA manifest dest name
+            importAndOpen this.Logger connAsDBA manifest dest name
             |> toOraclePDBResult
         member this.SnapshotPDB from dest name = 
-            snapshotPDB this.Logger connAsDBA from dest name
+            snapshotAndOpenPDB this.Logger connAsDBA from dest name
             |> toOraclePDBResult
         member this.PDBHasSnapshots name = 
             pdbHasSnapshots connAsDBA name
