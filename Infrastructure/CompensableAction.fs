@@ -41,19 +41,21 @@ let compose (logger:ILogger) (actions : CompensableAction<'T, 'E> list) input =
     result
 
 let composeAsync (logger:ILogger) (actions : CompensableAsyncAction<'T, 'E> list) input = async {
-    let f (oldResult : Result<'T,'E> * (AsyncCompensation<'T> list)) (compAction : CompensableAsyncAction<'T, 'E>) : Result<'T,'E> * (AsyncCompensation<'T> list) =
+    let f (oldResultAsync : Async<Result<'T,'E> * (AsyncCompensation<'T> list)>) (compAction : CompensableAsyncAction<'T, 'E>) : Async<Result<'T,'E> * (AsyncCompensation<'T> list)> = async {
+        let! oldResult = oldResultAsync
         match (oldResult) with
         | Ok oldValue, comps ->
             let action, comp = compAction
-            let result = action oldValue |> Async.RunSynchronously
+            let! result = action oldValue
             match result with
-            | Ok r -> (Ok r, comp :: comps)
+            | Ok r -> return (Ok r, comp :: comps)
             | Error e -> 
                 logger.LogWarning("Error encountered, compensating")
                 comps |> List.iter (fun comp -> try comp oldValue |> Async.RunSynchronously |> ignore with _ -> ())
                 logger.LogWarning("Compensation done")
-                (Error e, [])
-        | error -> error
-    let result, _ = actions |> List.fold f (Ok input, [])
+                return (Error e, [])
+        | error -> return error
+    }
+    let! result, _ = actions |> List.fold f (async { return (Ok input, []) })
     return result
 }
