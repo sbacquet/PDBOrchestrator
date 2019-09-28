@@ -14,3 +14,4 @@ nuget Akkling.TestKit
 nuget Akka.Logger.Serilog
 nuget Serilog.Sinks.Trace
 nuget Serilog.Extensions.Logging
+nuget Chiron prerelease

@@ -6,6 +6,7 @@
     <GenerateProgramFile>false</GenerateProgramFile>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="JsonTests.fs" />
     <Compile Include="Oracle.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

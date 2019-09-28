@@ -2,3 +2,4 @@ FSharp.Core
 FsSql.Core
 Oracle.ManagedDataAccess.Core
 Microsoft.Extensions.Logging
+Chiron

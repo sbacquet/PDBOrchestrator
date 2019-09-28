@@ -13,7 +13,6 @@ open Akka.Configuration
 open Serilog
 open Microsoft.Extensions.Logging
 open System
-open Application.PDBRepository
 open Application.DTO.OracleInstance
 open Application.DTO.Orchestrator
 open Application.MasterPDBActor
@@ -138,9 +137,9 @@ let getInstance = function
     | name -> failwithf "Oracle instance %s does not exist" name
 
 type FakeMasterPDBRepo(map : Map<string, MasterPDB>) =
-    interface MasterPDBRepo with
+    interface OracleInstanceActor.MasterPDBRepo with
         member this.Get pdb = map |> Map.find pdb
-        member this.Put name pdb = FakeMasterPDBRepo (map.Add(name, pdb)) :> MasterPDBRepo
+        member this.Put name pdb = FakeMasterPDBRepo (map.Add(name, pdb)) :> OracleInstanceActor.MasterPDBRepo
 
 let masterPDBMap1 =
     [ 

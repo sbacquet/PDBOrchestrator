@@ -9,8 +9,9 @@ open Domain.OracleInstance
 open Domain.Common.Validation
 open Domain.Common.Result
 open System
-open Application.PDBRepository
 open Application.Common
+
+type MasterPDBRepo = Common.Repository<string, Domain.MasterPDB.MasterPDB>
 
 type CreateMasterPDBParams = {
     Name: string

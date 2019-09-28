@@ -5,7 +5,6 @@ open Xunit
 
 open Infrastructure.Oracle
 open Microsoft.Extensions.Logging.Abstractions
-open Microsoft.Extensions.Logging
 open Application.Oracle
 open Domain.Common.Result
 
