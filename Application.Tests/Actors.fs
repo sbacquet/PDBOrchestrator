@@ -132,7 +132,7 @@ type FakeOracleAPI() =
 let fakeOracleAPI = FakeOracleAPI()
 
 type FakeOracleInstanceRepo(map : Map<string, OracleInstance>) =
-    interface OrchestratorActor.OracleInstanceRepo with
+    interface IOracleInstanceRepository with
         member this.Get pdb = map |> Map.find pdb
         member this.Put name pdb = upcast FakeOracleInstanceRepo (map.Add(name, pdb))
 
@@ -143,9 +143,9 @@ let allInstances =
     ] |> Map.ofList
 
 type FakeMasterPDBRepo(map : Map<string, MasterPDB>) =
-    interface OracleInstanceActor.MasterPDBRepo with
+    interface IMasterPDBRepository with
         member this.Get pdb = map |> Map.find pdb
-        member this.Put name pdb = FakeMasterPDBRepo (map.Add(name, pdb)) :> OracleInstanceActor.MasterPDBRepo
+        member this.Put name pdb = upcast FakeMasterPDBRepo (map.Add(name, pdb))
 
 let masterPDBMap1 =
     [ 
@@ -169,7 +169,7 @@ let ``Test state transfer`` () = test <| fun tck ->
 
 let orchestratorState = {
     OracleInstanceNames = [ "server1"; "server2" ]
-    PrimaryServer = "server1"
+    PrimaryInstance = "server1"
 }
 
 let getMasterPDBRepo = function

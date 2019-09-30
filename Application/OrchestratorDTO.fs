@@ -12,5 +12,5 @@ let toDTO (instanceActors:Map<string, IActorRef<_>>) (orchestrator:Domain.Orches
         orchestrator.OracleInstanceNames 
         |> List.map (fun instance -> instanceActors.[instance] <? Application.OracleInstanceActor.GetState)
         |> Async.Parallel
-    return { OracleInstances = instances |> Array.toList; PrimaryInstance = orchestrator.PrimaryServer }
+    return { OracleInstances = instances |> Array.toList; PrimaryInstance = orchestrator.PrimaryInstance }
 }

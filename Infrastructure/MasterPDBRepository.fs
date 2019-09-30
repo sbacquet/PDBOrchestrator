@@ -4,6 +4,7 @@ open Domain.MasterPDB
 open System.IO
 open Chiron
 open Infrastructure
+open Application.Common
 
 let loadMasterPDB rootFolder name : MasterPDB =
     use stream = new StreamReader (sprintf "%s\%s.json" rootFolder name)
@@ -27,7 +28,7 @@ let saveMasterPDB rootFolder (cache:Map<string,MasterPDB>) name pdb =
     cache |> Map.add name pdb
     
 type MasterPDBRepository(rootFolder, cache) = 
-    interface Application.Common.Repository<string, MasterPDB> with
+    interface IMasterPDBRepository with
         member this.Get name = cache |> Map.find name
         member this.Put name pdb = upcast MasterPDBRepository(rootFolder, pdb |> saveMasterPDB rootFolder cache name)
 

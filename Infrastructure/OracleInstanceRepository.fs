@@ -4,6 +4,7 @@ open Domain.OracleInstance
 open System.IO
 open Chiron
 open Infrastructure
+open Application.Common
 
 let loadOracleInstance rootFolder name : OracleInstance =
     use stream = new StreamReader (sprintf "%s\%s.json" rootFolder name)
@@ -21,6 +22,6 @@ let saveOracleInstance rootFolder name pdb =
     stream.Flush()
 
 type OracleInstanceRepository(rootFolder) = 
-    interface Application.Common.Repository<string, OracleInstance> with
+    interface IOracleInstanceRepository with
         member this.Get name = loadOracleInstance rootFolder name
         member this.Put name pdb = saveOracleInstance rootFolder name pdb; upcast this

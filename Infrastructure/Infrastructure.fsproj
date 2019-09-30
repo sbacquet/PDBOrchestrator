@@ -9,6 +9,8 @@
     <Compile Include="MasterPDBRepository.fs" />
     <Compile Include="OracleInstanceJson.fs" />
     <Compile Include="OracleInstanceRepository.fs" />
+    <Compile Include="OrchestratorJson.fs" />
+    <Compile Include="OrchestratorRepository.fs" />
     <Compile Include="CompensableAction.fs" />
     <Compile Include="Oracle.fs" />
   </ItemGroup>

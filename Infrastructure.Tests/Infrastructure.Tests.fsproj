@@ -6,9 +6,10 @@
     <GenerateProgramFile>false</GenerateProgramFile>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="OracleInstanceRepositoryTests.fs" />
-    <Compile Include="MasterPDBRepositoryTests.fs" />
     <Compile Include="JsonTests.fs" />
+    <Compile Include="MasterPDBRepositoryTests.fs" />
+    <Compile Include="OracleInstanceRepositoryTests.fs" />
+    <Compile Include="OrchestratorRepositoryTests.fs" />
     <Compile Include="Oracle.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

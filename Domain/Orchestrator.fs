@@ -2,5 +2,7 @@
 
 type Orchestrator = {
     OracleInstanceNames : string list
-    PrimaryServer : string
+    PrimaryInstance : string
 }
+
+let consOrchestrator instances primary = { OracleInstanceNames = instances; PrimaryInstance = primary }

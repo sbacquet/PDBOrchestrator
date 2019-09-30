@@ -33,9 +33,7 @@ type RequestStatus =
 | CompletedOk of string
 | CompletedWithError of string
 
-type OracleInstanceRepo = Repository<string, Domain.OracleInstance.OracleInstance>
-
-let spawnCollaborators getOracleAPI (oracleInstanceRepo:#OracleInstanceRepo) getMasterPDBRepo state (ctx : Actor<_>) = {
+let spawnCollaborators getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo state (ctx : Actor<_>) = {
     OracleInstanceActors =
         state.OracleInstanceNames 
         |> List.map (fun instanceName -> 
@@ -46,7 +44,7 @@ let spawnCollaborators getOracleAPI (oracleInstanceRepo:#OracleInstanceRepo) get
 
 let createMasterPDBError error : MasterPDBCreationResult = InvalidRequest [ error ]
 
-let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#OracleInstanceRepo) getMasterPDBRepo initialState (ctx : Actor<_>) =
+let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo initialState (ctx : Actor<_>) =
 
     let collaborators = ctx |> spawnCollaborators getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState
 
@@ -62,7 +60,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#OracleInstanceRepo) 
             match command with
             | Synchronize targetInstance ->
                 if (orchestrator.OracleInstanceNames |> List.contains targetInstance) then
-                    let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
+                    let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                     let target = collaborators.OracleInstanceActors.[targetInstance]
                     retype primaryInstance <<! TransferInternalState target
                 else
@@ -75,7 +73,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#OracleInstanceRepo) 
                 return! loop orchestrator pendingRequests completedRequests
 
             | CreateMasterPDB (user, parameters) ->
-                let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
+                let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                 let requestId = newRequestId()
                 let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.CreateMasterPDB (requestId, parameters)
@@ -83,7 +81,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#OracleInstanceRepo) 
                 return! loop orchestrator newPendingRequests completedRequests
 
             | PrepareMasterPDBForModification (user, pdb, version) ->
-                let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
+                let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                 let requestId = newRequestId()
                 let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.PrepareMasterPDBForModification (requestId, pdb, version, user)
@@ -91,7 +89,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#OracleInstanceRepo) 
                 return! loop orchestrator newPendingRequests completedRequests
 
             | RollbackMasterPDB (user, pdb) ->
-                let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryServer]
+                let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                 let requestId = newRequestId()
                 let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.RollbackMasterPDB (requestId, pdb)
@@ -197,7 +195,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#OracleInstanceRepo) 
 
 let [<Literal>]cOrchestratorActorName = "Orchestrator"
 
-let spawn getOracleAPI (oracleInstanceRepo:#OracleInstanceRepo) getMasterPDBRepo initialState actorFactory =
+let spawn getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo initialState actorFactory =
     let actor = 
         Akkling.Spawn.spawn actorFactory cOrchestratorActorName 
         <| props (orchestratorActorBody getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState)

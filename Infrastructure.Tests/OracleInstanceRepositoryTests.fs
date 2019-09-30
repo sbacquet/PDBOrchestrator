@@ -3,14 +3,14 @@
 open Xunit
 open Infrastructure.OracleInstanceRepository
 open Domain.OracleInstance
-open Application.OrchestratorActor
+open Application.Common
 
 let [<Literal>]testFolder = __SOURCE_DIRECTORY__ + @"\tests\instances"
 
 [<Fact>]
 let ``Save and load Oracle instance`` () =
     let instance1Name = "test1"
-    let repo = OracleInstanceRepository(testFolder) :> OracleInstanceRepo
+    let repo = OracleInstanceRepository(testFolder) :> IOracleInstanceRepository
     let instance1 : OracleInstance = {
         Name = instance1Name
         Server = "fr1psl010716.misys.global.ad"

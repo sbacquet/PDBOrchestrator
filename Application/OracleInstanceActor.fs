@@ -11,8 +11,6 @@ open Domain.Common.Result
 open System
 open Application.Common
 
-type MasterPDBRepo = Common.Repository<string, Domain.MasterPDB.MasterPDB>
-
 type CreateMasterPDBParams = {
     Name: string
     Dump: string
@@ -137,7 +135,7 @@ let addMasterPDBToCollaborators ctx (instance : OracleInstance) (masterPDB:Domai
     }
 
 // Spawn actor for a new master PDBs
-let addNewMasterPDB (ctx : Actor<obj>) (instance : OracleInstance) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:MasterPDBRepo) = result {
+let addNewMasterPDB (ctx : Actor<obj>) (instance : OracleInstance) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:IMasterPDBRepository) = result {
     let! newState = instance |> OracleInstance.addMasterPDB masterPDB.Name
     let newMasterPDBRepo = masterPDBRepo.Put masterPDB.Name masterPDB
     let newCollaborators = 
@@ -191,7 +189,7 @@ let collapse (expandedInstance:OracleInstanceExpanded) : OracleInstance = {
 }
 
 
-let updateMasterPDBs (ctx : Actor<obj>) (instanceToImport : OracleInstanceExpanded) (collaborators:Collaborators) (masterPDBRepo:MasterPDBRepo) (instance : OracleInstance) = result {
+let updateMasterPDBs (ctx : Actor<obj>) (instanceToImport : OracleInstanceExpanded) (collaborators:Collaborators) (masterPDBRepo:IMasterPDBRepository) (instance : OracleInstance) = result {
     let masterPDBs = instanceToImport.MasterPDBs
     let existingMasterPDBs = collaborators.MasterPDBActors |> Map.toSeq |> Seq.map (fun (name, _) -> name) |> Set.ofSeq
     let newMasterPDBs = masterPDBs |> List.map (fun pdb -> pdb.Name) |> Set.ofList
@@ -206,7 +204,7 @@ let updateMasterPDBs (ctx : Actor<obj>) (instanceToImport : OracleInstanceExpand
 
     let masterPDBsToUpdate = Set.intersect existingMasterPDBs newMasterPDBs
     let folder2 result pdb = 
-        result |> Result.bind (fun (inst, collabs, (repo:MasterPDBRepo)) -> 
+        result |> Result.bind (fun (inst, collabs, (repo:IMasterPDBRepository)) -> 
             retype collabs.MasterPDBActors.[pdb] <! Application.MasterPDBActor.SetInternalState masterPDBMap.[pdb]
             Ok (inst, collabs, (repo.Put pdb masterPDBMap.[pdb]))
         )
@@ -214,7 +212,7 @@ let updateMasterPDBs (ctx : Actor<obj>) (instanceToImport : OracleInstanceExpand
 }
 
 // Spawn actors for master PDBs that already exist
-let spawnCollaborators getOracleAPI (masterPDBRepo:MasterPDBRepo) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
+let spawnCollaborators getOracleAPI (masterPDBRepo:IMasterPDBRepository) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
     let oracleAPI = getOracleAPI instance
     let oracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn oracleAPI
     let oracleDiskIntensiveTaskExecutor = ctx |> Application.OracleDiskIntensiveActor.spawn oracleAPI
@@ -232,9 +230,9 @@ let oracleInstanceActorName (instance : OracleInstance) =
     Common.ActorName 
         (sprintf "OracleInstance='%s'" (instance.Name.ToUpper() |> System.Uri.EscapeDataString))
 
-let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:MasterPDBRepo) initialInstance (ctx : Actor<obj>) =
+let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:IMasterPDBRepository) initialInstance (ctx : Actor<obj>) =
 
-    let rec loop collaborators (instance : OracleInstance) (requests : RequestMap<Command>) (masterPDBRepo:MasterPDBRepo) = actor {
+    let rec loop collaborators (instance : OracleInstance) (requests : RequestMap<Command>) (masterPDBRepo:IMasterPDBRepository) = actor {
 
         logDebugf ctx "Number of pending requests : %d" requests.Count
         let! msg = ctx.Receive()

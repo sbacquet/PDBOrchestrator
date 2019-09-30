@@ -33,7 +33,12 @@ let resolveActor (ActorName name) (ctx:Actor<_>) =
 
 let resolveSiblingActor (ActorName name) = resolveActor (ActorName (sprintf "../%s" name))
 
-type Repository<'K, 'T> =
+type IRepository<'K, 'T> =
     abstract member Get : 'K -> 'T
-    abstract member Put : 'K -> 'T -> Repository<'K, 'T>
+    abstract member Put : 'K -> 'T -> IRepository<'K, 'T>
 
+type IMasterPDBRepository = IRepository<string, Domain.MasterPDB.MasterPDB>
+
+type IOracleInstanceRepository = IRepository<string, Domain.OracleInstance.OracleInstance>
+
+type IOrchestratorRepository = IRepository<string, Domain.Orchestrator.Orchestrator>
