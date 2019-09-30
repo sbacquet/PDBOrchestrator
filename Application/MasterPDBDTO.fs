@@ -34,11 +34,9 @@ type MasterPDBState = {
     Schemas: Schema list
     Versions: MasterPDBVersion list
     LockState : LockInfo option
-    _iv : byte[]
 }
 
-let consMasterPDBState name manifest schemas versions lockState iv  = {
-    _iv = iv
+let consMasterPDBState name manifest schemas versions lockState = {
     Name = name
     Manifest = manifest
     Schemas = schemas
@@ -61,7 +59,6 @@ let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) = {
             })
         |> Map.toList |> List.map snd
     LockState = masterPDB.LockState |> Option.map (fun lock -> { Locker = lock.Locker; Date = lock.Date })
-    _iv = Array.empty
 }
 
 let fromDTO (dto:MasterPDBState) : Domain.MasterPDB.MasterPDB = { 

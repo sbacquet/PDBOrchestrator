@@ -71,7 +71,7 @@ let decodeMasterPDBVersion = jsonDecoder {
     let! creationDate = Decode.required Decode.dateTime "creationdate"
     let! comment = Decode.required Decode.string "comment"
     let! deleted = Decode.required Decode.bool "deleted"
-    return { Number = number; CreatedBy = createdBy; CreationDate = creationDate; Comment = comment; Deleted = deleted}
+    return { Number = number; CreatedBy = createdBy; CreationDate = creationDate.ToLocalTime(); Comment = comment; Deleted = deleted}
 }
 
 let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersion) jObj ->
@@ -91,7 +91,7 @@ let decodeMasterPDBState (algo:SymmetricAlgorithm) = jsonDecoder {
     let! schemas = Decode.required (Decode.listWith (decodeSchema algo)) "schemas"
     let! versions = Decode.required (Decode.listWith decodeMasterPDBVersion) "versions"
     let! lockState = Decode.optional decodeLockInfo "lockstate"
-    return consMasterPDBState name manifest schemas versions lockState iv
+    return consMasterPDBState name manifest schemas versions lockState
 }
 
 let encodeMasterPDBState (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:MasterPDBState) jObj ->
@@ -116,8 +116,6 @@ let serializeMasterPDBState pdb =
     aesAlg.Key <- secretKey
     pdb |> Json.serializeWith (encodeMasterPDBState aesAlg) JsonFormattingOptions.Pretty
 
-let DTOtoJson = 
-    toDTO >> serializeMasterPDBState
+let DTOtoJson = serializeMasterPDBState
 
-let jsonToDTO = 
-    deserializeMasterPDBState
+let jsonToDTO = deserializeMasterPDBState

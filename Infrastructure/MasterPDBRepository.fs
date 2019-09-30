@@ -1,25 +1,36 @@
 ﻿module Infrastructure.MasterPDBRepository
 
-open System
 open Application.DTO.MasterPDB
 open Domain.MasterPDB
 open System.IO
 open Chiron
+open Infrastructure
 
-let getMasterPDB rootFolder name : Lazy<MasterPDB> = lazy(
+let loadMasterPDB rootFolder name : MasterPDB =
     use stream = new StreamReader (sprintf "%s\%s.json" rootFolder name)
     let content = stream.ReadToEnd()
-    let state:Application.DTO.MasterPDB.MasterPDBState = failwith ""
-    state |> fromDTO
-)
+    let result = content |> MasterPDBJson.jsonToDTO
+    match result with
+    | JPass masterPDB -> masterPDB |> fromDTO
+    | JFail error -> failwith (error.ToString())
 
-let putMasterPDB rootFolder name pdb = 
-    () // TODO
+let loadMasterPDBs rootfolder (names:string list) =
+    names 
+    |> List.map (fun name -> name, loadMasterPDB rootfolder name)
+    |> Map.ofList
+
+let saveMasterPDB rootFolder (cache:Map<string,MasterPDB>) name pdb = 
+    Directory.CreateDirectory rootFolder |> ignore
+    use stream = File.CreateText (sprintf "%s\%s.json" rootFolder name)
+    let json = pdb |> toDTO |> MasterPDBJson.DTOtoJson
+    stream.Write json
+    stream.Flush()
+    cache |> Map.add name pdb
     
-type MasterPDBRepository(rootFolder : string) =
-    //member this.Cache : Map<string, MasterPDBState> = load rootFolder
-    interface Application.Common.Repository<string, Domain.MasterPDB.MasterPDB> with
-        member this.Get name = (getMasterPDB rootFolder name).Value
-        member this.Put name pdb = 
-            putMasterPDB rootFolder name pdb
-            upcast this
+type MasterPDBRepository(rootFolder, cache) = 
+    interface Application.Common.Repository<string, MasterPDB> with
+        member this.Get name = cache |> Map.find name
+        member this.Put name pdb = upcast MasterPDBRepository(rootFolder, pdb |> saveMasterPDB rootFolder cache name)
+
+let loadMasterPDBRepository rootFolder names = 
+    MasterPDBRepository(rootFolder, loadMasterPDBs rootFolder names)
