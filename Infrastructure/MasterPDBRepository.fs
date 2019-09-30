@@ -1,6 +1,5 @@
 ﻿module Infrastructure.MasterPDBRepository
 
-open Application.DTO.MasterPDB
 open Domain.MasterPDB
 open System.IO
 open Chiron
@@ -9,9 +8,9 @@ open Infrastructure
 let loadMasterPDB rootFolder name : MasterPDB =
     use stream = new StreamReader (sprintf "%s\%s.json" rootFolder name)
     let content = stream.ReadToEnd()
-    let result = content |> MasterPDBJson.jsonToDTO
+    let result = content |> MasterPDBJson.jsonToMasterPDB
     match result with
-    | JPass masterPDB -> masterPDB |> fromDTO
+    | JPass masterPDB -> masterPDB
     | JFail error -> failwith (error.ToString())
 
 let loadMasterPDBs rootfolder (names:string list) =
@@ -22,7 +21,7 @@ let loadMasterPDBs rootfolder (names:string list) =
 let saveMasterPDB rootFolder (cache:Map<string,MasterPDB>) name pdb = 
     Directory.CreateDirectory rootFolder |> ignore
     use stream = File.CreateText (sprintf "%s\%s.json" rootFolder name)
-    let json = pdb |> toDTO |> MasterPDBJson.DTOtoJson
+    let json = pdb |> MasterPDBJson.masterPDBtoJson
     stream.Write json
     stream.Flush()
     cache |> Map.add name pdb

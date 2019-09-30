@@ -1,6 +1,7 @@
 ﻿module Domain.MasterPDB
 
 open Domain.Common.Result
+open Domain.MasterPDBVersion
 
 type Schema = {
     User: string
@@ -30,12 +31,12 @@ type MasterPDB = {
     LockState : LockInfo option
 }
 
-let consMasterPDB name manifest schemas versions deletedVersions lockState = 
+let consMasterPDB name manifest schemas versions lockState = 
     { 
         Name = name
         Manifest = manifest
         Schemas = schemas 
-        Versions = versions
+        Versions = versions |> List.map (fun version -> version.Number, version) |> Map.ofList
         LockState = lockState
     }
 
@@ -46,7 +47,7 @@ let newMasterPDB name schemas createdBy creationDate comment =
         Name = name
         Manifest = masterPDBManifest name 1
         Schemas = schemas
-        Versions = [ 1, MasterPDBVersion.newPDBVersion name createdBy creationDate comment ] |> Map.ofList
+        Versions = [ 1, newPDBVersion createdBy creationDate comment ] |> Map.ofList
         LockState = None 
     }
 

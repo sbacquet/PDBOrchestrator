@@ -6,12 +6,7 @@ type Schema = {
     User: string
     Password: string
     Type: string
-} (*with
-    static member ToJson (x:Schema) = json {
-        do! Json.write "user" x.User
-        do! Json.writeWith encryptPassword "password" x.Password
-        do! Json.write "type" x.Type
-    }*)
+}
 
 type LockInfo = {
     Locker: string
@@ -68,7 +63,6 @@ let fromDTO (dto:MasterPDBState) : Domain.MasterPDB.MasterPDB = {
     Versions = dto.Versions 
         |> List.map (fun version -> 
             let v:Domain.MasterPDBVersion.MasterPDBVersion = { 
-                MasterPDBName = dto.Name
                 Number = version.Number
                 CreatedBy = version.CreatedBy
                 CreationDate = version.CreationDate

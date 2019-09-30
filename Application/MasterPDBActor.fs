@@ -33,7 +33,7 @@ type Collaborators = {
     OracleDiskIntensiveTaskExecutor : IActorRef<OracleDiskIntensiveActor.Command>
 }
 
-let getOrSpawnVersionActor (version:MasterPDBVersion) collaborators ctx =
+let getOrSpawnVersionActor (masterPDBName:string) (version:MasterPDBVersion) collaborators ctx =
     let versionActorMaybe = collaborators.MasterPDBVersionActors |> Map.tryFind version.Number
     match versionActorMaybe with
     | Some versionActor -> collaborators, versionActor
@@ -43,6 +43,7 @@ let getOrSpawnVersionActor (version:MasterPDBVersion) collaborators ctx =
                 collaborators.OracleAPI
                 collaborators.OracleLongTaskExecutor
                 collaborators.OracleDiskIntensiveTaskExecutor
+                masterPDBName
                 version
         
         { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Add(version.Number, versionActor) }, 
@@ -109,7 +110,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                     sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name))
                     return! loop masterPDB requests collaborators
                 | Some version -> 
-                    let newCollabs, versionActor = getOrSpawnVersionActor version collaborators ctx
+                    let newCollabs, versionActor = getOrSpawnVersionActor masterPDB.Name version collaborators ctx
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
                     versionActor <! MasterPDBVersionActor.Snapshot (requestId, masterPDB.Manifest, instance.SnapshotSourcePDBDestPath, snapshotName, instance.SnapshotPDBDestPath)
                     return! loop masterPDB newRequests newCollabs

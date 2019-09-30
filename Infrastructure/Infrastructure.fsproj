@@ -4,8 +4,11 @@
     <TargetFramework>netcoreapp2.2</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Encryption.fs" />
     <Compile Include="MasterPDBJson.fs" />
     <Compile Include="MasterPDBRepository.fs" />
+    <Compile Include="OracleInstanceJson.fs" />
+    <Compile Include="OracleInstanceRepository.fs" />
     <Compile Include="CompensableAction.fs" />
     <Compile Include="Oracle.fs" />
   </ItemGroup>

@@ -16,7 +16,7 @@ type Command =
 | Snapshot of WithRequestId<string, string, string, string> // responds with WithRequestId<OraclePDBResult>
 | DeleteSnapshot of WithRequestId<string>
 
-let getSnapshotSourceName (masterPDBVersion:MasterPDBVersion) = sprintf "%s_v%03d" (masterPDBVersion.MasterPDBName.ToUpper()) masterPDBVersion.Number
+let getSnapshotSourceName (pdb:string) (masterPDBVersion:MasterPDBVersion) = sprintf "%s_v%03d" (pdb.ToUpper()) masterPDBVersion.Number
 
 let cDefaultTimeout = 5000
 let cImportTimeout = int(Math.Round(TimeSpan.FromMinutes(20.).TotalMilliseconds)) // TODO
@@ -25,6 +25,7 @@ let masterPDBVersionActorBody
     (oracleAPI:#Application.Oracle.IOracleAPI) 
     (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 
     (oracleDiskIntensiveTaskExecutor:IActorRef<OracleDiskIntensiveActor.Command>) 
+    (masterPDBName:string)
     (masterPDBVersion:MasterPDBVersion) 
     (ctx : Actor<_>) =
 
@@ -33,7 +34,7 @@ let masterPDBVersionActorBody
 
         match msg with
         | Snapshot (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotName, snapshotDest) -> 
-            let snapshotSourceName = getSnapshotSourceName masterPDBVersion
+            let snapshotSourceName = getSnapshotSourceName masterPDBName masterPDBVersion
             let snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName |> runWithinElseDefault cDefaultTimeout false
             if (not snapshotSourceExists) then
                 let importResult:WithRequestId<OraclePDBResult> = 
@@ -57,7 +58,7 @@ let masterPDBVersionActorBody
 
 let masterPDBVersionActorName (versionNumber:int) = Common.ActorName (sprintf "Version=%d" versionNumber)
 
-let spawn (oracleAPI:#Application.Oracle.IOracleAPI) longTaskExecutor oracleDiskIntensiveTaskExecutor (masterPDBVersion:MasterPDBVersion) (actorFactory:IActorRefFactory) =
+let spawn (oracleAPI:#Application.Oracle.IOracleAPI) longTaskExecutor oracleDiskIntensiveTaskExecutor (masterPDBName:string) (masterPDBVersion:MasterPDBVersion) (actorFactory:IActorRefFactory) =
 
     let (Common.ActorName actorName) = masterPDBVersionActorName masterPDBVersion.Number
     
@@ -67,6 +68,7 @@ let spawn (oracleAPI:#Application.Oracle.IOracleAPI) longTaskExecutor oracleDisk
                 oracleAPI
                 longTaskExecutor 
                 oracleDiskIntensiveTaskExecutor 
+                masterPDBName
                 masterPDBVersion
         )
 

@@ -131,10 +131,16 @@ type FakeOracleAPI() =
 
 let fakeOracleAPI = FakeOracleAPI()
 
-let getInstance = function
-    | "server1" -> instance1
-    | "server2" -> instance2
-    | name -> failwithf "Oracle instance %s does not exist" name
+type FakeOracleInstanceRepo(map : Map<string, OracleInstance>) =
+    interface OrchestratorActor.OracleInstanceRepo with
+        member this.Get pdb = map |> Map.find pdb
+        member this.Put name pdb = upcast FakeOracleInstanceRepo (map.Add(name, pdb))
+
+let allInstances = 
+    [
+        "server1", instance1
+        "server2", instance2
+    ] |> Map.ofList
 
 type FakeMasterPDBRepo(map : Map<string, MasterPDB>) =
     interface OracleInstanceActor.MasterPDBRepo with
@@ -173,7 +179,8 @@ let getMasterPDBRepo = function
 
 [<Fact>]
 let ``Synchronize state`` () = test <| fun tck ->
-    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
+    let instanceRepo = FakeOracleInstanceRepo allInstances
+    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
     //monitor tck orchestrator
     let state : OracleInstanceActor.StateSet = retype orchestrator <? OrchestratorActor.Synchronize "server2" |> run
     state |> Result.mapError (fun error -> failwith error) |> ignore
@@ -233,7 +240,8 @@ let throwIfRequestNotCompletedOk tck orchestrator request =
 
 [<Fact>]
 let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
-    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
+    let instanceRepo = FakeOracleInstanceRepo allInstances
+    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
 
     let stateBefore : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> run
     Assert.Equal(2, stateBefore.OracleInstances.[0].MasterPDBs.Length)
@@ -301,7 +309,8 @@ let ``OracleInstance locks master PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``Orchestrator locks master PDB`` () = test <| fun tck ->
-    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
+    let instanceRepo = FakeOracleInstanceRepo allInstances
+    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
 
     let request : RequestValidation = 
         orchestrator <? OrchestratorActor.PrepareMasterPDBForModification ("me", "test1", 1) |> run
@@ -332,7 +341,8 @@ let ``OracleInstance snapshots PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``Orchestrator snapshots PDB`` () = test <| fun tck ->
-    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) getInstance getMasterPDBRepo orchestratorState
+    let instanceRepo = FakeOracleInstanceRepo allInstances
+    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
 
     let request : RequestValidation = 
         orchestrator <? OrchestratorActor.SnapshotMasterPDBVersion ("me", "server1", "test1", 1, "snapshot") |> run

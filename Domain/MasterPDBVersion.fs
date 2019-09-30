@@ -5,7 +5,6 @@ open System
 type VersionNumber = int
 
 type MasterPDBVersion = {
-    MasterPDBName: string
     Number: VersionNumber
     CreatedBy: string
     CreationDate: DateTime
@@ -13,9 +12,8 @@ type MasterPDBVersion = {
     Deleted : bool
 }
 
-let consPDBVersion version deleted name createdBy creationDate comment =
+let consPDBVersion version deleted createdBy creationDate comment =
     { 
-        MasterPDBName = name
         Number = version
         CreatedBy = createdBy
         CreationDate = creationDate

@@ -12,12 +12,12 @@ let ``Serialize and deserialize master PDB`` () =
     let password = "toto"
     let date = DateTime.Now
     let pdb = newMasterPDB "test1" [ consSchema "toto" password "Invest" ] "me" date "comment1"
-    let json = pdb |> toDTO |> MasterPDBJson.DTOtoJson
-    let pdb2 = json |> MasterPDBJson.jsonToDTO
+    let json = pdb |> MasterPDBJson.masterPDBtoJson
+    let pdb2 = json |> MasterPDBJson.jsonToMasterPDB
     match pdb2 with
     | JPass p -> 
         let schema = Assert.Single(p.Schemas)
         Assert.Equal(password, schema.Password)
-        let version = Assert.Single(p.Versions)
+        let version = p.Versions |> Map.find 1
         Assert.Equal(date, version.CreationDate)
     | JFail e -> failwith (e.ToString())
