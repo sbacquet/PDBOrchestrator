@@ -33,3 +33,24 @@ let getRequestStatus (ctx:APIContext) requestId =
 let snapshotMasterPDBVersion (ctx:APIContext) user instance masterPDBName versionNumber snapshotName : RequestValidation =
     let result:RequestValidation = ctx.Orchestrator <? SnapshotMasterPDBVersion (user, instance, masterPDBName, versionNumber, snapshotName) |> run
     result
+
+let createMasterPDB (ctx:APIContext) user name dump schemas targetSchemas comment =
+    let pars : OracleInstanceActor.CreateMasterPDBParams = {
+        Name = name
+        Dump = dump
+        Schemas = schemas
+        TargetSchemas = targetSchemas
+        User = user
+        Date = System.DateTime.Now
+        Comment = comment
+    }
+    let result:RequestValidation = ctx.Orchestrator <? OrchestratorActor.CreateMasterPDB (user, pars) |> run
+    result
+
+let prepareMasterPDBForModification (ctx:APIContext) user pdb version =
+    let result:RequestValidation = ctx.Orchestrator <? OrchestratorActor.PrepareMasterPDBForModification (user, pdb, version) |> run
+    result
+
+let rollbackMasterPDB (ctx:APIContext) user pdb =
+    let result:RequestValidation = ctx.Orchestrator <? OrchestratorActor.RollbackMasterPDB (user, pdb) |> run
+    result

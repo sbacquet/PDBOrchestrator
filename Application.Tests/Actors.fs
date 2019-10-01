@@ -179,16 +179,16 @@ let getMasterPDBRepo (instance:OracleInstance) =
     | name -> failwithf "Oracle instance %s does not exist" name
 
 [<Fact>]
-let ``Synchronize state`` () = test <| fun tck ->
+let ``API synchronizes state`` () = test <| fun tck ->
     let instanceRepo = FakeOracleInstanceRepo allInstances
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
-    //monitor tck orchestrator
-    let state : OracleInstanceActor.StateSet = retype orchestrator <? OrchestratorActor.Synchronize "server2" |> run
+    let ctx = API.consAPIContext tck orchestrator loggerFactory
+    let state = API.synchronizePrimaryInstanceWith ctx "server2"
     state |> Result.mapError (fun error -> failwith error) |> ignore
     ()
 
 [<Fact>]
-let ``Oracle server actor creates PDB`` () = test <| fun tck ->
+let ``Oracle instance actor creates PDB`` () = test <| fun tck ->
     let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap2) instance2
 
     let stateBefore : OracleInstanceState = retype oracleActor <? OracleInstanceActor.GetState |> run
@@ -240,28 +240,18 @@ let throwIfRequestNotCompletedOk tck orchestrator request =
         | _ -> failwith "operation not completed successfully"
 
 [<Fact>]
-let ``Orchestrator actor creates PDB`` () = test <| fun tck ->
+let ``API creates PDB`` () = test <| fun tck ->
     let instanceRepo = FakeOracleInstanceRepo allInstances
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
+    let ctx = API.consAPIContext tck orchestrator loggerFactory
 
-    let stateBefore : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> run
+    let stateBefore = API.getState ctx
     Assert.Equal(2, stateBefore.OracleInstances.[0].MasterPDBs.Length)
 
-    let parameters : OracleInstanceActor.CreateMasterPDBParams = {
-        Name = "test3"
-        Dump = @"c:\windows\system.ini" // always exists
-        Schemas = [ "schema1" ]
-        TargetSchemas = [ "targetschema1", "pass1", "FusionInvest" ]
-        User = "me"
-        Date = DateTime.Now
-        Comment = "yeah"
-    }
-    let request : RequestValidation = 
-        orchestrator <? OrchestratorActor.CreateMasterPDB ("me", parameters) |> run
-
+    let request = API.createMasterPDB ctx "me" "test3" @"c:\windows\system.ini" [ "schema1" ] [ "targetschema1", "pass1", "FusionInvest" ] "yeah"
     request |> throwIfRequestNotCompletedOk tck orchestrator
 
-    let stateAfter : OrchestratorState = orchestrator <? OrchestratorActor.GetState |> run
+    let stateAfter = API.getState ctx
     Assert.Equal(3, stateAfter.OracleInstances.[0].MasterPDBs.Length)
 
 [<Fact>]
@@ -309,18 +299,15 @@ let ``OracleInstance locks master PDB`` () = test <| fun tck ->
     | PreparationFailure error -> failwith error
 
 [<Fact>]
-let ``Orchestrator locks master PDB`` () = test <| fun tck ->
+let ``API locks master PDB`` () = test <| fun tck ->
     let instanceRepo = FakeOracleInstanceRepo allInstances
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
+    let ctx = API.consAPIContext tck orchestrator loggerFactory
 
-    let request : RequestValidation = 
-        orchestrator <? OrchestratorActor.PrepareMasterPDBForModification ("me", "test1", 1) |> run
-
+    let request = API.prepareMasterPDBForModification ctx "me" "test1" 1
     request |> throwIfRequestNotCompletedOk tck orchestrator
 
-    let request : RequestValidation = 
-        orchestrator <? OrchestratorActor.RollbackMasterPDB ("me", "test1") |> run
-    
+    let request = API.rollbackMasterPDB ctx "me" "test1"
     request |> throwIfRequestNotCompletedOk tck orchestrator
 
 [<Fact>]
@@ -341,11 +328,10 @@ let ``OracleInstance snapshots PDB`` () = test <| fun tck ->
     result |> Result.mapError (fun error -> failwith error) |> ignore
 
 [<Fact>]
-let ``Orchestrator snapshots PDB`` () = test <| fun tck ->
+let ``API snapshots PDB`` () = test <| fun tck ->
     let instanceRepo = FakeOracleInstanceRepo allInstances
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
+    let ctx = API.consAPIContext tck orchestrator loggerFactory
 
-    let request : RequestValidation = 
-        orchestrator <? OrchestratorActor.SnapshotMasterPDBVersion ("me", "server1", "test1", 1, "snapshot") |> run
-
+    let request = API.snapshotMasterPDBVersion ctx "me" "server1" "test1" 1 "snapshot"
     request |> throwIfRequestNotCompletedOk tck orchestrator
