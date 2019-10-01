@@ -123,10 +123,10 @@ type FakeOracleAPI() =
             return Ok name 
         }
         member this.PDBHasSnapshots _ = async { 
-            return false
+            return Ok false
         }
         member this.PDBExists _ = async { 
-            return true
+            return Ok true
         }
 
 let fakeOracleAPI = FakeOracleAPI()

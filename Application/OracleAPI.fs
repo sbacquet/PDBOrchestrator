@@ -1,6 +1,8 @@
 ﻿module Application.Oracle
 
-type OraclePDBResult = Domain.Common.Result.Exceptional<string>
+open Domain.Common.Result
+
+type OraclePDBResult = Exceptional<string>
 
 type IOracleAPI =
     //inherit System.IDisposable
@@ -10,5 +12,5 @@ type IOracleAPI =
     abstract member ExportPDB : manifest:string -> name:string -> Async<OraclePDBResult>
     abstract member ImportPDB : manifest:string -> dest:string -> name:string -> Async<OraclePDBResult>
     abstract member SnapshotPDB : from:string -> dest:string -> name:string -> Async<OraclePDBResult>
-    abstract member PDBHasSnapshots : name:string -> Async<bool>
-    abstract member PDBExists : name:string -> Async<bool>
+    abstract member PDBHasSnapshots : name:string -> Async<Exceptional<bool>>
+    abstract member PDBExists : name:string -> Async<Exceptional<bool>>

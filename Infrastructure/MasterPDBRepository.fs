@@ -6,7 +6,8 @@ open Chiron
 open Infrastructure
 open Application.Common
 
-let masterPDBPath = sprintf "%s\%s.json"
+let masterPDBFolder folder _ = sprintf "%s\masterPDBs" folder
+let masterPDBPath folder name = sprintf "%s\%s.json" (masterPDBFolder folder name) name
 
 let loadMasterPDB folder name : MasterPDB =
     use stream = new StreamReader (masterPDBPath folder name)
@@ -22,7 +23,7 @@ let loadMasterPDBs rootfolder (names:string list) =
     |> Map.ofList
 
 let saveMasterPDB folder (cache:Map<string,MasterPDB>) name pdb = 
-    Directory.CreateDirectory folder |> ignore
+    Directory.CreateDirectory (masterPDBFolder folder name) |> ignore
     use stream = File.CreateText (masterPDBPath folder name)
     let json = pdb |> MasterPDBJson.masterPDBtoJson
     stream.Write json

@@ -8,7 +8,6 @@
     <Compile Include="PendingRequest.fs" />
     <Compile Include="UserPendingRequest.fs" />
     <Compile Include="OracleAPI.fs" />
-    <Compile Include="API.fs" />
     <Compile Include="OracleLongTaskExecutor.fs" />
     <Compile Include="OracleDiskIntensiveActor.fs" />
     <Compile Include="MasterPDBVersionActor.fs" />
@@ -18,6 +17,7 @@
     <Compile Include="OracleInstanceActor.fs" />
     <Compile Include="OrchestratorDTO.fs" />
     <Compile Include="OrchestratorActor.fs" />
+    <Compile Include="API.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Domain\Domain.fsproj" />

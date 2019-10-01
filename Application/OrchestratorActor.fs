@@ -15,7 +15,7 @@ type OnInstance<'T1, 'T2, 'T3> = WithUser<string, 'T1, 'T2, 'T3>
 type RequestValidation = Validation<RequestId, string>
 
 type Command =
-| Synchronize of string
+| Synchronize of string // responds with OracleInstanceActor.StateSet
 | GetState // responds with Application.DTO.Orchestrator
 | CreateMasterPDB of WithUser<CreateMasterPDBParams> // responds with RequestValidation
 | PrepareMasterPDBForModification of WithUser<string, int> // responds with RequestValidation

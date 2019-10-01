@@ -15,7 +15,8 @@ let oracleAPI : IOracleAPI = new OracleAPI (NullLoggerFactory.Instance, conn, co
 [<Fact>]
 let ``Fail to get inexisting PDB from server`` () =
     let pdb = getPDBOnServer conn "xxxxxxxxxx" |> Async.RunSynchronously
-    Assert.True(pdb.IsNone)
+    pdb |> Result.mapError raise |> ignore
+    pdb |> Result.map (fun p -> Assert.True(p.IsNone)) |> ignore
 
 [<Fact>]
 let ``Import PDB`` () =
@@ -28,12 +29,12 @@ let ``Snapshot PDB`` () =
     let res = result {
         let! _ = oracleAPI.ImportPDB "/u01/app/oracle/oradata/SB_PDBs/test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source" |> Async.RunSynchronously
         let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot" |> Async.RunSynchronously
-        return if (oracleAPI.PDBHasSnapshots "source" |> Async.RunSynchronously) then Ok "snapshot" else Error (exn "No snapshot ??!!")
+        return! oracleAPI.PDBHasSnapshots "source" |> Async.RunSynchronously
     }
     res |> Result.mapError raise |> ignore
     let res = result {
         let! _ = oracleAPI.DeletePDB "snapshot" |> Async.RunSynchronously
         let! _ = oracleAPI.DeletePDB "source" |> Async.RunSynchronously
-        return if (oracleAPI.PDBHasSnapshots "source" |> Async.RunSynchronously) then Error "Yet some snapshots ??!!" else Ok "snapshot"
+        return! oracleAPI.PDBHasSnapshots "source" |> Async.RunSynchronously
     }
     res |> Result.mapError raise |> ignore

@@ -243,35 +243,47 @@ type RawOraclePDB = {
 }
 
 let getPDBsOnServer connAsDBA = async {
-    let! result = Sql.asyncExecReader connAsDBA "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs" [] 
-    return result |> Sql.map (Sql.asRecord<RawOraclePDB> "")
+    try
+        let! result = Sql.asyncExecReader connAsDBA "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs" [] 
+        return result |> Sql.map (Sql.asRecord<RawOraclePDB> "") |> Ok
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return Error ex
 }
 
 let getPDBOnServer connAsDBA (name:string) = async {
-    let! result = 
-        Sql.asyncExecReader 
-            connAsDBA 
-            (sprintf "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs where upper(Name)='%s'" (name.ToUpper()))
-            [] 
-    return result |> Sql.mapFirst (Sql.asRecord<RawOraclePDB> "")
+    try
+        let! result = 
+            Sql.asyncExecReader 
+                connAsDBA 
+                (sprintf "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs where upper(Name)='%s'" (name.ToUpper()))
+                [] 
+        return result |> Sql.mapFirst (Sql.asRecord<RawOraclePDB> "") |> Ok
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return Error ex
 }
 
 let PDBExistsOnServer connAsDBA (name:string) = async {
-    let! result = 
-        Sql.asyncExecScalar 
-            connAsDBA 
-            (sprintf "select count(*) from v$pdbs where upper(Name)='%s'" (name.ToUpper()))
-            [] 
-    return result |> Option.get > 0M
+    try
+        let! result = 
+            Sql.asyncExecScalar 
+                connAsDBA 
+                (sprintf "select count(*) from v$pdbs where upper(Name)='%s'" (name.ToUpper()))
+                [] 
+        return result |> Option.get > 0M |> Ok
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return Error ex
 }
 
 let pdbHasSnapshots connAsDBA (name:string) = async {
-    let! result = 
-        Sql.asyncExecScalar
-            connAsDBA
-            (sprintf @"select count(*) from v$pdbs where SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where upper(name)='%s')" (name.ToUpper()))
-            []
-    return result |> Option.get > 0M
+    try
+        let! result = 
+            Sql.asyncExecScalar
+                connAsDBA
+                (sprintf @"select count(*) from v$pdbs where SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where upper(name)='%s')" (name.ToUpper()))
+                []
+        return result |> Option.get > 0M |> Ok
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return Error ex
 }
 
 let toOraclePDBResult result = async {
@@ -289,10 +301,13 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
             closePDB this.Logger connAsDBA name
             |> toOraclePDBResult
         member this.DeletePDB name = async {
-            let! hasSnapshots = pdbHasSnapshots connAsDBA name
-            match hasSnapshots with
-            | false -> return! deletePDB this.Logger connAsDBA true name |> toOraclePDBResult
-            | true -> return Error (exn "PDB cannot be deleted because open snapshots have been created from it")
+            let! hasSnapshotsMaybe = pdbHasSnapshots connAsDBA name
+            match hasSnapshotsMaybe with
+            | Ok hasSnapshots ->
+                match hasSnapshots with
+                | false -> return! deletePDB this.Logger connAsDBA true name |> toOraclePDBResult
+                | true -> return Error (exn "PDB cannot be deleted because open snapshots have been created from it")
+            | Error error -> return Error (upcast error)
         }
         member this.ExportPDB manifest name = 
             exportPDB this.Logger connAsDBA manifest name
@@ -305,5 +320,7 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
             |> toOraclePDBResult
         member this.PDBHasSnapshots name = 
             pdbHasSnapshots connAsDBA name
+            |> toOraclePDBResult
         member this.PDBExists name = 
             PDBExistsOnServer connAsDBA name
+            |> toOraclePDBResult

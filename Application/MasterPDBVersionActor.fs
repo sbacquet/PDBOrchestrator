@@ -14,7 +14,7 @@ open System
 
 type Command =
 | Snapshot of WithRequestId<string, string, string, string> // responds with WithRequestId<OraclePDBResult>
-| DeleteSnapshot of WithRequestId<string>
+| DeleteSnapshot of WithRequestId<string> // responds with WithRequestId<OraclePDBResult>
 
 let getSnapshotSourceName (pdb:string) (masterPDBVersion:MasterPDBVersion) = sprintf "%s_v%03d" (pdb.ToUpper()) masterPDBVersion.Number
 
@@ -30,27 +30,33 @@ let masterPDBVersionActorBody
     (ctx : Actor<_>) =
 
     let rec loop () = actor {
-        let! msg = ctx.Receive();
+
+        let! msg = ctx.Receive()
+        let sender = ctx.Sender().Retype<WithRequestId<OraclePDBResult>>()
 
         match msg with
         | Snapshot (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotName, snapshotDest) -> 
             let snapshotSourceName = getSnapshotSourceName masterPDBName masterPDBVersion
-            let snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName |> runWithinElseDefault cDefaultTimeout false
-            if (not snapshotSourceExists) then
-                let importResult:WithRequestId<OraclePDBResult> = 
-                    oracleDiskIntensiveTaskExecutor <? ImportPDB (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotSourceName)
-                    |> runWithin cImportTimeout id (fun () -> (requestId, Error (exn (sprintf "timeout reached while importing %s" snapshotSourceName))))
-                match snd importResult with
-                | Error _ -> 
-                    ctx.Sender() <! importResult
-                    return! loop ()
-                | Ok _ -> ()
-            else
-                logDebugf ctx "Snapshot source PDB %s already exists" snapshotSourceName
-            oracleLongTaskExecutor <<! SnapshotPDB (requestId, snapshotSourceName, snapshotDest, snapshotName)
+            let snapshotSourceExistsMaybe = oracleAPI.PDBExists snapshotSourceName |> runWithinElseDefault cDefaultTimeout (Error (exn "timeout reached"))
+            match snapshotSourceExistsMaybe with
+            | Ok snapshotSourceExists ->
+                if (not snapshotSourceExists) then
+                    let importResult:WithRequestId<OraclePDBResult> = 
+                        oracleDiskIntensiveTaskExecutor <? ImportPDB (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotSourceName)
+                        |> runWithin cImportTimeout id (fun () -> (requestId, Error (exn (sprintf "timeout reached while importing %s" snapshotSourceName))))
+                    match snd importResult with
+                    | Error _ -> 
+                        sender <! importResult
+                        return! loop ()
+                    | Ok _ -> ()
+                else
+                    logDebugf ctx "Snapshot source PDB %s already exists" snapshotSourceName
+                oracleLongTaskExecutor <<! SnapshotPDB (requestId, snapshotSourceName, snapshotDest, snapshotName)
+            | Error ex -> sender <! (requestId, Error ex)
             return! loop ()
 
         | DeleteSnapshot (requestId, snapshotName) ->
+            // TODO
             return! loop ()
     }
 

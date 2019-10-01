@@ -96,8 +96,8 @@ type OracleInstanceExpanded = {
 
 type Command =
 | GetState // responds with Application.DTO.OracleInstance
-| SetInternalState of OracleInstanceExpanded // responds with Application.DTO.OracleInstance.OracleInstanceState
-| TransferInternalState of IActorRef<obj> // responds with (StateSet state)
+| SetInternalState of OracleInstanceExpanded // responds with StateSet
+| TransferInternalState of IActorRef<obj> // responds with StateSet
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
 | RollbackMasterPDB of WithRequestId<string> // responds with WithRequestId<MasterPDBActor.RollbackResult>
