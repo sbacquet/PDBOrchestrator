@@ -6,22 +6,24 @@ open Chiron
 open Infrastructure
 open Application.Common
 
-let loadOrchestrator rootFolder name : Orchestrator =
-    use stream = new StreamReader (sprintf "%s\%s.json" rootFolder name)
+let orchestratorPath = sprintf "%s\%s.json"
+
+let loadOrchestrator folder name : Orchestrator =
+    use stream = new StreamReader (orchestratorPath folder name)
     let content = stream.ReadToEnd()
     let result = content |> OrchestratorJson.jsonToOrchestrator
     match result with
     | JPass orchestrator -> orchestrator
     | JFail error -> failwith (error.ToString())
 
-let saveOrchestrator rootFolder name orchestrator = 
-    Directory.CreateDirectory rootFolder |> ignore
-    use stream = File.CreateText (sprintf "%s\%s.json" rootFolder name)
+let saveOrchestrator folder name orchestrator = 
+    Directory.CreateDirectory folder |> ignore
+    use stream = File.CreateText (orchestratorPath folder name)
     let json = orchestrator |> OrchestratorJson.orchestratorToJson
     stream.Write json
     stream.Flush()
 
-type OrchestratorRepository(rootFolder) = 
+type OrchestratorRepository(folder) = 
     interface IOrchestratorRepository with
-        member this.Get name = loadOrchestrator rootFolder name
-        member this.Put name orchestrator = saveOrchestrator rootFolder name orchestrator; upcast this
+        member this.Get name = loadOrchestrator folder name
+        member this.Put name orchestrator = saveOrchestrator folder name orchestrator; upcast this

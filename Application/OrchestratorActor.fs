@@ -37,8 +37,9 @@ let spawnCollaborators getOracleAPI (oracleInstanceRepo:#IOracleInstanceReposito
     OracleInstanceActors =
         state.OracleInstanceNames 
         |> List.map (fun instanceName -> 
-            instanceName,
-            ctx |> OracleInstanceActor.spawn getOracleAPI (getMasterPDBRepo instanceName) (oracleInstanceRepo.Get instanceName))
+            let instance = oracleInstanceRepo.Get instanceName
+            instanceName, ctx |> OracleInstanceActor.spawn getOracleAPI (getMasterPDBRepo instance) instance
+           )
         |> Map.ofList
 }
 

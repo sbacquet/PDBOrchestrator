@@ -172,7 +172,8 @@ let orchestratorState = {
     PrimaryInstance = "server1"
 }
 
-let getMasterPDBRepo = function
+let getMasterPDBRepo (instance:OracleInstance) = 
+    match instance.Name with
     | "server1" -> FakeMasterPDBRepo masterPDBMap1
     | "server2" -> FakeMasterPDBRepo masterPDBMap2
     | name -> failwithf "Oracle instance %s does not exist" name

@@ -6,8 +6,10 @@ open Chiron
 open Infrastructure
 open Application.Common
 
-let loadMasterPDB rootFolder name : MasterPDB =
-    use stream = new StreamReader (sprintf "%s\%s.json" rootFolder name)
+let masterPDBPath = sprintf "%s\%s.json"
+
+let loadMasterPDB folder name : MasterPDB =
+    use stream = new StreamReader (masterPDBPath folder name)
     let content = stream.ReadToEnd()
     let result = content |> MasterPDBJson.jsonToMasterPDB
     match result with
@@ -19,18 +21,18 @@ let loadMasterPDBs rootfolder (names:string list) =
     |> List.map (fun name -> name, loadMasterPDB rootfolder name)
     |> Map.ofList
 
-let saveMasterPDB rootFolder (cache:Map<string,MasterPDB>) name pdb = 
-    Directory.CreateDirectory rootFolder |> ignore
-    use stream = File.CreateText (sprintf "%s\%s.json" rootFolder name)
+let saveMasterPDB folder (cache:Map<string,MasterPDB>) name pdb = 
+    Directory.CreateDirectory folder |> ignore
+    use stream = File.CreateText (masterPDBPath folder name)
     let json = pdb |> MasterPDBJson.masterPDBtoJson
     stream.Write json
     stream.Flush()
     cache |> Map.add name pdb
     
-type MasterPDBRepository(rootFolder, cache) = 
+type MasterPDBRepository(folder, cache) = 
     interface IMasterPDBRepository with
         member this.Get name = cache |> Map.find name
-        member this.Put name pdb = upcast MasterPDBRepository(rootFolder, pdb |> saveMasterPDB rootFolder cache name)
+        member this.Put name pdb = upcast MasterPDBRepository(folder, pdb |> saveMasterPDB folder cache name)
 
-let loadMasterPDBRepository rootFolder names = 
-    MasterPDBRepository(rootFolder, loadMasterPDBs rootFolder names)
+let loadMasterPDBRepository folder names = 
+    MasterPDBRepository(folder, loadMasterPDBs folder names)

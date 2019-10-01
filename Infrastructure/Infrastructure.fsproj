@@ -2,6 +2,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netcoreapp2.2</TargetFramework>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>PDBOrchestrator</AssemblyName>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Encryption.fs" />
@@ -13,6 +15,7 @@
     <Compile Include="OrchestratorRepository.fs" />
     <Compile Include="CompensableAction.fs" />
     <Compile Include="Oracle.fs" />
+    <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Application\Application.fsproj" />

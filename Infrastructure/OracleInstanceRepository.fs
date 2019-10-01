@@ -6,22 +6,25 @@ open Chiron
 open Infrastructure
 open Application.Common
 
-let loadOracleInstance rootFolder name : OracleInstance =
-    use stream = new StreamReader (sprintf "%s\%s.json" rootFolder name)
+let instanceFolder = sprintf "%s\%s"
+let instancePath folder name = sprintf "%s\%s.json" (instanceFolder folder name) name
+
+let loadOracleInstance folder name : OracleInstance =
+    use stream = new StreamReader (instancePath folder name)
     let content = stream.ReadToEnd()
     let result = content |> OracleInstanceJson.jsonToOracleInstance
     match result with
     | JPass instance -> instance
     | JFail error -> failwith (error.ToString())
 
-let saveOracleInstance rootFolder name pdb = 
-    Directory.CreateDirectory rootFolder |> ignore
-    use stream = File.CreateText (sprintf "%s\%s.json" rootFolder name)
+let saveOracleInstance folder name pdb = 
+    Directory.CreateDirectory (instanceFolder folder name) |> ignore
+    use stream = File.CreateText (instancePath folder name)
     let json = pdb |> OracleInstanceJson.oracleInstancetoJson
     stream.Write json
     stream.Flush()
 
-type OracleInstanceRepository(rootFolder) = 
+type OracleInstanceRepository(folder) = 
     interface IOracleInstanceRepository with
-        member this.Get name = loadOracleInstance rootFolder name
-        member this.Put name pdb = saveOracleInstance rootFolder name pdb; upcast this
+        member this.Get name = loadOracleInstance folder name
+        member this.Put name pdb = saveOracleInstance folder name pdb; upcast this

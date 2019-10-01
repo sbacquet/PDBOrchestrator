@@ -3,3 +3,6 @@ FsSql.Core
 Oracle.ManagedDataAccess.Core
 Microsoft.Extensions.Logging
 Chiron
+Akka.Logger.Serilog
+Serilog.Sinks.Console
+Serilog.Extensions.Logging

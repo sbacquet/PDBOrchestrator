@@ -15,3 +15,4 @@ nuget Akka.Logger.Serilog
 nuget Serilog.Sinks.Trace
 nuget Serilog.Extensions.Logging
 nuget Chiron prerelease
+nuget Serilog.Sinks.Console
