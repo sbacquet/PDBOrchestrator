@@ -24,7 +24,7 @@ type PrepareForModificationResult =
 
 type EditionDone = Result<MasterPDB, string>
 
-type SnapshotResult = Result<int * string, string>
+type SnapshotResult = Result<string * int * string, string>
 
 type Collaborators = {
     OracleAPI: IOracleAPI
@@ -168,7 +168,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                     let sender = request.Requester.Retype<WithRequestId<SnapshotResult>>()
                     match result with
                     | Ok _ ->
-                        sender <! (requestId, Ok (versionNumber, snapshotName))
+                        sender <! (requestId, Ok (masterPDB.Name, versionNumber, snapshotName))
                     | Error error ->
                         sender <! (requestId, Error (error.ToString()))
                     return! loop masterPDB newRequests collaborators

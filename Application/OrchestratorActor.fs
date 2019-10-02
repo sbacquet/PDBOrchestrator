@@ -194,7 +194,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
             | Some request ->
                 let status = 
                     match result with
-                    | Ok (versionNumber, snapshotName) -> CompletedOk (sprintf "version %d of master PDB *TODO* snapshoted successfully with name %s" versionNumber snapshotName)
+                    | Ok (pdb, versionNumber, snapshotName) -> CompletedOk (sprintf "version %d of master PDB %s snapshoted successfully with name %s" versionNumber pdb snapshotName)
                     | Error error -> CompletedWithError (sprintf "error while snapshoting master PDB version : %s" error)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop orchestrator newPendingRequests newCompletedRequests
