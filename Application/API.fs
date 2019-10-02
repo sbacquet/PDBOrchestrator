@@ -44,3 +44,6 @@ let prepareMasterPDBForModification (ctx:APIContext) user pdb version : Async<Re
 
 let rollbackMasterPDB (ctx:APIContext) user pdb : Async<RequestValidation> =
     ctx.Orchestrator <? OrchestratorActor.RollbackMasterPDB (user, pdb)
+
+let commitMasterPDB (ctx:APIContext) user pdb comment : Async<RequestValidation> =
+    ctx.Orchestrator <? OrchestratorActor.CommitMasterPDB (user, pdb, comment)

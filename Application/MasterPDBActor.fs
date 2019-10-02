@@ -13,8 +13,8 @@ type Command =
 | GetInternalState // responds with MasterPDB
 | SetInternalState of MasterPDB
 | PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
-| Commit of WithRequestId<string, string>
-| Rollback of RequestId // responds with WithRequestId<RollbackResult>
+| Commit of WithRequestId<string, string> // responds with WithRequestId<EditionDone>
+| Rollback of RequestId // responds with WithRequestId<EditionDone>
 | SnapshotVersion of WithRequestId<int, string> // responds with WithRequest<SnapshotResult>
 
 type PrepareForModificationResult = 
@@ -22,7 +22,7 @@ type PrepareForModificationResult =
 | Prepared of MasterPDB
 | PreparationFailure of string
 
-type RollbackResult = Result<MasterPDB, string>
+type EditionDone = Result<MasterPDB, string>
 
 type SnapshotResult = Result<int * string, string>
 
@@ -87,11 +87,25 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                     sender <! (requestId, PreparationFailure error)
                     return! loop masterPDB requests collaborators
 
-            | Commit (requestId, user, comment) -> // TODO
-                return! loop masterPDB requests collaborators
+            | Commit (requestId, unlocker, comment) ->
+                let sender = ctx.Sender().Retype<WithRequestId<EditionDone>>()
+                let lockInfoMaybe = masterPDB.LockState
+                match lockInfoMaybe with
+                | None -> 
+                    sender <! (requestId, Error (sprintf "the master PDB %s is not being edited" masterPDB.Name))
+                    return! loop masterPDB requests collaborators
+                | Some lockInfo ->
+                    if (lockInfo.Locker <> unlocker) then
+                        sender <! (requestId, Error (sprintf "you (%s) are not the editor (%s) of master PDB %s" unlocker lockInfo.Locker masterPDB.Name))
+                        return! loop masterPDB requests collaborators
+                    else
+                        let manifest = masterPDBManifest masterPDB.Name (getNextAvailableVersion masterPDB)
+                        oracleLongTaskExecutor <! OracleLongTaskExecutor.ExportPDB (requestId, manifest, masterPDB.Name)
+                        let newRequests = requests |> registerRequest requestId command (ctx.Sender())
+                        return! loop masterPDB newRequests collaborators
 
             | Rollback requestId ->
-                let sender = ctx.Sender().Retype<WithRequestId<RollbackResult>>()
+                let sender = ctx.Sender().Retype<WithRequestId<EditionDone>>()
                 let newMasterPDBMaybe = masterPDB |> unlock
                 match newMasterPDBMaybe with
                 | Ok _ ->
@@ -136,8 +150,9 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                         sender <! (requestId, PreparationFailure (error.ToString()))
                     return! loop masterPDB newRequests collaborators
 
+                | Commit _
                 | Rollback _ ->
-                    let sender = request.Requester.Retype<WithRequestId<RollbackResult>>()
+                    let sender = request.Requester.Retype<WithRequestId<EditionDone>>()
                     let newMasterPDBMaybe = masterPDB |> unlock
                     match newMasterPDBMaybe with
                     | Ok newMasterPDB ->

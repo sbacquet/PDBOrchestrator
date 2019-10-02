@@ -14,7 +14,6 @@ open System
 
 type Command =
 | Snapshot of WithRequestId<string, string, string, string> // responds with WithRequestId<OraclePDBResult>
-| DeleteSnapshot of WithRequestId<string> // responds with WithRequestId<OraclePDBResult>
 
 let getSnapshotSourceName (pdb:string) (masterPDBVersion:MasterPDBVersion) = sprintf "%s_v%03d" (pdb.ToUpper()) masterPDBVersion.Number
 
@@ -29,6 +28,8 @@ let masterPDBVersionActorBody
     (masterPDBVersion:MasterPDBVersion) 
     (ctx : Actor<_>) =
 
+    let snapshotSourceName = getSnapshotSourceName masterPDBName masterPDBVersion
+
     let rec loop () = actor {
 
         let! msg = ctx.Receive()
@@ -36,7 +37,6 @@ let masterPDBVersionActorBody
 
         match msg with
         | Snapshot (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotName, snapshotDest) -> 
-            let snapshotSourceName = getSnapshotSourceName masterPDBName masterPDBVersion
             let snapshotSourceExistsMaybe = oracleAPI.PDBExists snapshotSourceName |> runWithinElseDefault cDefaultTimeout (Error (exn "timeout reached"))
             match snapshotSourceExistsMaybe with
             | Ok snapshotSourceExists ->
@@ -53,10 +53,6 @@ let masterPDBVersionActorBody
                     logDebugf ctx "Snapshot source PDB %s already exists" snapshotSourceName
                 oracleLongTaskExecutor <<! SnapshotPDB (requestId, snapshotSourceName, snapshotDest, snapshotName)
             | Error ex -> sender <! (requestId, Error ex)
-            return! loop ()
-
-        | DeleteSnapshot (requestId, snapshotName) ->
-            // TODO
             return! loop ()
     }
 

@@ -100,7 +100,8 @@ type Command =
 | TransferInternalState of IActorRef<obj> // responds with StateSet
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
-| RollbackMasterPDB of WithRequestId<string> // responds with WithRequestId<MasterPDBActor.RollbackResult>
+| CommitMasterPDB of WithRequestId<string, string, string> // responds with WithRequestId<MasterPDBActor.EditionDone>
+| RollbackMasterPDB of WithRequestId<string> // responds with WithRequestId<MasterPDBActor.EditionDone>
 | SnapshotMasterPDBVersion of WithRequestId<string, int, string> // responds with WithRequest<MasterPDBActor.SnapshotResult>
 
 type StateSet = Result<Application.DTO.OracleInstance.OracleInstanceState, string>
@@ -294,8 +295,17 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:IMasterPDBReposit
                 retype masterPDBActor <! MasterPDBActor.PrepareForModification (requestId, version, user)
                 return! loop collaborators instance newRequests masterPDBRepo
 
+            | CommitMasterPDB (requestId, pdb, locker, comment) ->
+                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionDone>>()
+                let masterPDBOk = instance.MasterPDBs |> List.contains pdb
+                if (not masterPDBOk) then sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
+                let masterPDBActor = collaborators.MasterPDBActors.[pdb]
+                let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                retype masterPDBActor <! MasterPDBActor.Commit (requestId, locker, comment)
+                return! loop collaborators instance newRequests masterPDBRepo
+
             | RollbackMasterPDB (requestId, pdb) ->
-                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.RollbackResult>>()
+                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionDone>>()
                 let masterPDBOk = instance.MasterPDBs |> List.contains pdb
                 if (not masterPDBOk) then sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
                 let masterPDBActor = collaborators.MasterPDBActors.[pdb]
@@ -383,9 +393,9 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:IMasterPDBReposit
                     logError ctx "internal error"
                     return! loop collaborators instance newRequests masterPDBRepo
 
-        // Callback from Master PDB actor in response to Rollback
-        | :? WithRequestId<MasterPDBActor.RollbackResult> as rollbackResult ->
-            let (requestId, result) = rollbackResult
+        // Callback from Master PDB actor in response to Commit or Rollback
+        | :? WithRequestId<MasterPDBActor.EditionDone> as editionResult ->
+            let (requestId, result) = editionResult
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
             match requestMaybe with
             | None -> 
@@ -397,11 +407,11 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:IMasterPDBReposit
                 | Ok unlockedMasterPDB -> 
                     // Persist the state of the PDB
                     let newMasterPDBRepo = masterPDBRepo.Put unlockedMasterPDB.Name unlockedMasterPDB
-                    retype request.Requester <! rollbackResult
+                    retype request.Requester <! editionResult
                     return! loop collaborators instance newRequests newMasterPDBRepo
 
                 | Error error ->
-                    retype request.Requester <! rollbackResult
+                    retype request.Requester <! editionResult
                     return! loop collaborators instance newRequests masterPDBRepo
 
         | _ -> return! loop collaborators instance requests masterPDBRepo

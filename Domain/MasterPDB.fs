@@ -93,3 +93,5 @@ let unlock masterPDB =
     match masterPDB.LockState with
     | None -> Error (sprintf "%s is not locked" masterPDB.Name)
     | Some _ -> Ok { masterPDB with LockState = None }
+
+let isLocked masterPDB = masterPDB.LockState.IsSome

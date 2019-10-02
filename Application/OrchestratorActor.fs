@@ -19,6 +19,7 @@ type Command =
 | GetState // responds with Application.DTO.Orchestrator
 | CreateMasterPDB of WithUser<CreateMasterPDBParams> // responds with RequestValidation
 | PrepareMasterPDBForModification of WithUser<string, int> // responds with RequestValidation
+| CommitMasterPDB of WithUser<string, string> // responds with RequestValidation
 | RollbackMasterPDB of WithUser<string> // responds with RequestValidation
 | SnapshotMasterPDBVersion of OnInstance<string, int, string> // responds with RequestValidation
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
@@ -86,6 +87,14 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                 let requestId = newRequestId()
                 let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.PrepareMasterPDBForModification (requestId, pdb, version, user)
+                sender <! Valid requestId
+                return! loop orchestrator newPendingRequests completedRequests
+
+            | CommitMasterPDB (user, pdb, comment) ->
+                let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
+                let requestId = newRequestId()
+                let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
+                retype primaryInstance <! Application.OracleInstanceActor.CommitMasterPDB (requestId, pdb, user, comment)
                 sender <! Valid requestId
                 return! loop orchestrator newPendingRequests completedRequests
 
@@ -160,7 +169,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop orchestrator newPendingRequests newCompletedRequests
 
-        | :? WithRequestId<MasterPDBActor.RollbackResult> as responseToRollbackMasterPDB ->
+        | :? WithRequestId<MasterPDBActor.EditionDone> as responseToRollbackMasterPDB ->
             let (requestId, result) = responseToRollbackMasterPDB
             let requestMaybe = pendingRequests |> Map.tryFind requestId
             match requestMaybe with
@@ -170,8 +179,8 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
             | Some request ->
                 let status = 
                     match result with
-                    | Ok pdb -> CompletedOk (sprintf "master PDB %s rolled back successfully" pdb.Name)
-                    | Error error -> CompletedWithError (sprintf "error while rollbacking master PDB : %s" error)
+                    | Ok pdb -> CompletedOk (sprintf "master PDB %s unlocked successfully" pdb.Name)
+                    | Error error -> CompletedWithError (sprintf "error while unlocking master PDB : %s" error)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop orchestrator newPendingRequests newCompletedRequests
 

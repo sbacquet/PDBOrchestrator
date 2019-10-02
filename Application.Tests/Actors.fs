@@ -294,7 +294,7 @@ let ``Lock master PDB`` () = test <| fun tck ->
         | _ -> false
     )
 
-    let (_, result) : WithRequestId<MasterPDBActor.RollbackResult> = 
+    let (_, result) : WithRequestId<MasterPDBActor.EditionDone> = 
         retype masterPDBActor <? MasterPDBActor.Rollback (newRequestId()) |> run
 
     result |> Result.mapError (fun error -> failwith error) |> ignore
@@ -312,7 +312,7 @@ let ``OracleInstance locks master PDB`` () = test <| fun tck ->
     | PreparationFailure error -> failwith error
 
 [<Fact>]
-let ``API locks master PDB`` () = test <| fun tck ->
+let ``API prepares and rolls back master PDB`` () = test <| fun tck ->
     let instanceRepo = FakeOracleInstanceRepo allInstances
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
     let ctx = API.consAPIContext tck orchestrator loggerFactory
@@ -324,7 +324,19 @@ let ``API locks master PDB`` () = test <| fun tck ->
     request |> throwIfRequestNotCompletedOk ctx
 
 [<Fact>]
-let ``Snapshot PDB`` () = test <| fun tck ->
+let ``API prepares and commits master PDB`` () = test <| fun tck ->
+    let instanceRepo = FakeOracleInstanceRepo allInstances
+    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
+    let ctx = API.consAPIContext tck orchestrator loggerFactory
+
+    let request = API.prepareMasterPDBForModification ctx "me" "test1" 1 |> runQuick
+    request |> throwIfRequestNotCompletedOk ctx
+
+    let request = API.commitMasterPDB ctx "me" "test1" "my comment" |> runQuick
+    request |> throwIfRequestNotCompletedOk ctx
+
+[<Fact>]
+let ``MasterPDB snapshots a version`` () = test <| fun tck ->
     let pdb1 = newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment1"
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn fakeOracleAPI
