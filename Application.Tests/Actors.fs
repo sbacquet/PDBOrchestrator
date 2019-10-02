@@ -168,7 +168,7 @@ let ``Test state transfer`` () = test <| fun tck ->
     let aref1 = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap1) instance1
     let aref2 = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap2) instance2
 
-    let state : OracleInstanceActor.StateSet = retype aref1 <? OracleInstanceActor.TransferInternalState aref2 |> run
+    let state : OracleInstanceActor.StateResult = retype aref1 <? OracleInstanceActor.TransferInternalState aref2 |> run
     state |> Result.mapError (fun error -> failwith error) |> ignore
     ()
 
@@ -196,8 +196,10 @@ let ``API synchronizes state`` () = test <| fun tck ->
 let ``Oracle instance actor creates PDB`` () = test <| fun tck ->
     let oracleActor = tck |> OracleInstanceActor.spawn (fun _ -> fakeOracleAPI) (FakeMasterPDBRepo masterPDBMap2) instance2
 
-    let stateBefore : OracleInstanceState = retype oracleActor <? OracleInstanceActor.GetState |> runQuick
-    Assert.Equal(1, stateBefore.MasterPDBs.Length)
+    let stateBefore : OracleInstanceActor.StateResult = retype oracleActor <? OracleInstanceActor.GetState |> runQuick
+    match stateBefore with
+    | Ok state -> Assert.Equal(1, state.MasterPDBs.Length)
+    | Error error -> failwith error
 
     let parameters : OracleInstanceActor.CreateMasterPDBParams = {
         Name = "test3"
@@ -215,8 +217,10 @@ let ``Oracle instance actor creates PDB`` () = test <| fun tck ->
     | OracleInstanceActor.MasterPDBCreationFailure error -> failwithf "the creation of %s failed : %s" parameters.Name error
     | OracleInstanceActor.InvalidRequest errors -> failwithf "the request is invalid : %A" errors
 
-    let stateAfter = retype oracleActor <? OracleInstanceActor.GetState |> runQuick
-    Assert.Equal(2, stateAfter.MasterPDBs.Length)
+    let stateAfter : OracleInstanceActor.StateResult = retype oracleActor <? OracleInstanceActor.GetState |> runQuick
+    match stateAfter with
+    | Ok state -> Assert.Equal(2, state.MasterPDBs.Length)
+    | Error error -> failwith error
     ()
 
 let pollRequestStatus (ctx:API.APIContext) requestId =
@@ -334,6 +338,9 @@ let ``API prepares and commits master PDB`` () = test <| fun tck ->
 
     let request = API.commitMasterPDB ctx "me" "test1" "my comment" |> runQuick
     request |> throwIfRequestNotCompletedOk ctx
+
+    let state = API.getMasterPDBState ctx "server1" "test1" |> run
+    state |> Result.mapError failwith |> ignore
 
 [<Fact>]
 let ``MasterPDB snapshots a version`` () = test <| fun tck ->

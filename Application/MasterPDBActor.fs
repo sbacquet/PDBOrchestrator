@@ -9,9 +9,9 @@ open Akka.Actor
 open Domain.MasterPDBVersion
 
 type Command =
-| GetState
+| GetState // responds with StateResult
 | GetInternalState // responds with MasterPDB
-| SetInternalState of MasterPDB
+| SetInternalState of MasterPDB // no response
 | PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
 | Commit of WithRequestId<string, string> // responds with WithRequestId<EditionDone>
 | Rollback of RequestId // responds with WithRequestId<EditionDone>
@@ -21,6 +21,10 @@ type PrepareForModificationResult =
 | Locked of MasterPDB
 | Prepared of MasterPDB
 | PreparationFailure of string
+
+type StateResult = Result<Application.DTO.MasterPDB.MasterPDBState, string>
+let stateOk state : StateResult = Ok state
+let stateError error : StateResult = Error error
 
 type EditionDone = Result<MasterPDB, string>
 
@@ -62,7 +66,8 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
         | :? Command as command -> 
             match command with
             | GetState -> 
-                ctx.Sender() <! (masterPDB |> Application.DTO.MasterPDB.toDTO)
+                let sender = ctx.Sender().Retype<StateResult>()
+                sender <! stateOk (masterPDB |> Application.DTO.MasterPDB.toDTO)
                 return! loop masterPDB requests collaborators
 
             | GetInternalState ->

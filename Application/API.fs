@@ -18,7 +18,13 @@ let consAPIContext system orchestratorActor (loggerFactory:ILoggerFactory) =
 let getState (ctx:APIContext) : Async<Application.DTO.Orchestrator.OrchestratorState> =
     ctx.Orchestrator <? GetState
 
-let synchronizePrimaryInstanceWith (ctx:APIContext) instance : Async<Application.OracleInstanceActor.StateSet> =
+let getInstanceState (ctx:APIContext) instance : Async<Application.OracleInstanceActor.StateResult> =
+    ctx.Orchestrator <? GetInstanceState instance
+
+let getMasterPDBState (ctx:APIContext) instance pdb : Async<Application.MasterPDBActor.StateResult> =
+    ctx.Orchestrator <? GetMasterPDBState (instance, pdb)
+
+let synchronizePrimaryInstanceWith (ctx:APIContext) instance : Async<Application.OracleInstanceActor.StateResult> =
     ctx.Orchestrator <? Synchronize instance
 
 let getRequestStatus (ctx:APIContext) requestId : Async<WithRequestId<RequestStatus>> =

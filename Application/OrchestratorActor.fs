@@ -15,8 +15,10 @@ type OnInstance<'T1, 'T2, 'T3> = WithUser<string, 'T1, 'T2, 'T3>
 type RequestValidation = Validation<RequestId, string>
 
 type Command =
-| Synchronize of string // responds with OracleInstanceActor.StateSet
 | GetState // responds with Application.DTO.Orchestrator
+| GetInstanceState of string // responds with Application.OracleInstanceActor.StateResult
+| GetMasterPDBState of string * string // responds with Application.MasterPDBActor.StateResult
+| Synchronize of string // responds with OracleInstanceActor.StateSet
 | CreateMasterPDB of WithUser<CreateMasterPDBParams> // responds with RequestValidation
 | PrepareMasterPDBForModification of WithUser<string, int> // responds with RequestValidation
 | CommitMasterPDB of WithUser<string, string> // responds with RequestValidation
@@ -60,18 +62,36 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
         | :? Command as command ->
             let sender = ctx.Sender().Retype<RequestValidation>()
             match command with
+            | GetState ->
+                let! state = orchestrator |> DTO.Orchestrator.toDTO (collaborators.OracleInstanceActors |> Map.map (fun _ a -> a.Retype<OracleInstanceActor.Command>()))
+                ctx.Sender() <! state
+                return! loop orchestrator pendingRequests completedRequests
+
+            | GetInstanceState instanceName ->
+                let sender = ctx.Sender().Retype<Application.OracleInstanceActor.StateResult>()
+                if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
+                    let instance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[instanceName]
+                    instance <<! OracleInstanceActor.GetState
+                else
+                    sender <! OracleInstanceActor.stateError (sprintf "cannot find Oracle instance %s" instanceName)
+                return! loop orchestrator pendingRequests completedRequests
+
+            | GetMasterPDBState (instanceName, pdb) ->
+                let sender = ctx.Sender().Retype<MasterPDBActor.StateResult>()
+                if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
+                    let instance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[instanceName]
+                    instance <<! OracleInstanceActor.GetMasterPDBState pdb
+                else
+                    sender <! MasterPDBActor.stateError (sprintf "cannot find Oracle instance %s" instanceName)
+                return! loop orchestrator pendingRequests completedRequests
+
             | Synchronize targetInstance ->
                 if (orchestrator.OracleInstanceNames |> List.contains targetInstance) then
                     let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                     let target = collaborators.OracleInstanceActors.[targetInstance]
                     retype primaryInstance <<! TransferInternalState target
                 else
-                    ctx.Sender() <! stateSetError (sprintf "cannot find Oracle instance %s" targetInstance)
-                return! loop orchestrator pendingRequests completedRequests
-
-            | GetState ->
-                let! state = orchestrator |> DTO.Orchestrator.toDTO (collaborators.OracleInstanceActors |> Map.map (fun _ a -> a.Retype<OracleInstanceActor.Command>()))
-                ctx.Sender() <! state
+                    ctx.Sender() <! stateError (sprintf "cannot find Oracle instance %s" targetInstance)
                 return! loop orchestrator pendingRequests completedRequests
 
             | CreateMasterPDB (user, parameters) ->
@@ -107,14 +127,16 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                 return! loop orchestrator newPendingRequests completedRequests
 
             | SnapshotMasterPDBVersion (user, instanceName, masterPDBName, versionNumber, snapshotName) ->
-                let instanceOk = orchestrator.OracleInstanceNames |> List.contains instanceName
-                if (not instanceOk) then sender <! Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
-                let instance = collaborators.OracleInstanceActors.[instanceName]
-                let requestId = newRequestId()
-                let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
-                retype instance <! Application.OracleInstanceActor.SnapshotMasterPDBVersion (requestId, masterPDBName, versionNumber, snapshotName)
-                sender <! Valid requestId
-                return! loop orchestrator newPendingRequests completedRequests
+                if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
+                    let instance = collaborators.OracleInstanceActors.[instanceName]
+                    let requestId = newRequestId()
+                    let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
+                    retype instance <! Application.OracleInstanceActor.SnapshotMasterPDBVersion (requestId, masterPDBName, versionNumber, snapshotName)
+                    sender <! Valid requestId
+                    return! loop orchestrator newPendingRequests completedRequests
+                else
+                    sender <! Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
+                    return! loop orchestrator pendingRequests completedRequests
 
             | GetRequest requestId ->
                 let sender = ctx.Sender().Retype<WithRequestId<RequestStatus>>()

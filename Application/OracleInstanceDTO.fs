@@ -14,10 +14,18 @@ type OracleInstanceState = {
     MasterPDBs: MasterPDBState list
 }
 
+let getResult (state:MasterPDBActor.StateResult) : MasterPDBState =
+    match state with
+    | Ok result -> result
+    | Error _ -> failwith "should never happen" // TODO
+
 let toDTO (masterPDBActors:Map<string, IActorRef<obj>>) (oracleInstance : Domain.OracleInstance.OracleInstance) = async {
     let! masterPDBs = 
         oracleInstance.MasterPDBs 
-            |> List.map (fun name -> retype (masterPDBActors |> Map.find name) <? MasterPDBActor.GetState)
+            |> List.map (fun name -> async {
+                let! (state:MasterPDBActor.StateResult) = retype (masterPDBActors |> Map.find name) <? MasterPDBActor.GetState
+                return getResult state
+               })
             |> Async.Parallel
     return {
         Name = oracleInstance.Name
