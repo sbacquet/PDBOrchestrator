@@ -40,12 +40,14 @@ let main args =
     let state = API.getState ctx
     printfn "State:\n%A" state
 
-    let res : RequestValidation = API.snapshotMasterPDBVersion ctx "me" "instance1" "test1" 1 "toto"
+    let run cont = runWithinElseTimeoutException 100 cont
+    
+    let res : RequestValidation = API.snapshotMasterPDBVersion ctx "me" "instance1" "test1" 1 "toto" |> run
     match res with
     | Valid req -> 
         printfn "Request id = %s" (req.ToString())
         System.Threading.Thread.Sleep 5000
-        printfn "Request for %s = %A" (req.ToString()) (API.getRequestStatus ctx req)
+        printfn "Request for %s = %A" (req.ToString()) (API.getRequestStatus ctx req |> run)
     | Invalid errors -> printfn "Cannot snapshot : %A" errors
     // TEST --------------------------------------------------------
 

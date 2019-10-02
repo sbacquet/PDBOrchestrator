@@ -4,7 +4,6 @@ open Akka.Actor
 open Microsoft.Extensions.Logging
 open Akkling
 open Application.OrchestratorActor
-open Application.Common
 open Application.PendingRequest
 
 type APIContext = {
@@ -16,25 +15,19 @@ type APIContext = {
 let consAPIContext system orchestratorActor (loggerFactory:ILoggerFactory) =
     { System = system; Orchestrator = orchestratorActor; Logger = loggerFactory.CreateLogger("API")}
 
-let run cont = runWithinElseTimeoutException 1000 cont // TODO
+let getState (ctx:APIContext) : Async<Application.DTO.Orchestrator.OrchestratorState> =
+    ctx.Orchestrator <? GetState
 
-let getState (ctx:APIContext) =
-    let state:Application.DTO.Orchestrator.OrchestratorState = ctx.Orchestrator <? GetState |> run
-    state
+let synchronizePrimaryInstanceWith (ctx:APIContext) instance : Async<Application.OracleInstanceActor.StateSet> =
+    ctx.Orchestrator <? Synchronize instance
 
-let synchronizePrimaryInstanceWith (ctx:APIContext) instance =
-    let result:Application.OracleInstanceActor.StateSet = ctx.Orchestrator <? Synchronize instance |> run
-    result
+let getRequestStatus (ctx:APIContext) requestId : Async<WithRequestId<RequestStatus>> =
+    ctx.Orchestrator <? GetRequest requestId
 
-let getRequestStatus (ctx:APIContext) requestId =
-    let requestStatus:WithRequestId<RequestStatus> = ctx.Orchestrator <? GetRequest requestId |> run
-    requestStatus |> snd
+let snapshotMasterPDBVersion (ctx:APIContext) user instance masterPDBName versionNumber snapshotName : Async<RequestValidation> =
+    ctx.Orchestrator <? SnapshotMasterPDBVersion (user, instance, masterPDBName, versionNumber, snapshotName)
 
-let snapshotMasterPDBVersion (ctx:APIContext) user instance masterPDBName versionNumber snapshotName : RequestValidation =
-    let result:RequestValidation = ctx.Orchestrator <? SnapshotMasterPDBVersion (user, instance, masterPDBName, versionNumber, snapshotName) |> run
-    result
-
-let createMasterPDB (ctx:APIContext) user name dump schemas targetSchemas comment =
+let createMasterPDB (ctx:APIContext) user name dump schemas targetSchemas comment : Async<RequestValidation> =
     let pars : OracleInstanceActor.CreateMasterPDBParams = {
         Name = name
         Dump = dump
@@ -44,13 +37,10 @@ let createMasterPDB (ctx:APIContext) user name dump schemas targetSchemas commen
         Date = System.DateTime.Now
         Comment = comment
     }
-    let result:RequestValidation = ctx.Orchestrator <? OrchestratorActor.CreateMasterPDB (user, pars) |> run
-    result
+    ctx.Orchestrator <? OrchestratorActor.CreateMasterPDB (user, pars)
 
-let prepareMasterPDBForModification (ctx:APIContext) user pdb version =
-    let result:RequestValidation = ctx.Orchestrator <? OrchestratorActor.PrepareMasterPDBForModification (user, pdb, version) |> run
-    result
+let prepareMasterPDBForModification (ctx:APIContext) user pdb version : Async<RequestValidation> =
+    ctx.Orchestrator <? OrchestratorActor.PrepareMasterPDBForModification (user, pdb, version)
 
-let rollbackMasterPDB (ctx:APIContext) user pdb =
-    let result:RequestValidation = ctx.Orchestrator <? OrchestratorActor.RollbackMasterPDB (user, pdb) |> run
-    result
+let rollbackMasterPDB (ctx:APIContext) user pdb : Async<RequestValidation> =
+    ctx.Orchestrator <? OrchestratorActor.RollbackMasterPDB (user, pdb)
