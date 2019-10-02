@@ -7,10 +7,21 @@ open Infrastructure.Oracle
 open Microsoft.Extensions.Logging.Abstractions
 open Application.Oracle
 open Domain.Common.Result
+open Serilog
+open Microsoft.Extensions.Logging
+
+Serilog.Log.Logger <- 
+    (new LoggerConfiguration()).
+        WriteTo.Trace().
+        MinimumLevel.Debug().
+        CreateLogger()
+
+let loggerFactory = (new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory)
 
 let conn = Sql.withNewConnection (openConn "fr1psl010716.misys.global.ad" 1521 "intcdb2" "sys" "syspwd8" true)
 let connIn pdb = Sql.withNewConnection (openConn "fr1psl010716.misys.global.ad" 1521 pdb "sys" "syspwd8" true)
-let oracleAPI : IOracleAPI = new OracleAPI (NullLoggerFactory.Instance, conn, connIn) :> IOracleAPI
+let oracleAPI : IOracleAPI = new OracleAPI (loggerFactory, conn, connIn) :> IOracleAPI
+
 
 [<Fact>]
 let ``Fail to get inexisting PDB from server`` () =
@@ -27,8 +38,14 @@ let ``Import PDB`` () =
 [<Fact>]
 let ``Snapshot PDB`` () =
     let res = result {
+        let stopWatch = System.Diagnostics.Stopwatch.StartNew()
         let! _ = oracleAPI.ImportPDB "/u01/app/oracle/oradata/SB_PDBs/test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source" |> Async.RunSynchronously
+        stopWatch.Stop()
+        Log.Logger.Debug("Time to import : {time}", stopWatch.Elapsed.TotalSeconds)
+        stopWatch.Restart()
         let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot" |> Async.RunSynchronously
+        stopWatch.Stop()
+        Log.Logger.Debug("Time to snapshot : {time}", stopWatch.Elapsed.TotalSeconds)
         let! hasSnapshots = oracleAPI.PDBHasSnapshots "source" |> Async.RunSynchronously
         return! if hasSnapshots then Ok "Snapshot" else Error (exn "No snapshot ??!!")
     }
