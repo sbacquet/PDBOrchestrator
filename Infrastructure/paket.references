@@ -1,7 +1,8 @@
 FSharp.Core
+Microsoft.AspNetCore.App
+Giraffe
 FsSql.Core
 Oracle.ManagedDataAccess.Core
-Microsoft.Extensions.Logging
 Chiron
 Akka.Logger.Serilog
 Serilog.Sinks.Console

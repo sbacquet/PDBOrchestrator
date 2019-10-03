@@ -1,10 +1,16 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk.Web">
   <PropertyGroup>
     <TargetFramework>netcoreapp2.2</TargetFramework>
     <OutputType>Exe</OutputType>
     <AssemblyName>PDBOrchestrator</AssemblyName>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <DefineConstants>TRACE</DefineConstants>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Remove="web.config" />
+  </ItemGroup>
   <ItemGroup>
     <Compile Include="Encryption.fs" />
     <Compile Include="MasterPDBJson.fs" />
@@ -15,7 +21,13 @@
     <Compile Include="OrchestratorRepository.fs" />
     <Compile Include="CompensableAction.fs" />
     <Compile Include="Oracle.fs" />
+    <Compile Include="HttpHandlers.fs" />
     <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="web.config">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Application\Application.fsproj" />
