@@ -51,7 +51,7 @@ let newMasterPDB name schemas createdBy creationDate comment =
         LockState = None 
     }
 
-let addVersionToMasterPDB (version:MasterPDBVersion.MasterPDBVersion) createdBy comment masterPDB =
+let addVersionToMasterPDB (version:MasterPDBVersion.MasterPDBVersion) masterPDB =
 
     if (masterPDB.Versions |> Map.tryFind version.Number |> Option.isSome) then
         Error (sprintf "version %d is already used for PDB %s" version.Number masterPDB.Name)
@@ -75,14 +75,22 @@ let getCurrentVersion masterPDB = masterPDB.Versions.[0]
 
 let deleteVersion versionNumber masterPDB =
     if (versionNumber = 1) 
-    then Error "version 1 cannot be deleted"
+    then 
+        Error "version 1 cannot be deleted"
     else
         let versionMaybe = masterPDB.Versions |> Map.tryFind versionNumber
         match versionMaybe with
-        | Some version -> Ok { 
-            masterPDB with Versions = masterPDB.Versions |> Map.map (fun number version -> if (number = versionNumber) then { version with Deleted = true } else version)
-          }
-        | None -> Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name)
+        | Some version ->
+            if not version.Deleted then
+                Ok { 
+                    masterPDB with 
+                        Versions = masterPDB.Versions 
+                        |> Map.map (fun number version -> if (number = versionNumber) then { version with Deleted = true } else version)
+                }
+            else
+                Error (sprintf "version %d of master PDB %s is already deleted" versionNumber masterPDB.Name)
+        | None -> 
+            Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name)
 
 let lock user comment masterPDB =
     match masterPDB.LockState with
