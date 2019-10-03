@@ -23,6 +23,8 @@ let consLockInfo locker date =
         Date = date
     }
 
+let newLockInfo locker = consLockInfo locker System.DateTime.Now
+
 type MasterPDB = {
     Name: string
     Schemas: Schema list
@@ -38,11 +40,11 @@ let consMasterPDB name schemas versions lockState =
         LockState = lockState
     }
 
-let newMasterPDB name schemas createdBy creationDate comment =
+let newMasterPDB name schemas createdBy comment =
     { 
         Name = name
         Schemas = schemas
-        Versions = [ 1, newPDBVersion createdBy creationDate comment ] |> Map.ofList
+        Versions = [ 1, newPDBVersion createdBy comment ] |> Map.ofList
         LockState = None 
     }
 

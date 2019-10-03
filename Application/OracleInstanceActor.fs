@@ -21,7 +21,7 @@ type CreateMasterPDBParams = {
     Comment: string
 }
 
-let newCreateMasterPDBParams name dump schemas targetSchemas user date comment = 
+let consCreateMasterPDBParams name dump schemas targetSchemas user date comment = 
     { 
         Name=name
         Dump=dump
@@ -32,53 +32,58 @@ let newCreateMasterPDBParams name dump schemas targetSchemas user date comment =
         Comment=comment 
     }
 
+let newCreateMasterPDBParams name dump schemas targetSchemas user comment = 
+    consCreateMasterPDBParams name dump schemas targetSchemas user System.DateTime.Now comment
+
 type CreateMasterPDBParamsValidation = Validation<CreateMasterPDBParams, string>
 
-let validatePDB oracleInstance name =
-    if (oracleInstance |> masterPDBAlreadyExists name) then
-        Invalid [ sprintf "a PDB named \"%s\" already exists" name ]
-    else
-        Valid name
+[<RequireQualifiedAccess>]
+module Validation =
+    let validatePDB oracleInstance name =
+        if (oracleInstance |> masterPDBAlreadyExists name) then
+            Invalid [ sprintf "a PDB named \"%s\" already exists" name ]
+        else
+            Valid name
 
-let validateDump dump =
-    if (System.IO.File.Exists(dump)) then
-        Valid dump
-    else
-        Invalid [ sprintf "the dump file \"%s\" does not exist" dump ]
+    let validateDump dump =
+        if (System.IO.File.Exists(dump)) then
+            Valid dump
+        else
+            Invalid [ sprintf "the dump file \"%s\" does not exist" dump ]
 
-let validateSchemas schemas =
-    if schemas = [] then
-        Invalid [ "at least 1 schema must be provided" ]
-    else    
-        Valid schemas
+    let validateSchemas schemas =
+        if schemas = [] then
+            Invalid [ "at least 1 schema must be provided" ]
+        else    
+            Valid schemas
 
-let validateTargetSchemas (schemas:_ list) (targetSchemas : _ list) =
-    if schemas.Length <> targetSchemas.Length then
-        Invalid [ "the number of target schemas must be equal to the number of source schemas" ]
-    else    
-        Valid targetSchemas
+    let validateTargetSchemas (schemas:_ list) (targetSchemas : _ list) =
+        if schemas.Length <> targetSchemas.Length then
+            Invalid [ "the number of target schemas must be equal to the number of source schemas" ]
+        else    
+            Valid targetSchemas
 
-let validateUser (user:string) =
-    if (user = "") then
-        Invalid [ "the user cannot be empty" ]
-    else
-        Valid user
+    let validateUser (user:string) =
+        if (user = "") then
+            Invalid [ "the user cannot be empty" ]
+        else
+            Valid user
 
-let validateComment (comment:string) =
-    if (comment = "") then
-        Invalid [ "the comment cannot be empty" ]
-    else
-        Valid comment
+    let validateComment (comment:string) =
+        if (comment = "") then
+            Invalid [ "the comment cannot be empty" ]
+        else
+            Valid comment
 
-let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : Domain.OracleInstance.OracleInstance) : CreateMasterPDBParamsValidation =
-    let pdb = validatePDB state parameters.Name
-    let dump = validateDump parameters.Dump
-    let schemas = validateSchemas parameters.Schemas
-    let targetSchemas = validateTargetSchemas parameters.Schemas parameters.TargetSchemas
-    let user = validateUser parameters.User
-    let date = Valid parameters.Date
-    let comment = validateComment parameters.Comment
-    retn newCreateMasterPDBParams <*> pdb <*> dump <*> schemas <*> targetSchemas <*> user <*> date <*> comment
+    let validateCreateMasterPDBParams (parameters : CreateMasterPDBParams) (state : Domain.OracleInstance.OracleInstance) : CreateMasterPDBParamsValidation =
+        let pdb = validatePDB state parameters.Name
+        let dump = validateDump parameters.Dump
+        let schemas = validateSchemas parameters.Schemas
+        let targetSchemas = validateTargetSchemas parameters.Schemas parameters.TargetSchemas
+        let user = validateUser parameters.User
+        let date = Valid parameters.Date
+        let comment = validateComment parameters.Comment
+        retn consCreateMasterPDBParams <*> pdb <*> dump <*> schemas <*> targetSchemas <*> user <*> date <*> comment
 
 type OracleInstanceExpanded = {
     Name: string
@@ -278,7 +283,7 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:IMasterPDBReposit
 
             | CreateMasterPDB (requestId, parameters) as command ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBCreationResult>>()
-                let validation = validateCreateMasterPDBParams parameters instance
+                let validation = Validation.validateCreateMasterPDBParams parameters instance
                 match validation with
                 | Valid _ -> 
                     let parameters2 = {
@@ -353,7 +358,7 @@ let oracleInstanceActorBody getOracleAPI (initialMasterPDBRepo:IMasterPDBReposit
                             Domain.MasterPDB.newMasterPDB 
                                 parameters.Name 
                                 (parameters.TargetSchemas |> List.map Domain.MasterPDB.consSchemaFromTuple)
-                        let masterPDB = newMasterPDB parameters.User parameters.Date parameters.Comment
+                        let masterPDB = newMasterPDB parameters.User parameters.Comment
                         let newStateResult = 
                             addNewMasterPDB 
                                 ctx 

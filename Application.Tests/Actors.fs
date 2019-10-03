@@ -154,13 +154,13 @@ type FakeMasterPDBRepo(map : Map<string, MasterPDB>) =
 
 let masterPDBMap1 =
     [ 
-        "test1", (newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment1")
-        "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "new comment2")
+        "test1", (newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1")
+        "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "new comment2")
     ] |> Map.ofList
 
 let masterPDBMap2 =
     [ 
-        "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment2")
+        "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "comment2")
     ] |> Map.ofList
 
 [<Fact>]
@@ -273,7 +273,7 @@ let ``API creates PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``Lock master PDB`` () = test <| fun tck ->
-    let pdb1 = newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment1"
+    let pdb1 = newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn fakeOracleAPI
     let masterPDBActor = tck |> MasterPDBActor.spawn fakeOracleAPI instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor pdb1
@@ -346,7 +346,7 @@ let ``API edits and commits master PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``MasterPDB snapshots a version`` () = test <| fun tck ->
-    let pdb1 = newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" DateTime.Now "comment1"
+    let pdb1 = newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn fakeOracleAPI
     let masterPDBActor = tck |> MasterPDBActor.spawn fakeOracleAPI instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor pdb1

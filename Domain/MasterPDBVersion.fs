@@ -21,4 +21,4 @@ let consPDBVersion version deleted createdBy creationDate comment =
         Deleted = deleted
     }
 
-let newPDBVersion = consPDBVersion 1 false
+let newPDBVersion createdBy comment = consPDBVersion 1 false createdBy System.DateTime.Now comment

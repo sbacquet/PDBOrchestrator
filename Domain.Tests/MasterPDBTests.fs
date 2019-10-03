@@ -6,14 +6,14 @@ open Domain.MasterPDBVersion
 
 [<Fact>]
 let ``Next version available`` () =
-    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" (System.DateTime.Now) "comment version 1"
+    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" "comment version 1"
     let nextVersion = pdb |> getNextAvailableVersion
     Assert.Equal(2, nextVersion)
 
 [<Fact>]
 let ``Next version available with deleted`` () =
     let versions = [
-        newPDBVersion "me" System.DateTime.Now "version 1"
+        newPDBVersion "me" "version 1"
         consPDBVersion 2 true "me" System.DateTime.Now "version 2"
         consPDBVersion 3 true "me" System.DateTime.Now "version 3"
     ]
@@ -24,7 +24,7 @@ let ``Next version available with deleted`` () =
 [<Fact>]
 let ``Previous version with deleted`` () =
     let versions = [
-        newPDBVersion "me" System.DateTime.Now "version 1"
+        newPDBVersion "me" "version 1"
         consPDBVersion 2 false "me" System.DateTime.Now "version 2"
         consPDBVersion 3 true "me" System.DateTime.Now "version 3"
         consPDBVersion 4 true "me" System.DateTime.Now "version 4"
@@ -36,7 +36,7 @@ let ``Previous version with deleted`` () =
 [<Fact>]
 let ``Can delete an existing version`` () =
     let versions = [
-        newPDBVersion "me" System.DateTime.Now "version 1"
+        newPDBVersion "me" "version 1"
         consPDBVersion 2 false "me" System.DateTime.Now "version 2"
         consPDBVersion 3 false "me" System.DateTime.Now "version 3"
         consPDBVersion 4 false "me" System.DateTime.Now "version 4"
@@ -57,7 +57,7 @@ let ``Can delete an existing version`` () =
 [<Fact>]
 let ``Cannot delete non existing version`` () =
     let versions = [
-        newPDBVersion "me" System.DateTime.Now "version 1"
+        newPDBVersion "me" "version 1"
         consPDBVersion 2 false "me" System.DateTime.Now "version 2"
         consPDBVersion 3 false "me" System.DateTime.Now "version 3"
         consPDBVersion 4 false "me" System.DateTime.Now "version 4"
@@ -71,7 +71,7 @@ let ``Cannot delete non existing version`` () =
 [<Fact>]
 let ``Cannot delete deleted version`` () =
     let versions = [
-        newPDBVersion "me" System.DateTime.Now "version 1"
+        newPDBVersion "me" "version 1"
         consPDBVersion 2 false "me" System.DateTime.Now "version 2"
         consPDBVersion 3 true "me" System.DateTime.Now "version 3"
         consPDBVersion 4 false "me" System.DateTime.Now "version 4"
@@ -85,7 +85,7 @@ let ``Cannot delete deleted version`` () =
 [<Fact>]
 let ``Can add and delete a version`` () =
     let versions = [
-        newPDBVersion "me" System.DateTime.Now "version 1"
+        newPDBVersion "me" "version 1"
         consPDBVersion 2 false "me" System.DateTime.Now "version 2"
         consPDBVersion 3 true "me" System.DateTime.Now "version 3"
         consPDBVersion 4 true "me" System.DateTime.Now "version 4"
@@ -107,7 +107,7 @@ let ``Can add and delete a version`` () =
 
 [<Fact>]
 let ``Cannot delete version 1`` () =
-    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" (System.DateTime.Now) "comment version 1"
+    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" "comment version 1"
     let result = pdb |> deleteVersion 1
     match result with
     | Ok _ -> failwith "version 1 cannot be deleted!"
@@ -115,7 +115,7 @@ let ``Cannot delete version 1`` () =
 
 [<Fact>]
 let ``Can lock an unlocked version`` () =
-    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" (System.DateTime.Now) "comment version 1"
+    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" "comment version 1"
     let result = pdb |> lock "me"
     match result with
     | Ok pdb -> Assert.Equal("me", pdb.LockState.Value.Locker)
@@ -123,7 +123,7 @@ let ``Can lock an unlocked version`` () =
 
 [<Fact>]
 let ``Can lock and unlock repeatedly`` () =
-    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" (System.DateTime.Now) "comment version 1"
+    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" "comment version 1"
     let result = 
         pdb 
         |> lock "me" |> Result.bind unlock 
@@ -135,7 +135,7 @@ let ``Can lock and unlock repeatedly`` () =
 
 [<Fact>]
 let ``Cannot lock a locked version`` () =
-    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" (System.DateTime.Now) "comment version 1"
+    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" "comment version 1"
     let result = pdb |> lock "me" |> Result.bind (lock "other")
     match result with
     | Ok _ -> failwith "should not be able to lock a locked version"

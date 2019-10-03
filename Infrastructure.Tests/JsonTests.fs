@@ -11,8 +11,7 @@ open Chiron
 [<Fact>]
 let ``Serialize and deserialize master PDB`` () =
     let password = "toto"
-    let date = DateTime.Now
-    let pdb = newMasterPDB "test1" [ consSchema "toto" password "Invest" ] "me" date "comment1"
+    let pdb = newMasterPDB "test1" [ consSchema "toto" password "Invest" ] "me" "comment1"
     let json = pdb |> MasterPDBJson.masterPDBtoJson
     let pdb' = json |> MasterPDBJson.jsonToMasterPDB
     match pdb' with
