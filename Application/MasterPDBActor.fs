@@ -81,7 +81,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                 let sender = ctx.Sender().Retype<WithRequestId<PrepareForModificationResult>>()
                 let latestVersion = masterPDB |> getLatestAvailableVersion
                 if (latestVersion.Number <> version) then sender <! (requestId, PreparationFailure (sprintf "version %d is not the latest version (%d) of \"%s\"" version latestVersion.Number masterPDB.Name))
-                let newMasterPDBMaybe = masterPDB |> lock locker System.DateTime.Now
+                let newMasterPDBMaybe = masterPDB |> lock locker
                 match newMasterPDBMaybe with
                 | Ok newMasterPDB -> 
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
@@ -92,7 +92,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                     sender <! (requestId, PreparationFailure error)
                     return! loop masterPDB requests collaborators
 
-            | Commit (requestId, unlocker, comment) ->
+            | Commit (requestId, unlocker, _) ->
                 let sender = ctx.Sender().Retype<WithRequestId<EditionDone>>()
                 let lockInfoMaybe = masterPDB.LockState
                 match lockInfoMaybe with
@@ -155,19 +155,37 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                         sender <! (requestId, PreparationFailure (error.ToString()))
                     return! loop masterPDB newRequests collaborators
 
-                | Commit _
+                | Commit (_, unlocker, comment) ->
+                    let sender = request.Requester.Retype<WithRequestId<EditionDone>>()
+                    match result with
+                    | Ok _ ->
+                        let newMasterPDBMaybe = masterPDB |> addVersionToMasterPDB unlocker comment |> unlock
+                        match newMasterPDBMaybe with
+                        | Ok newMasterPDB ->
+                            sender <! (requestId, Ok newMasterPDB)
+                            return! loop newMasterPDB newRequests collaborators
+                        | Error error -> 
+                            sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name (error.ToString())))
+                            return! loop masterPDB newRequests collaborators
+                    | Error error ->
+                        sender <! (requestId, Error (sprintf "cannot commit %s : %s" masterPDB.Name (error.ToString())))
+                        return! loop masterPDB newRequests collaborators
+
                 | Rollback _ ->
                     let sender = request.Requester.Retype<WithRequestId<EditionDone>>()
-                    let newMasterPDBMaybe = masterPDB |> unlock
-                    match newMasterPDBMaybe with
-                    | Ok newMasterPDB ->
-                        match result with
-                        | Ok _ ->
+                    match result with
+                    | Ok _ ->
+                        let newMasterPDBMaybe = masterPDB |> unlock
+                        match newMasterPDBMaybe with
+                        | Ok newMasterPDB ->
                             sender <! (requestId, Ok newMasterPDB)
-                        | Error error ->
-                            sender <! (requestId, Error (error.ToString()))
-                        return! loop newMasterPDB newRequests collaborators
-                    | Error error -> failwithf "Fatal error"
+                            return! loop newMasterPDB newRequests collaborators
+                        | Error error -> 
+                            sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name (error.ToString())))
+                            return! loop masterPDB newRequests collaborators
+                    | Error error ->
+                        sender <! (requestId, Error (sprintf "cannot rollback %s : %s" masterPDB.Name (error.ToString())))
+                        return! loop masterPDB newRequests collaborators
 
                 | SnapshotVersion (_, versionNumber, snapshotName) ->
                     let sender = request.Requester.Retype<WithRequestId<SnapshotResult>>()

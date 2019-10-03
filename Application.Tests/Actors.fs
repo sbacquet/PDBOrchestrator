@@ -316,7 +316,7 @@ let ``OracleInstance locks master PDB`` () = test <| fun tck ->
     | PreparationFailure error -> failwith error
 
 [<Fact>]
-let ``API prepares and rolls back master PDB`` () = test <| fun tck ->
+let ``API edits and rolls back master PDB`` () = test <| fun tck ->
     let instanceRepo = FakeOracleInstanceRepo allInstances
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
     let ctx = API.consAPIContext tck orchestrator loggerFactory
@@ -328,7 +328,7 @@ let ``API prepares and rolls back master PDB`` () = test <| fun tck ->
     request |> throwIfRequestNotCompletedOk ctx
 
 [<Fact>]
-let ``API prepares and commits master PDB`` () = test <| fun tck ->
+let ``API edits and commits master PDB`` () = test <| fun tck ->
     let instanceRepo = FakeOracleInstanceRepo allInstances
     let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
     let ctx = API.consAPIContext tck orchestrator loggerFactory
@@ -336,11 +336,13 @@ let ``API prepares and commits master PDB`` () = test <| fun tck ->
     let request = API.prepareMasterPDBForModification ctx "me" "test1" 1 |> runQuick
     request |> throwIfRequestNotCompletedOk ctx
 
-    let request = API.commitMasterPDB ctx "me" "test1" "my comment" |> runQuick
+    let request = API.commitMasterPDB ctx "me" "test1" "version 2" |> runQuick
     request |> throwIfRequestNotCompletedOk ctx
 
-    let state = API.getMasterPDBState ctx "server1" "test1" |> run
-    state |> Result.mapError failwith |> ignore
+    let state = API.getMasterPDBState ctx orchestratorState.PrimaryInstance "test1" |> run
+    match state with
+    | Ok pdb -> Assert.Equal("version 2", pdb.Versions.[1].Comment)
+    | Error error -> failwith error
 
 [<Fact>]
 let ``MasterPDB snapshots a version`` () = test <| fun tck ->

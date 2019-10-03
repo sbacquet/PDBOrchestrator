@@ -191,8 +191,8 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop orchestrator newPendingRequests newCompletedRequests
 
-        | :? WithRequestId<MasterPDBActor.EditionDone> as responseToRollbackMasterPDB ->
-            let (requestId, result) = responseToRollbackMasterPDB
+        | :? WithRequestId<MasterPDBActor.EditionDone> as responseToMasterPDBEdition ->
+            let (requestId, result) = responseToMasterPDBEdition
             let requestMaybe = pendingRequests |> Map.tryFind requestId
             match requestMaybe with
             | None -> 

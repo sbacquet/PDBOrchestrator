@@ -46,13 +46,6 @@ let newMasterPDB name schemas createdBy creationDate comment =
         LockState = None 
     }
 
-let addVersionToMasterPDB (version:MasterPDBVersion.MasterPDBVersion) masterPDB =
-
-    if (masterPDB.Versions |> Map.tryFind version.Number |> Option.isSome) then
-        Error (sprintf "version %d is already used for PDB %s" version.Number masterPDB.Name)
-    else
-        Ok { masterPDB with Versions = masterPDB.Versions.Add(version.Number, version) }
-
 let isVersionDeleted version masterPDB =
     masterPDB.Versions |> Map.tryFind version |> Option.exists (fun v -> v.Deleted)
 
@@ -66,7 +59,10 @@ let getNextAvailableVersion masterPDB =
     let highestVersionUsed = masterPDB.Versions |> Map.toList |> List.last |> snd
     highestVersionUsed.Number + 1
 
-let getCurrentVersion masterPDB = masterPDB.Versions.[0]
+let addVersionToMasterPDB createdBy comment masterPDB =
+    let newVersionNumber = getNextAvailableVersion masterPDB
+    let version:MasterPDBVersion.MasterPDBVersion = consPDBVersion newVersionNumber false createdBy System.DateTime.Now comment
+    { masterPDB with Versions = masterPDB.Versions.Add(newVersionNumber, version) }
 
 let deleteVersion versionNumber masterPDB =
     if (versionNumber = 1) 
@@ -87,10 +83,10 @@ let deleteVersion versionNumber masterPDB =
         | None -> 
             Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name)
 
-let lock user comment masterPDB =
+let lock user masterPDB =
     match masterPDB.LockState with
     | Some lockInfo -> Error (sprintf "%s is already locked by %s" masterPDB.Name lockInfo.Locker)
-    | None -> Ok { masterPDB with LockState = Some (consLockInfo user comment) }
+    | None -> Ok { masterPDB with LockState = Some (consLockInfo user System.DateTime.Now) }
 
 let unlock masterPDB =
     match masterPDB.LockState with
