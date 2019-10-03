@@ -25,27 +25,22 @@ let consLockInfo locker date =
 
 type MasterPDB = {
     Name: string
-    Manifest: string
     Schemas: Schema list
     Versions: Map<MasterPDBVersion.VersionNumber, MasterPDBVersion.MasterPDBVersion>
     LockState : LockInfo option
 }
 
-let consMasterPDB name manifest schemas versions lockState = 
+let consMasterPDB name schemas versions lockState = 
     { 
         Name = name
-        Manifest = manifest
         Schemas = schemas 
         Versions = versions |> List.map (fun version -> version.Number, version) |> Map.ofList
         LockState = lockState
     }
 
-let masterPDBManifest = sprintf "%s_v%03d.xml"
-
 let newMasterPDB name schemas createdBy creationDate comment =
     { 
         Name = name
-        Manifest = masterPDBManifest name 1
         Schemas = schemas
         Versions = [ 1, newPDBVersion createdBy creationDate comment ] |> Map.ofList
         LockState = None 
@@ -103,3 +98,6 @@ let unlock masterPDB =
     | Some _ -> Ok { masterPDB with LockState = None }
 
 let isLocked masterPDB = masterPDB.LockState.IsSome
+
+let manifestFile = sprintf "%s_v%03d.xml"
+let manifestPath baseFolder name version = sprintf "%s/%s" baseFolder <| manifestFile name version

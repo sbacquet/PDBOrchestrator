@@ -55,9 +55,9 @@ let getOrSpawnVersionActor (masterPDBName:string) (version:MasterPDBVersion) col
 
 let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor (initialMasterPDB : Domain.MasterPDB.MasterPDB) (ctx : Actor<_>) =
 
-    let manifestPath = sprintf "%s/%s" instance.MasterPDBManifestsPath
+    let rec loop (masterPDB:MasterPDB) (requests:RequestMap<Command>) collaborators = actor {
 
-    let rec loop masterPDB (requests : RequestMap<Command>) collaborators = actor {
+        let manifestPath = Domain.MasterPDB.manifestPath instance.MasterPDBManifestsPath masterPDB.Name
 
         logDebugf ctx "Number of pending requests : %d" requests.Count
         let! (msg:obj) = ctx.Receive()
@@ -85,7 +85,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                 match newMasterPDBMaybe with
                 | Ok newMasterPDB -> 
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (requestId, (manifestPath masterPDB.Manifest), instance.MasterPDBDestPath, masterPDB.Name)
+                    oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (requestId, (manifestPath version), instance.MasterPDBDestPath, masterPDB.Name)
                     sender <! (requestId, Locked newMasterPDB)
                     return! loop newMasterPDB newRequests collaborators
                 | Error error -> 
@@ -104,7 +104,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                         sender <! (requestId, Error (sprintf "you (%s) are not the editor (%s) of master PDB %s" unlocker lockInfo.Locker masterPDB.Name))
                         return! loop masterPDB requests collaborators
                     else
-                        let manifest = masterPDBManifest masterPDB.Name (getNextAvailableVersion masterPDB)
+                        let manifest = manifestPath (getNextAvailableVersion masterPDB)
                         oracleLongTaskExecutor <! OracleLongTaskExecutor.ExportPDB (requestId, manifest, masterPDB.Name)
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
                         return! loop masterPDB newRequests collaborators
@@ -131,7 +131,7 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                 | Some version -> 
                     let newCollabs, versionActor = getOrSpawnVersionActor masterPDB.Name version collaborators ctx
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    versionActor <! MasterPDBVersionActor.Snapshot (requestId, masterPDB.Manifest, instance.SnapshotSourcePDBDestPath, snapshotName, instance.SnapshotPDBDestPath)
+                    versionActor <! MasterPDBVersionActor.Snapshot (requestId, (manifestPath versionNumber), instance.SnapshotSourcePDBDestPath, snapshotName, instance.SnapshotPDBDestPath)
                     return! loop masterPDB newRequests newCollabs
 
         | :? WithRequestId<OraclePDBResult> as requestResponse ->

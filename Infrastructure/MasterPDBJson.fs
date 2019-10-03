@@ -68,19 +68,17 @@ let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersion) jObj ->
 
 let decodeMasterPDB (algo:SymmetricAlgorithm) = jsonDecoder {
     let! name = Decode.required Decode.string "name" 
-    let! manifest = Decode.required Decode.string "manifest" 
     let! iv = Decode.required Decode.bytes "_iv"
     algo.IV <- iv
     let! schemas = Decode.required (Decode.listWith (decodeSchema algo)) "schemas"
     let! versions = Decode.required (Decode.listWith decodeMasterPDBVersion) "versions"
     let! lockState = Decode.optional decodeLockInfo "lockstate"
-    return consMasterPDB name manifest schemas versions lockState
+    return consMasterPDB name schemas versions lockState
 }
 
 let encodeMasterPDB (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:MasterPDB) jObj ->
     jObj
     |> Encode.required Encode.string "name" x.Name
-    |> Encode.required Encode.string "manifest" x.Manifest
     |> Encode.required Encode.bytes "_iv" algo.IV
     |> Encode.required (Encode.listWith (encodeSchema algo)) "schemas" x.Schemas
     |> Encode.required (Encode.listWith encodeMasterPDBVersion) "versions" (x.Versions |> Map.toList |> List.map snd)

@@ -17,7 +17,7 @@ let ``Next version available with deleted`` () =
         consPDBVersion 2 true "me" System.DateTime.Now "version 2"
         consPDBVersion 3 true "me" System.DateTime.Now "version 3"
     ]
-    let pdb = consMasterPDB "test1" (masterPDBManifest "test1" 1) [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None
+    let pdb = consMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None
     let nextVersion = pdb |> getNextAvailableVersion
     Assert.Equal(4, nextVersion)
 
@@ -29,7 +29,7 @@ let ``Previous version with deleted`` () =
         consPDBVersion 3 true "me" System.DateTime.Now "version 3"
         consPDBVersion 4 true "me" System.DateTime.Now "version 4"
     ]
-    let pdb = consMasterPDB "test1" (masterPDBManifest "test1" 1) [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None
+    let pdb = consMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None
     let version = pdb |> getLatestAvailableVersion
     Assert.Equal(2, version.Number)
 
@@ -41,7 +41,7 @@ let ``Delete existing version`` () =
         consPDBVersion 3 false "me" System.DateTime.Now "version 3"
         consPDBVersion 4 false "me" System.DateTime.Now "version 4"
     ]
-    let pdb = consMasterPDB "test1" (masterPDBManifest "test1" 1) [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None
+    let pdb = consMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None
     let version = pdb |> getLatestAvailableVersion
     Assert.Equal(4, version.Number)
     let result = pdb |> deleteVersion 4
@@ -62,7 +62,7 @@ let ``Cannot delete non existing version`` () =
         consPDBVersion 3 false "me" System.DateTime.Now "version 3"
         consPDBVersion 4 false "me" System.DateTime.Now "version 4"
     ]
-    let pdb = consMasterPDB "test1" (masterPDBManifest "test1" 1) [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None
+    let pdb = consMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None
     let result = pdb |> deleteVersion 5
     match result with
     | Ok _ -> failwith "version 5 does not exist!"
@@ -76,7 +76,7 @@ let ``Cannot delete deleted version`` () =
         consPDBVersion 3 true "me" System.DateTime.Now "version 3"
         consPDBVersion 4 false "me" System.DateTime.Now "version 4"
     ]
-    let pdb = consMasterPDB "test1" (masterPDBManifest "test1" 1) [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None
+    let pdb = consMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None
     let result = pdb |> deleteVersion 3
     match result with
     | Ok _ -> failwith "version 3 already deleted!"

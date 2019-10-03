@@ -21,19 +21,27 @@ type MasterPDBVersion = {
     CreationDate: DateTime
     Comment: string
     Deleted : bool
+    Manifest : string
+}
+
+let consMasterPDBVersion pdb version createdBy creationDate comment deleted = {
+    Number = version
+    CreatedBy = createdBy
+    CreationDate = creationDate
+    Comment = comment
+    Deleted = deleted
+    Manifest = Domain.MasterPDB.manifestFile pdb version
 }
 
 type MasterPDBState = {
     Name: string
-    Manifest: string
     Schemas: Schema list
     Versions: MasterPDBVersion list
     LockState : LockInfo option
 }
 
-let consMasterPDBState name manifest schemas versions lockState = {
+let consMasterPDBState name schemas versions lockState = {
     Name = name
-    Manifest = manifest
     Schemas = schemas
     Versions = versions
     LockState = lockState
@@ -41,24 +49,16 @@ let consMasterPDBState name manifest schemas versions lockState = {
 
 let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) = { 
     Name = masterPDB.Name
-    Manifest = masterPDB.Manifest
     Schemas = masterPDB.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type })
     Versions = masterPDB.Versions 
         |> Map.map (fun _ version -> 
-            { 
-                Number = version.Number
-                CreatedBy = version.CreatedBy
-                CreationDate = version.CreationDate
-                Comment = version.Comment
-                Deleted = version.Deleted
-            })
+            consMasterPDBVersion masterPDB.Name version.Number version.CreatedBy version.CreationDate version.Comment version.Deleted)
         |> Map.toList |> List.map snd
     LockState = masterPDB.LockState |> Option.map (fun lock -> { Locker = lock.Locker; Date = lock.Date })
 }
 
 let fromDTO (dto:MasterPDBState) : Domain.MasterPDB.MasterPDB = { 
     Name = dto.Name
-    Manifest = dto.Manifest
     Schemas = dto.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type })
     Versions = dto.Versions 
         |> List.map (fun version -> 
