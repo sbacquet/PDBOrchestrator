@@ -49,6 +49,9 @@ NUGET
       FSharp.Core (>= 4.2.3) - restriction: && (< net40) (>= netstandard1.6)
       NETStandard.Library (>= 1.6.1) - restriction: && (< net40) (>= netstandard1.6)
     FSharp.Core (4.7)
+    FsSql.Core (3.1)
+      FSharp.Core (>= 4.3) - restriction: >= netstandard2.0
+      System.Data.SqlClient (>= 4.4.2) - restriction: >= netstandard2.0
     Hyperion (0.9.8) - restriction: || (>= net452) (>= netstandard1.6)
       Microsoft.CSharp (>= 4.3) - restriction: && (< net45) (>= netstandard1.6)
       NETStandard.Library (>= 1.6.1) - restriction: && (< net45) (>= netstandard1.6)
@@ -727,7 +730,3 @@ NUGET
       xunit.extensibility.core (2.4) - restriction: >= netstandard1.1
     xunit.runner.visualstudio (2.4)
       Microsoft.NET.Test.Sdk (>= 15.0) - restriction: >= netcoreapp1.0
-  remote: \\repository\Repository\public\dev_repository\NugetPackages\
-    FsSql.Core (3.0.2)
-      FSharp.Core (>= 4.7) - restriction: >= netstandard2.0
-      System.Data.SqlClient (>= 4.6.1) - restriction: >= netstandard2.0
