@@ -1,0 +1,6 @@
+{
+  "oracleInstanceNames": [
+    "intcdb2"
+  ],
+  "primaryInstance": "intcdb2"
+}

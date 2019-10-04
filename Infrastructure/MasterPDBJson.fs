@@ -29,9 +29,9 @@ let encodeSchema algo = Encode.buildWith (fun (x:Schema) jObj ->
     |> Encode.required Encode.string "type" x.Type
 )
 
-let decodeSchema algo = jsonDecoder {
+let decodeSchema decoder = jsonDecoder {
     let! user = Decode.required Decode.string "user"
-    let! password = Decode.required (decryptPassword algo) "password"
+    let! password = Decode.required (match decoder with | Some algo -> decryptPassword algo | None -> Decode.string) "password"
     let! t = Decode.required Decode.string "type"
     return { User = user; Password = password; Type = t }
 }
@@ -68,9 +68,9 @@ let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersion) jObj ->
 
 let decodeMasterPDB (algo:SymmetricAlgorithm) = jsonDecoder {
     let! name = Decode.required Decode.string "name" 
-    let! iv = Decode.required Decode.bytes "_iv"
-    algo.IV <- iv
-    let! schemas = Decode.required (Decode.listWith (decodeSchema algo)) "schemas"
+    let! ivMaybe = Decode.optional Decode.bytes "_iv"
+    let decoder = ivMaybe |> Option.map (fun iv -> algo.IV <- iv; algo)
+    let! schemas = Decode.required (Decode.listWith (decodeSchema decoder)) "schemas"
     let! versions = Decode.required (Decode.listWith decodeMasterPDBVersion) "versions"
     let! lockState = Decode.optional decodeLockInfo "lockstate"
     return consMasterPDB name schemas versions lockState

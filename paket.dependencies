@@ -1,12 +1,12 @@
 source "C:\Program Files (x86)\Microsoft SDKs\NuGetPackages\"
 source https://api.nuget.org/v3/index.json
 
-nuget FSharp.Core
+framework: netcoreapp2.2
+
 nuget Microsoft.NET.Test.Sdk 16.0.1
 nuget xunit 2.4.0
 nuget xunit.runner.visualstudio 2.4.0
 nuget unquote
-nuget Akkling
 nuget FsSql.Core
 nuget Oracle.ManagedDataAccess.Core
 nuget Akkling.TestKit
