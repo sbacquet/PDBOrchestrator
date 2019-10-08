@@ -133,6 +133,12 @@ type FakeOracleAPI() =
         member this.PDBExists _ = async { 
             return Ok true
         }
+        member this.DeletePDBWithSnapshots name = async { 
+            return Ok name
+        }
+        member this.PDBSnapshots name = async {
+            return Ok []
+        }
 
 let fakeOracleAPI = FakeOracleAPI()
 

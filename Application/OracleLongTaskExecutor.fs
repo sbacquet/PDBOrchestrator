@@ -22,6 +22,7 @@ type Command =
 | SnapshotPDB of WithRequestId<string, string, string>
 | ExportPDB of WithRequestId<string, string>
 | DeletePDB of WithRequestId<string>
+| DeletePDBWithSnapshots of WithRequestId<string>
 
 let newManifestName (pdb:string) version =
     sprintf "%s_V%03d.XML" (pdb.ToUpper()) version
@@ -55,6 +56,10 @@ let oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
             return! loop ()
         | DeletePDB (requestId, name) -> 
             let! result = oracleAPI.DeletePDB name
+            ctx.Sender() <! (requestId, result)
+            return! loop ()
+        | DeletePDBWithSnapshots (requestId, name) -> 
+            let! result = oracleAPI.DeletePDBWithSnapshots name
             ctx.Sender() <! (requestId, result)
             return! loop ()
     }

@@ -4,6 +4,8 @@ let ofOption error = function Some s -> Ok s | None -> Error error
 
 let toOption = function Ok s -> Some s | Error _ -> None
 
+let toErrorOption = function Ok _ -> None | Error error -> Some error
+
 module Result =
     type ResultBuilder() =
         member __.Return(x) = Ok x

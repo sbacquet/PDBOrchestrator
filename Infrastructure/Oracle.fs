@@ -6,6 +6,7 @@ open Oracle.ManagedDataAccess.Client
 open Compensable
 open Application.Oracle
 open Microsoft.Extensions.Logging
+open Domain.Common
 
 type PDBCompensableAction = CompensableAction<string, Oracle.ManagedDataAccess.Client.OracleException>
 type PDBCompensableAsyncAction = CompensableAsyncAction<string, Oracle.ManagedDataAccess.Client.OracleException>
@@ -274,6 +275,18 @@ let PDBExistsOnServer connAsDBA (name:string) = async {
         return Error ex
 }
 
+let pdbSnapshots connAsDBA (name:string) = async {
+    try
+        let! result = 
+            Sql.asyncExecReader
+                connAsDBA
+                (sprintf @"select name from v$pdbs where SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where upper(name)='%s')" (name.ToUpper()))
+                []
+        return result |> Sql.map (fun d -> (string)d?name.Value) |> List.ofSeq |> Ok
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return Error ex
+}
+
 let pdbHasSnapshots connAsDBA (name:string) = async {
     try
         let! result = 
@@ -286,9 +299,27 @@ let pdbHasSnapshots connAsDBA (name:string) = async {
         return Error ex
 }
 
-let toOraclePDBResult result = async {
+let toOraclePDBResult result =
+    result |> Result.mapError (fun error -> error :> exn)
+
+let toOraclePDBResultAsync result = async {
     let! r = result
-    return r |> Result.mapError (fun error -> error :> exn)
+    return toOraclePDBResult r
+}
+
+let deletePDBWithSnapshots (logger:ILogger) connAsDBA (name:string) = async {
+    logger.LogDebug("Deleting PDB {PDB} and dependant snapshots", name)
+    let! snapshotsMaybe = pdbSnapshots connAsDBA name
+    match snapshotsMaybe with
+    | Ok snapshots -> 
+        let! r = snapshots |> List.map (fun snapshot -> deletePDB logger connAsDBA true snapshot) |> Async.Parallel
+        let errors = r |> List.ofArray |> List.choose toErrorOption
+        if (errors.Length > 0) then 
+            return Error (exn (sprintf "some snapshots could not be deleted : %s" (System.String.Join("; ", errors))))
+        else
+            let! r = deletePDB logger connAsDBA true name
+            return r |> toOraclePDBResult
+    | Error error -> return Error (error :> exn)
 }
 
 type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager, connAsDBAIn : string -> Sql.ConnectionManager) = 
@@ -296,31 +327,37 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
     interface IOracleAPI with
         member this.NewPDBFromDump adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name =
             createManifestFromDump this.Logger connAsDBA connAsDBAIn adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name
-            |> toOraclePDBResult
+            |> toOraclePDBResultAsync
         member this.ClosePDB name =
             closePDB this.Logger connAsDBA name
-            |> toOraclePDBResult
+            |> toOraclePDBResultAsync
         member this.DeletePDB name = async {
             let! hasSnapshotsMaybe = pdbHasSnapshots connAsDBA name
             match hasSnapshotsMaybe with
             | Ok hasSnapshots ->
                 match hasSnapshots with
-                | false -> return! deletePDB this.Logger connAsDBA true name |> toOraclePDBResult
+                | false -> return! deletePDB this.Logger connAsDBA true name |> toOraclePDBResultAsync
                 | true -> return Error (exn "PDB cannot be deleted because open snapshots have been created from it")
             | Error error -> return Error (upcast error)
         }
         member this.ExportPDB manifest name = 
             exportPDB this.Logger connAsDBA manifest name
-            |> toOraclePDBResult
+            |> toOraclePDBResultAsync
         member this.ImportPDB manifest dest name = 
             importAndOpen this.Logger connAsDBA manifest dest name
-            |> toOraclePDBResult
+            |> toOraclePDBResultAsync
         member this.SnapshotPDB from dest name = 
             snapshotAndOpenPDB this.Logger connAsDBA from dest name
-            |> toOraclePDBResult
+            |> toOraclePDBResultAsync
         member this.PDBHasSnapshots name = 
             pdbHasSnapshots connAsDBA name
-            |> toOraclePDBResult
+            |> toOraclePDBResultAsync
         member this.PDBExists name = 
             PDBExistsOnServer connAsDBA name
-            |> toOraclePDBResult
+            |> toOraclePDBResultAsync
+        member this.PDBSnapshots name =
+            pdbSnapshots connAsDBA name
+            |> toOraclePDBResultAsync
+        member this.DeletePDBWithSnapshots name =
+            deletePDBWithSnapshots this.Logger connAsDBA name
+        

@@ -134,6 +134,20 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                     versionActor <! MasterPDBVersionActor.Snapshot (requestId, (manifestPath versionNumber), instance.SnapshotSourcePDBDestPath, snapshotName, instance.SnapshotPDBDestPath)
                     return! loop masterPDB newRequests newCollabs
 
+        | :? MasterPDBVersionActor.CommandToParent as commandToParent->
+            match commandToParent with
+            | MasterPDBVersionActor.KillVersion version ->
+                let versionActorMaybe = collaborators.MasterPDBVersionActors |> Map.tryFind version
+                match versionActorMaybe with
+                | Some versionActor -> 
+                    System.Diagnostics.Debug.Assert((versionActor = ctx.Sender().Retype<MasterPDBVersionActor.Command>()))
+                    versionActor <! MasterPDBVersionActor.HaraKiri
+                    let newCollabs = { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Remove(version) }
+                    return! loop masterPDB requests newCollabs
+                | None -> 
+                    ctx.Log.Value.Error("cannot find actor for PDB {pdb} version {pdbversion}", masterPDB.Name, version)
+                    return! loop masterPDB requests collaborators
+
         | :? WithRequestId<OraclePDBResult> as requestResponse ->
 
             let (requestId, result) = requestResponse

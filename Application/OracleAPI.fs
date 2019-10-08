@@ -13,4 +13,6 @@ type IOracleAPI =
     abstract member ImportPDB : manifest:string -> dest:string -> name:string -> Async<OraclePDBResult>
     abstract member SnapshotPDB : from:string -> dest:string -> name:string -> Async<OraclePDBResult>
     abstract member PDBHasSnapshots : name:string -> Async<Exceptional<bool>>
+    abstract member PDBSnapshots : name:string -> Async<Exceptional<string list>>
     abstract member PDBExists : name:string -> Async<Exceptional<bool>>
+    abstract member DeletePDBWithSnapshots : name:string -> Async<Exceptional<string>>
