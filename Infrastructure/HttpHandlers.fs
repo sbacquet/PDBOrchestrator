@@ -6,6 +6,9 @@ open FSharp.Control.Tasks.V2.ContextInsensitive
 open Giraffe
 open Application
 open Application
+open Chiron.Serialization.Json
+open Chiron.Formatting
+open Microsoft.Net.Http.Headers
 
 let handleGetHello next (ctx:HttpContext) = task {
     //let! body = ctx.ReadBodyFromRequestAsync()
@@ -37,10 +40,35 @@ let getRequestStatus (apiCtx:API.APIContext) (requestId:PendingRequest.RequestId
     match requestStatus with
     | OrchestratorActor.NotFound -> 
         return! RequestErrors.notFound (text (sprintf "No request found with id = %O" requestId)) next ctx
-    | OrchestratorActor.Pending ->
-        return! Successful.accepted (text (sprintf "The request with id %O is pending" requestId)) next ctx
-    | OrchestratorActor.CompletedOk data -> 
-        return! text data next ctx
-    | OrchestratorActor.CompletedWithError error ->
-        return! text error next ctx
+    | _ ->
+        let encodeRequestStatus = Encode.buildWith (fun (x:OrchestratorActor.RequestStatus) jObj ->
+            let jObj = jObj |> Encode.required Encode.string "requestId" (sprintf "%O" requestId)
+            match x with 
+            | OrchestratorActor.Pending -> 
+                jObj 
+                |> Encode.required Encode.string "status" "Pending"
+            | OrchestratorActor.CompletedOk data -> 
+                jObj 
+                |> Encode.required Encode.string "status" "Completed"
+                |> Encode.required Encode.string "data" data
+            | OrchestratorActor.CompletedWithError error -> 
+                jObj 
+                |> Encode.required Encode.string "status" "Completed"
+                |> Encode.required Encode.string "error" error
+            | _ -> jObj // cannot happen
+        )
+
+        return! text (requestStatus |> serializeWith encodeRequestStatus JsonFormattingOptions.Pretty) next ctx
+}
+
+open Domain.Common.Validation
+
+let snapshot (apiCtx:API.APIContext) (user:string) endpoint (instance:string, masterPDB:string, version:int, name:string) next (ctx:HttpContext) = task {
+    let! request = API.snapshotMasterPDBVersion apiCtx user instance masterPDB version name
+    match request with
+    | Valid reqId -> 
+        ctx.SetHttpHeader HeaderNames.Location (sprintf "%s/request/%O" endpoint reqId) 
+        return! Successful.accepted (text "Request accepted. Please poll the resource in response header's Location.") next ctx
+    | Invalid errors -> 
+        return! RequestErrors.badRequest (text (System.String.Join("; ", errors))) next ctx
 }

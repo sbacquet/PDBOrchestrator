@@ -1,15 +1,15 @@
 {
-  "_iv": "YXfMpLznSjty1LtuETUU3g==",
   "name": "intcdb2",
   "server": "fr1psl010716.misys.global.ad",
   "dbaUser": "sys",
-  "dbaPassword": "3AfnFieojSZuWkW9e2YbZA==",
+  "dbaPassword": "syspwd8",
   "masterPDBManifestsPath": "/u01/app/oracle/oradata/MasterDBs",
   "masterPDBDestPath": "/u01/app/oracle/oradata/MasterDBs",
   "snapshotSourcePDBDestPath": "/u01/app/oracle/oradata/SB_PDBs/snaphot_sources",
   "snapshotPDBDestPath": "/u01/app/oracle/oradata/SB_PDBs/snapshots",
   "oracleDirectoryForDumps": "DP_DIR",
   "masterPDBs": [
-    "OFI7210_FLA"
+    "OFI7210_FLA",
+    "NORTHVIEW"
   ]
 }

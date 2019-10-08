@@ -97,5 +97,5 @@ let unlock masterPDB =
 
 let isLocked masterPDB = masterPDB.LockState.IsSome
 
-let manifestFile = sprintf "%s_v%03d.xml"
+let manifestFile = sprintf "%s_V%03d.XML"
 let manifestPath baseFolder name version = sprintf "%s/%s" baseFolder <| manifestFile name version

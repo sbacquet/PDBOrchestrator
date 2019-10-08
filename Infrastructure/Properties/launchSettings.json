@@ -1,0 +1,28 @@
+{
+  "iisSettings": {
+    "windowsAuthentication": false,
+    "anonymousAuthentication": true,
+    "iisExpress": {
+      "applicationUrl": "http://localhost:59274/",
+      "sslPort": 0
+    }
+  },
+  "profiles": {
+    "IIS Express": {
+      "commandName": "IISExpress",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    },
+    "Infrastructure": {
+      "commandName": "Project",
+      "commandLineArgs": "root=d:\\Documents\\git_repos\\PDBOrchestrator\\Infrastructure.Tests\\integration",
+      "workingDirectory": "d:\\Documents\\git_repos\\PDBOrchestrator\\Infrastructure\\bin\\Debug\\netcoreapp2.2\\",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "http://localhost:59275/"
+    }
+  }
+}

@@ -25,7 +25,15 @@ let loggerFactory = new SerilogLoggerFactory(dispose=true) :> ILoggerFactory
 
 [<RequireQualifiedAccess>]
 module Rest =
-    let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc = 
+    let buildEndpoint dnsname port =
+        let dnsName = 
+            if (dnsname = null) then 
+                (sprintf "%s.%s" (System.Environment.GetEnvironmentVariable("COMPUTERNAME")) (System.Environment.GetEnvironmentVariable("USERDNSDOMAIN")))
+            else
+                dnsname
+        sprintf "http://%s:%d" dnsName port
+
+    let webApp (apiCtx:API.APIContext) endpoint : HttpFunc -> HttpFunc = 
         choose [
             GET >=> choose [
                 route "/hello" >=> HttpHandlers.handleGetHello
@@ -34,6 +42,9 @@ module Rest =
                 route "/instance" >=> HttpHandlers.getAllInstances apiCtx
                 routef "/request/%O" (HttpHandlers.getRequestStatus apiCtx)
             ]
+            POST >=> choose [
+                routef "/instance/%s/masterpdb/%s/%i/snapshot/%s" (HttpHandlers.snapshot apiCtx "me" endpoint)
+            ]
             RequestErrors.NOT_FOUND "Not Found" 
         ]
 
@@ -41,7 +52,7 @@ module Rest =
         logger.LogError(ex, "An unhandled exception has occurred while executing the request.")
         clearResponse >=> setStatusCode 500 >=> text ex.Message
 
-    let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
+    let configureApp (apiCtx:API.APIContext) endpoint (app : IApplicationBuilder) =
         let env = app.ApplicationServices.GetService<IHostingEnvironment>()
         (match env.IsDevelopment() with
         | true  -> app.UseDeveloperExceptionPage()
@@ -49,7 +60,7 @@ module Rest =
             //.UseHttpsRedirection()
             //.UseCors(configureCors)
             //.UseAuthentication()
-            .UseGiraffe(webApp apiCtx) |> ignore
+            .UseGiraffe(webApp apiCtx endpoint) |> ignore
 
     let configureServices (config : IConfiguration) (services : IServiceCollection) =
         services
@@ -85,12 +96,13 @@ let main args =
     use system = Akkling.System.create "pdb-orchestrator-system" akkaConfig
     let orchestratorActor = system |> OrchestratorActor.spawn getOracleAPI oracleInstanceRepo getMasterPDBRepo orchestrator
     let apiContext = API.consAPIContext system orchestratorActor loggerFactory
+    let port = if config.["port"] = null then 59275 else (Int32.Parse(config.["port"]))
 
     WebHostBuilder()
         .UseConfiguration(config)
-        .UseKestrel()
+        .UseKestrel(fun options -> options.Listen(System.Net.IPAddress.IPv6Any, port))
         .UseIISIntegration()
-        .Configure(Action<IApplicationBuilder> (Rest.configureApp apiContext))
+        .Configure(Action<IApplicationBuilder> (Rest.configureApp apiContext (Rest.buildEndpoint config.["dnsname"] port)))
         .ConfigureServices(Rest.configureServices config)
         .Build()
         .Run()

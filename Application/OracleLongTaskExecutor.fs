@@ -27,6 +27,9 @@ let newManifestName (pdb:string) version =
     sprintf "%s_V%03d.XML" (pdb.ToUpper()) version
 
 let oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
+
+    let stopWatch = System.Diagnostics.Stopwatch()
+
     let rec loop () = actor {
         let! n = ctx.Receive()
         match n with
@@ -39,7 +42,11 @@ let oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
             ctx.Sender() <! (requestId, result)
             return! loop ()
         | SnapshotPDB (requestId, from, dest, name) -> 
+            stopWatch.Restart()
             let! result = oracleAPI.SnapshotPDB from dest name
+            stopWatch.Stop()
+            result |> Result.map (fun snap -> ctx.Log.Value.Info("Snapshot {snapshot} created in {0} s", snap, stopWatch.Elapsed.TotalSeconds)) |> ignore
+            let elapsed = stopWatch.Elapsed
             ctx.Sender() <! (requestId, result)
             return! loop ()
         | ExportPDB (requestId, manifest, name) -> 

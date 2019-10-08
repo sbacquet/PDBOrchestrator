@@ -22,13 +22,18 @@ let decryptPassword (algo:SymmetricAlgorithm) (encryptedPasswordJson:Json) =
         |> JFail
 
 let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
-    let! iv = Decode.required Decode.bytes "_iv"
-    algo.IV <- iv
+    let! ivMaybe = Decode.optional Decode.bytes "_iv"
+    let decoder = 
+        match ivMaybe with
+        | Some iv -> 
+            algo.IV <- iv
+            decryptPassword algo
+        | None -> Decode.string
     let! name = Decode.required Decode.string "name" 
     let! server = Decode.required Decode.string "server" 
     let! port = Decode.optional Decode.int "port"
     let! dbaUser = Decode.required Decode.string "dbaUser" 
-    let! dbaPassword = Decode.required (decryptPassword algo) "dbaPassword"
+    let! dbaPassword = Decode.required decoder "dbaPassword"
     let! masterPDBManifestsPath = Decode.required Decode.string "masterPDBManifestsPath" 
     let! masterPDBDestPath = Decode.required Decode.string "masterPDBDestPath" 
     let! snapshotSourcePDBDestPath = Decode.required Decode.string "snapshotSourcePDBDestPath" 
