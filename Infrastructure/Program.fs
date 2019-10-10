@@ -41,11 +41,12 @@ module Rest =
                 routef "/instance/%s" (HttpHandlers.getInstance apiCtx)
                 route "/instance" >=> HttpHandlers.getAllInstances apiCtx
                 routef "/request/%O" (HttpHandlers.getRequestStatus apiCtx)
+                route "/pendingchanges" >=> HttpHandlers.getPendingChanges apiCtx
             ]
             POST >=> choose [
                 routef "/instance/%s/masterpdb/%s/%i/snapshot/%s" (HttpHandlers.snapshot apiCtx "me" endpoint)
             ]
-            RequestErrors.NOT_FOUND "Not Found" 
+            RequestErrors.BAD_REQUEST "Unknown HTTP request"
         ]
 
     let errorHandler (ex : Exception) (logger : Microsoft.Extensions.Logging.ILogger) =

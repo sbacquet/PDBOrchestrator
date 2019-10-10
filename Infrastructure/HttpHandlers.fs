@@ -72,3 +72,13 @@ let snapshot (apiCtx:API.APIContext) (user:string) endpoint (instance:string, ma
     | Invalid errors -> 
         return! RequestErrors.badRequest (text (System.String.Join("; ", errors))) next ctx
 }
+
+let getPendingChanges (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
+    let! pendingChangesMaybe = API.getPendingChanges apiCtx
+    match pendingChangesMaybe with
+    | Error error -> return! ServerErrors.internalError (text error) next ctx
+    | Ok pendingChangesPerhaps -> 
+        match pendingChangesPerhaps with
+        | None -> return! Successful.NO_CONTENT next ctx
+        | Some pendingChanges -> return! json pendingChanges next ctx
+}
