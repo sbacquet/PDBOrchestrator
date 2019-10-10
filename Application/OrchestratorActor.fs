@@ -29,7 +29,7 @@ type Command =
 
 type PendingChanges = {
     Commands : Command list
-    OpenMasterPDBs : (string * DTO.MasterPDB.LockInfo) list
+    OpenMasterPDBs : (string * Domain.MasterPDB.LockInfo) list
 }
 
 let consPendingChanges commands openMasterPDBs = { Commands = commands |> Seq.toList; OpenMasterPDBs = openMasterPDBs }

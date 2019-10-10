@@ -80,5 +80,18 @@ let getPendingChanges (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
     | Ok pendingChangesPerhaps -> 
         match pendingChangesPerhaps with
         | None -> return! Successful.NO_CONTENT next ctx
-        | Some pendingChanges -> return! json pendingChanges next ctx
+        | Some pendingChanges -> 
+            let encodeOpenMasterPDB = Encode.buildWith (fun (x:string * Domain.MasterPDB.LockInfo) jObj ->
+                let name, lockInfo = x
+                jObj 
+                |> Encode.required Encode.string "name" name
+                |> Encode.required MasterPDBJson.encodeLockInfo "lock" lockInfo
+            )
+            let encodePendingChanges = Encode.buildWith (fun (x:OrchestratorActor.PendingChanges) jObj ->
+                jObj 
+                |> Encode.optional Encode.stringList "pendingChangeCommands" (if (pendingChanges.Commands.IsEmpty) then None else (Some (x.Commands |> List.map (sprintf "%A"))))
+                |> Encode.optional (Encode.listWith encodeOpenMasterPDB) "lockedPDBs" (if (pendingChanges.OpenMasterPDBs.IsEmpty) then None else Some x.OpenMasterPDBs)
+            )
+            return! text (pendingChanges |> serializeWith encodePendingChanges JsonFormattingOptions.Pretty) next ctx
+            //return! json pendingChanges next ctx
 }

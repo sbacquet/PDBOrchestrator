@@ -8,13 +8,6 @@ type Schema = {
     Type: string
 }
 
-type LockInfo = {
-    Locker: string
-    Date: System.DateTime
-}
-
-let consLockInfo locker date = { Locker = locker; Date = date }
-
 type MasterPDBVersion = {
     Number: Domain.MasterPDBVersion.VersionNumber
     CreatedBy: string
@@ -37,7 +30,7 @@ type MasterPDBState = {
     Name: string
     Schemas: Schema list
     Versions: MasterPDBVersion list
-    LockState : LockInfo option
+    LockState : Domain.MasterPDB.LockInfo option
 }
 
 let consMasterPDBState name schemas versions lockState = {
@@ -54,7 +47,7 @@ let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) = {
         |> Map.map (fun _ version -> 
             consMasterPDBVersion masterPDB.Name version.Number version.CreatedBy version.CreationDate version.Comment version.Deleted)
         |> Map.toList |> List.map snd
-    LockState = masterPDB.LockState |> Option.map (fun lock -> { Locker = lock.Locker; Date = lock.Date })
+    LockState = masterPDB.LockState
 }
 
 let fromDTO (dto:MasterPDBState) : Domain.MasterPDB.MasterPDB = { 
