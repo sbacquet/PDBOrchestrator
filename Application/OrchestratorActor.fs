@@ -25,6 +25,14 @@ type Command =
 | RollbackMasterPDB of WithUser<string> // responds with RequestValidation
 | SnapshotMasterPDBVersion of OnInstance<string, int, string> // responds with RequestValidation
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
+| GetPendingChanges // responds with Result<Option<PendingChanges>,string>
+
+type PendingChanges = {
+    Commands : Command list
+    OpenMasterPDBs : (string * DTO.MasterPDB.LockInfo) list
+}
+
+let consPendingChanges commands openMasterPDBs = { Commands = commands |> Seq.toList; OpenMasterPDBs = openMasterPDBs }
 
 type Collaborators = {
     OracleInstanceActors: Map<string, IActorRef<obj>>
@@ -155,6 +163,45 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                         sender <! (requestId, request.Status)
                         logDebugf ctx "Request %s completed => removed from the list" (requestId.ToString())
                         return! loop orchestrator pendingRequests (completedRequests |> Map.remove requestId)
+            
+            | GetPendingChanges ->
+                let pendingChangeCommandFilter = function
+                | GetState
+                | GetInstanceState _
+                | GetMasterPDBState _
+                | SnapshotMasterPDBVersion _
+                | GetRequest _
+                | GetPendingChanges
+                | Synchronize _ -> false
+                | CreateMasterPDB _
+                | PrepareMasterPDBForModification _
+                | CommitMasterPDB _
+                | RollbackMasterPDB _ -> true
+                let pendingChangeCommands = 
+                    pendingRequests 
+                    |> Map.toSeq
+                    |> Seq.map (fun (_, request) -> request.Command)
+                    |> Seq.filter pendingChangeCommandFilter
+                
+                let primaryInstance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
+                let! (primaryInstanceState:OracleInstanceActor.StateResult) = primaryInstance <? OracleInstanceActor.GetState
+                let openMasterPDBsMaybe = 
+                    primaryInstanceState 
+                    |> Result.map (fun state -> 
+                        state.MasterPDBs 
+                        |> List.filter (fun pdb -> pdb.LockState |> Option.isSome)
+                        |> List.map (fun pdb -> pdb.Name, pdb.LockState.Value)
+                       )
+                let result = 
+                    match openMasterPDBsMaybe with
+                    | Ok openMasterPDBs ->
+                        if (openMasterPDBs.IsEmpty && Seq.isEmpty pendingChangeCommands) then    
+                            Ok None
+                        else
+                            Ok (Some (consPendingChanges pendingChangeCommands openMasterPDBs))
+                    | Error error -> Error error
+                ctx.Sender() <! result
+                return! loop orchestrator pendingRequests completedRequests
 
         | :? WithRequestId<MasterPDBCreationResult> as responseToCreateMasterPDB ->
             let (requestId, result) = responseToCreateMasterPDB

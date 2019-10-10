@@ -53,3 +53,6 @@ let rollbackMasterPDB (ctx:APIContext) user pdb : Async<RequestValidation> =
 
 let commitMasterPDB (ctx:APIContext) user pdb comment : Async<RequestValidation> =
     ctx.Orchestrator <? OrchestratorActor.CommitMasterPDB (user, pdb, comment)
+
+let getPendingChanges (ctx:APIContext) : Async<Result<Option<PendingChanges>,string>> =
+    ctx.Orchestrator <? OrchestratorActor.GetPendingChanges

@@ -113,6 +113,7 @@ type FakeOracleAPI() =
         }
         member this.DeletePDB name = async { 
             this.Logger.LogDebug("Deleting PDB {PDB}...", name)
+            do! Async.Sleep 100
             return Ok name 
         }
         member this.ExportPDB _ name = async { 
@@ -125,6 +126,7 @@ type FakeOracleAPI() =
         }
         member this.SnapshotPDB _ _ name = async { 
             this.Logger.LogDebug("Snapshoting PDB {PDB}...", name)
+            do! Async.Sleep 100
             return Ok name 
         }
         member this.PDBHasSnapshots _ = async { 
@@ -375,3 +377,42 @@ let ``API snapshots PDB`` () = test <| fun tck ->
 
     let request = API.snapshotMasterPDBVersion ctx "me" "server1" "test1" 1 "snapshot" |> runQuick
     request |> throwIfRequestNotCompletedOk ctx
+
+[<Fact>]
+let ``API gets no pending changes`` () = test <| fun tck ->
+    let instanceRepo = FakeOracleInstanceRepo allInstances
+    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
+    let ctx = API.consAPIContext tck orchestrator loggerFactory
+    API.snapshotMasterPDBVersion ctx "me" "server1" "test1" 1 "snap1" |> runQuick |> ignore
+    let pendingChangesMaybe = API.getPendingChanges ctx |> runQuick
+    match pendingChangesMaybe with
+    | Ok pendingChanges -> Assert.True(pendingChanges.IsNone)
+    | Error error -> failwith error
+
+[<Fact>]
+let ``API gets pending changes`` () = test <| fun tck ->
+    let instanceRepo = FakeOracleInstanceRepo allInstances
+    let getMasterPDBRepo (instance:OracleInstance) = 
+        match instance.Name with
+        | "server1" -> 
+            let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newLockInfo "lockman" |> Some)
+            FakeMasterPDBRepo (masterPDBMap1 |> Map.add "test3" lockedMasterPDB)
+        | "server2" -> FakeMasterPDBRepo masterPDBMap2
+        | name -> failwithf "Oracle instance %s does not exist" name
+    let instanceRepo = FakeOracleInstanceRepo ([ "server1", { instance1 with MasterPDBs = "test3" :: instance1.MasterPDBs }] |> Map.ofList)
+    let orchestratorState = { OracleInstanceNames = [ "server1" ]; PrimaryInstance = "server1" }
+    let orchestrator = tck |> OrchestratorActor.spawn (fun _ -> fakeOracleAPI) instanceRepo getMasterPDBRepo orchestratorState
+    let ctx = API.consAPIContext tck orchestrator loggerFactory
+    // Enqueue a read-only request
+    API.snapshotMasterPDBVersion ctx "me" "server1" "test1" 1 "snap1" |> runQuick |> ignore
+    // Enqueue a change request
+    API.prepareMasterPDBForModification ctx "me" "test2" 1 |> runQuick |> ignore
+    // At that point, the requests above should still be pending (100 ms long)
+    let pendingChangesMaybe = API.getPendingChanges ctx |> runQuick
+    match pendingChangesMaybe with
+    | Ok pendingChanges -> 
+        let lockedPDBName, lockInfo = pendingChanges.Value.OpenMasterPDBs.Head
+        Assert.Equal("locked", lockedPDBName)
+        Assert.Equal("lockman", lockInfo.Locker)
+        Assert.Equal(1, pendingChanges.Value.Commands.Length)
+    | Error error -> failwith error
