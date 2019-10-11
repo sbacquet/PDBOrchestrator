@@ -33,18 +33,35 @@ module Rest =
                 dnsname
         sprintf "http://%s:%d" dnsName port
 
-    let webApp (apiCtx:API.APIContext) endpoint : HttpFunc -> HttpFunc = 
+    let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc = 
         choose [
             GET >=> choose [
-                route "/hello" >=> HttpHandlers.handleGetHello
+                routef "/request/%O" (HttpHandlers.getRequestStatus apiCtx)
                 routef "/instance/%s/masterpdb/%s" (HttpHandlers.getMasterPDB apiCtx)
                 routef "/instance/%s" (HttpHandlers.getInstance apiCtx)
                 route "/instance" >=> HttpHandlers.getAllInstances apiCtx
-                routef "/request/%O" (HttpHandlers.getRequestStatus apiCtx)
+
+                // Routes for admins
                 route "/pendingchanges" >=> HttpHandlers.getPendingChanges apiCtx
+                route "/read-only-mode" >=> HttpHandlers.isReadOnlyMode apiCtx
             ]
             POST >=> choose [
-                routef "/instance/%s/masterpdb/%s/%i/snapshot/%s" (HttpHandlers.snapshot apiCtx "me" endpoint)
+                // Commit edition
+                routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.commitMasterPDB apiCtx)
+                // Snapshot
+                routef "/instance/%s/masterpdb/%s/%i/snapshot/%s" (HttpHandlers.snapshot apiCtx)
+            ]
+            PUT >=> choose [
+                // Prepare for edition
+                routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.prepareMasterPDBForModification apiCtx)
+                // Routes for admins
+                route "/read-only-mode" >=> HttpHandlers.enterReadOnlyMode apiCtx
+            ]
+            DELETE >=> choose [
+                // Rollback edition
+                routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
+                // Routes for admins
+                route "/read-only-mode" >=> HttpHandlers.exitReadOnlyMode apiCtx
             ]
             RequestErrors.BAD_REQUEST "Unknown HTTP request"
         ]
@@ -53,7 +70,7 @@ module Rest =
         logger.LogError(ex, "An unhandled exception has occurred while executing the request.")
         clearResponse >=> setStatusCode 500 >=> text ex.Message
 
-    let configureApp (apiCtx:API.APIContext) endpoint (app : IApplicationBuilder) =
+    let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
         let env = app.ApplicationServices.GetService<IHostingEnvironment>()
         (match env.IsDevelopment() with
         | true  -> app.UseDeveloperExceptionPage()
@@ -61,7 +78,7 @@ module Rest =
             //.UseHttpsRedirection()
             //.UseCors(configureCors)
             //.UseAuthentication()
-            .UseGiraffe(webApp apiCtx endpoint) |> ignore
+            .UseGiraffe(webApp apiCtx) |> ignore
 
     let configureServices (config : IConfiguration) (services : IServiceCollection) =
         services
@@ -96,14 +113,14 @@ let main args =
 
     use system = Akkling.System.create "pdb-orchestrator-system" akkaConfig
     let orchestratorActor = system |> OrchestratorActor.spawn getOracleAPI oracleInstanceRepo getMasterPDBRepo orchestrator
-    let apiContext = API.consAPIContext system orchestratorActor loggerFactory
     let port = if config.["port"] = null then 59275 else (Int32.Parse(config.["port"]))
+    let apiContext = API.consAPIContext system orchestratorActor loggerFactory (Rest.buildEndpoint config.["dnsname"] port)
 
     WebHostBuilder()
         .UseConfiguration(config)
         .UseKestrel(fun options -> options.Listen(System.Net.IPAddress.IPv6Any, port))
         .UseIISIntegration()
-        .Configure(Action<IApplicationBuilder> (Rest.configureApp apiContext (Rest.buildEndpoint config.["dnsname"] port)))
+        .Configure(Action<IApplicationBuilder> (Rest.configureApp apiContext))
         .ConfigureServices(Rest.configureServices config)
         .Build()
         .Run()

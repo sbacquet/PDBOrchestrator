@@ -10,10 +10,11 @@ type APIContext = {
     Orchestrator : IActorRef<Command>
     Logger : ILogger
     System : IActorRefFactory
+    Endpoint : string
 }
 
-let consAPIContext system orchestratorActor (loggerFactory:ILoggerFactory) =
-    { System = system; Orchestrator = orchestratorActor; Logger = loggerFactory.CreateLogger("API")}
+let consAPIContext system orchestratorActor (loggerFactory:ILoggerFactory) endpoint =
+    { System = system; Orchestrator = orchestratorActor; Logger = loggerFactory.CreateLogger("API"); Endpoint = endpoint }
 
 let getState (ctx:APIContext) : Async<Application.DTO.Orchestrator.OrchestratorState> =
     ctx.Orchestrator <? GetState
@@ -55,4 +56,14 @@ let commitMasterPDB (ctx:APIContext) user pdb comment : Async<RequestValidation>
     ctx.Orchestrator <? OrchestratorActor.CommitMasterPDB (user, pdb, comment)
 
 let getPendingChanges (ctx:APIContext) : Async<Result<Option<PendingChanges>,string>> =
-    ctx.Orchestrator <? OrchestratorActor.GetPendingChanges
+    retype ctx.Orchestrator <? OrchestratorActor.GetPendingChanges
+
+let enterReadOnlyMode (ctx:APIContext) : Async<unit> =
+    retype ctx.Orchestrator <? OrchestratorActor.EnterReadOnlyMode |> Async.Ignore
+
+let exitReadOnlyMode (ctx:APIContext) : Async<unit> =
+    retype ctx.Orchestrator <? OrchestratorActor.ExitReadOnlyMode |> Async.Ignore
+
+let isReadOnlyMode (ctx:APIContext) : Async<bool> =
+    retype ctx.Orchestrator <? OrchestratorActor.IsReadOnlyMode
+

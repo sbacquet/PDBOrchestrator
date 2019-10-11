@@ -25,7 +25,24 @@ type Command =
 | RollbackMasterPDB of WithUser<string> // responds with RequestValidation
 | SnapshotMasterPDBVersion of OnInstance<string, int, string> // responds with RequestValidation
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
+
+type AdminCommand =
 | GetPendingChanges // responds with Result<Option<PendingChanges>,string>
+| EnterReadOnlyMode // responds with bool=true
+| ExitReadOnlyMode // responds with bool=false
+| IsReadOnlyMode // responds with bool
+
+let pendingChangeCommandFilter = function
+| GetState
+| GetInstanceState _
+| GetMasterPDBState _
+| SnapshotMasterPDBVersion _
+| GetRequest _
+| Synchronize _ -> false
+| CreateMasterPDB _
+| PrepareMasterPDBForModification _
+| CommitMasterPDB _
+| RollbackMasterPDB _ -> true
 
 type PendingChanges = {
     Commands : Command list
@@ -60,38 +77,46 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
 
     let collaborators = ctx |> spawnCollaborators getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState
 
-    let rec loop (orchestrator : Orchestrator) (pendingRequests:PendingUserRequestMap<Command>) (completedRequests : CompletedUserRequestMap<RequestStatus>) = actor {
+    let rec loop (orchestrator : Orchestrator) (pendingRequests:PendingUserRequestMap<Command>) (completedRequests : CompletedUserRequestMap<RequestStatus>) (readOnly:bool) = actor {
 
         logDebugf ctx "Number of pending requests : %d" pendingRequests.Count
         logDebugf ctx "Number of completed requests : %d" completedRequests.Count
+
         let! (msg:obj) = ctx.Receive()
 
         match msg with
         | :? Command as command ->
             let sender = ctx.Sender().Retype<RequestValidation>()
+            if (readOnly && pendingChangeCommandFilter command) then
+                sender <! RequestValidation.Invalid [ "this command cannot be accepted in read-only mode" ]
+                return! loop orchestrator pendingRequests completedRequests readOnly
+            let getInstanceName instanceName = if instanceName = "primary" then orchestrator.PrimaryInstance else instanceName
+            
             match command with
             | GetState ->
                 let! state = orchestrator |> DTO.Orchestrator.toDTO (collaborators.OracleInstanceActors |> Map.map (fun _ a -> a.Retype<OracleInstanceActor.Command>()))
                 ctx.Sender() <! state
-                return! loop orchestrator pendingRequests completedRequests
+                return! loop orchestrator pendingRequests completedRequests readOnly
 
             | GetInstanceState instanceName ->
                 let sender = ctx.Sender().Retype<Application.OracleInstanceActor.StateResult>()
+                let instanceName = getInstanceName instanceName
                 if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
                     let instance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[instanceName]
                     instance <<! OracleInstanceActor.GetState
                 else
                     sender <! OracleInstanceActor.stateError (sprintf "cannot find Oracle instance %s" instanceName)
-                return! loop orchestrator pendingRequests completedRequests
+                return! loop orchestrator pendingRequests completedRequests readOnly
 
             | GetMasterPDBState (instanceName, pdb) ->
                 let sender = ctx.Sender().Retype<MasterPDBActor.StateResult>()
+                let instanceName = getInstanceName instanceName
                 if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
                     let instance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[instanceName]
                     instance <<! OracleInstanceActor.GetMasterPDBState pdb
                 else
                     sender <! MasterPDBActor.stateError (sprintf "cannot find Oracle instance %s" instanceName)
-                return! loop orchestrator pendingRequests completedRequests
+                return! loop orchestrator pendingRequests completedRequests readOnly
 
             | Synchronize targetInstance ->
                 if (orchestrator.OracleInstanceNames |> List.contains targetInstance) then
@@ -100,7 +125,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                     retype primaryInstance <<! TransferInternalState target
                 else
                     ctx.Sender() <! stateError (sprintf "cannot find Oracle instance %s" targetInstance)
-                return! loop orchestrator pendingRequests completedRequests
+                return! loop orchestrator pendingRequests completedRequests readOnly
 
             | CreateMasterPDB (user, parameters) ->
                 let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
@@ -108,7 +133,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                 let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.CreateMasterPDB (requestId, parameters)
                 sender <! Valid requestId
-                return! loop orchestrator newPendingRequests completedRequests
+                return! loop orchestrator newPendingRequests completedRequests readOnly
 
             | PrepareMasterPDBForModification (user, pdb, version) ->
                 let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
@@ -116,7 +141,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                 let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.PrepareMasterPDBForModification (requestId, pdb, version, user)
                 sender <! Valid requestId
-                return! loop orchestrator newPendingRequests completedRequests
+                return! loop orchestrator newPendingRequests completedRequests readOnly
 
             | CommitMasterPDB (user, pdb, comment) ->
                 let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
@@ -124,27 +149,28 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                 let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.CommitMasterPDB (requestId, pdb, user, comment)
                 sender <! Valid requestId
-                return! loop orchestrator newPendingRequests completedRequests
+                return! loop orchestrator newPendingRequests completedRequests readOnly
 
             | RollbackMasterPDB (user, pdb) ->
                 let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                 let requestId = newRequestId()
                 let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
-                retype primaryInstance <! Application.OracleInstanceActor.RollbackMasterPDB (requestId, pdb)
+                retype primaryInstance <! Application.OracleInstanceActor.RollbackMasterPDB (requestId, user, pdb)
                 sender <! Valid requestId
-                return! loop orchestrator newPendingRequests completedRequests
+                return! loop orchestrator newPendingRequests completedRequests readOnly
 
             | SnapshotMasterPDBVersion (user, instanceName, masterPDBName, versionNumber, snapshotName) ->
+                let instanceName = getInstanceName instanceName
                 if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
                     let instance = collaborators.OracleInstanceActors.[instanceName]
                     let requestId = newRequestId()
                     let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
                     retype instance <! Application.OracleInstanceActor.SnapshotMasterPDBVersion (requestId, masterPDBName, versionNumber, snapshotName)
                     sender <! Valid requestId
-                    return! loop orchestrator newPendingRequests completedRequests
+                    return! loop orchestrator newPendingRequests completedRequests readOnly
                 else
                     sender <! Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
-                    return! loop orchestrator pendingRequests completedRequests
+                    return! loop orchestrator pendingRequests completedRequests readOnly
 
             | GetRequest requestId ->
                 let sender = ctx.Sender().Retype<WithRequestId<RequestStatus>>()
@@ -152,31 +178,21 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                 match requestMaybe with
                 | Some _ ->
                     sender <! (requestId, Pending)
-                    return! loop orchestrator pendingRequests completedRequests
+                    return! loop orchestrator pendingRequests completedRequests readOnly
                 | None -> 
                     let requestMaybe = completedRequests |> Map.tryFind requestId
                     match requestMaybe with
                     | None -> 
                         sender <! (requestId, NotFound)
-                        return! loop orchestrator pendingRequests completedRequests
+                        return! loop orchestrator pendingRequests completedRequests readOnly
                     | Some request ->
                         sender <! (requestId, request.Status)
                         logDebugf ctx "Request %s completed => removed from the list" (requestId.ToString())
-                        return! loop orchestrator pendingRequests (completedRequests |> Map.remove requestId)
+                        return! loop orchestrator pendingRequests (completedRequests |> Map.remove requestId) readOnly
             
+        | :? AdminCommand as command ->
+            match command with
             | GetPendingChanges ->
-                let pendingChangeCommandFilter = function
-                | GetState
-                | GetInstanceState _
-                | GetMasterPDBState _
-                | SnapshotMasterPDBVersion _
-                | GetRequest _
-                | GetPendingChanges
-                | Synchronize _ -> false
-                | CreateMasterPDB _
-                | PrepareMasterPDBForModification _
-                | CommitMasterPDB _
-                | RollbackMasterPDB _ -> true
                 let pendingChangeCommands = 
                     pendingRequests 
                     |> Map.toSeq
@@ -185,23 +201,33 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                 
                 let primaryInstance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                 let! (primaryInstanceState:OracleInstanceActor.StateResult) = primaryInstance <? OracleInstanceActor.GetState
-                let openMasterPDBsMaybe = 
+                let result = 
                     primaryInstanceState 
                     |> Result.map (fun state -> 
                         state.MasterPDBs 
                         |> List.filter (fun pdb -> pdb.LockState |> Option.isSome)
                         |> List.map (fun pdb -> pdb.Name, pdb.LockState.Value)
                        )
-                let result = 
-                    match openMasterPDBsMaybe with
-                    | Ok openMasterPDBs ->
+                    |> Result.map (fun openMasterPDBs ->
                         if (openMasterPDBs.IsEmpty && Seq.isEmpty pendingChangeCommands) then    
-                            Ok None
+                            None
                         else
-                            Ok (Some (consPendingChanges pendingChangeCommands openMasterPDBs))
-                    | Error error -> Error error
+                            Some <| consPendingChanges pendingChangeCommands openMasterPDBs
+                       )
                 ctx.Sender() <! result
-                return! loop orchestrator pendingRequests completedRequests
+                return! loop orchestrator pendingRequests completedRequests readOnly
+
+            | EnterReadOnlyMode ->
+                ctx.Sender() <! true
+                return! loop orchestrator pendingRequests completedRequests true
+
+            | ExitReadOnlyMode ->
+                ctx.Sender() <! false
+                return! loop orchestrator pendingRequests completedRequests false
+
+            | IsReadOnlyMode ->
+                ctx.Sender() <! readOnly
+                return! loop orchestrator pendingRequests completedRequests readOnly
 
         | :? WithRequestId<MasterPDBCreationResult> as responseToCreateMasterPDB ->
             let (requestId, result) = responseToCreateMasterPDB
@@ -209,7 +235,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
             match requestMaybe with
             | None -> 
                 logErrorf ctx "internal error : request %s not found" (requestId.ToString())
-                return! loop orchestrator pendingRequests completedRequests
+                return! loop orchestrator pendingRequests completedRequests readOnly
             | Some request ->
                 let status = 
                     match result with
@@ -220,7 +246,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                     | MasterPDBCreated pdb ->
                         CompletedOk (sprintf "master PDB %s created successfully" pdb.Name)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
-                return! loop orchestrator newPendingRequests newCompletedRequests
+                return! loop orchestrator newPendingRequests newCompletedRequests readOnly
 
         | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as responseToPrepareMasterPDBForModification ->
             let (requestId, result) = responseToPrepareMasterPDBForModification
@@ -228,7 +254,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
             match requestMaybe with
             | None -> 
                 logErrorf ctx "internal error : request %s not found" (requestId.ToString())
-                return! loop orchestrator pendingRequests completedRequests
+                return! loop orchestrator pendingRequests completedRequests readOnly
             | Some request ->
                 let status = 
                     match result with
@@ -236,7 +262,7 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                     | MasterPDBActor.Prepared pdb -> CompletedOk (sprintf "master PDB %s prepared successfully for edition" pdb.Name)
                     | MasterPDBActor.PreparationFailure error -> CompletedWithError (sprintf "error while preparing master PDB for edition : %s" error)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
-                return! loop orchestrator newPendingRequests newCompletedRequests
+                return! loop orchestrator newPendingRequests newCompletedRequests readOnly
 
         | :? WithRequestId<MasterPDBActor.EditionDone> as responseToMasterPDBEdition ->
             let (requestId, result) = responseToMasterPDBEdition
@@ -244,14 +270,14 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
             match requestMaybe with
             | None -> 
                 logErrorf ctx "internal error : request %s not found" (requestId.ToString())
-                return! loop orchestrator pendingRequests completedRequests
+                return! loop orchestrator pendingRequests completedRequests readOnly
             | Some request ->
                 let status = 
                     match result with
                     | Ok pdb -> CompletedOk (sprintf "master PDB %s unlocked successfully" pdb.Name)
                     | Error error -> CompletedWithError (sprintf "error while unlocking master PDB : %s" error)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
-                return! loop orchestrator newPendingRequests newCompletedRequests
+                return! loop orchestrator newPendingRequests newCompletedRequests readOnly
 
         | :? WithRequestId<MasterPDBActor.SnapshotResult> as responseToSnapshotMasterPDBVersion ->
             let (requestId, result) = responseToSnapshotMasterPDBVersion
@@ -259,18 +285,18 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
             match requestMaybe with
             | None -> 
                 logErrorf ctx "internal error : request %s not found" (requestId.ToString())
-                return! loop orchestrator pendingRequests completedRequests
+                return! loop orchestrator pendingRequests completedRequests readOnly
             | Some request ->
                 let status = 
                     match result with
                     | Ok (pdb, versionNumber, snapshotName) -> CompletedOk (sprintf "version %d of master PDB %s snapshoted successfully with name %s" versionNumber pdb snapshotName)
                     | Error error -> CompletedWithError (sprintf "error while snapshoting master PDB version : %s" error)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
-                return! loop orchestrator newPendingRequests newCompletedRequests
+                return! loop orchestrator newPendingRequests newCompletedRequests readOnly
 
-        | _ -> return! loop orchestrator pendingRequests completedRequests
+        | _ -> return! loop orchestrator pendingRequests completedRequests readOnly
     }
-    loop initialState Map.empty Map.empty
+    loop initialState Map.empty Map.empty false
 
 let [<Literal>]cOrchestratorActorName = "Orchestrator"
 

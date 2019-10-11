@@ -10,11 +10,15 @@ open Chiron.Serialization.Json
 open Chiron.Formatting
 open Microsoft.Net.Http.Headers
 
-let handleGetHello next (ctx:HttpContext) = task {
-    //let! body = ctx.ReadBodyFromRequestAsync()
-    ctx.GetLogger().Log(LogLevel.Information, "Hello request received with trace={Trace}", ctx.TraceIdentifier)
-    return! text "hello" next ctx
-}
+let withUser f : HttpHandler =
+    fun next (ctx:HttpContext) -> task {
+        let user = 
+            if (ctx.User.Identity.Name = null) then None else Some ctx.User.Identity.Name
+            |> Option.orElse (ctx.TryGetRequestHeader "user")
+        match user with
+        | Some user -> return! f user next ctx
+        | None -> return! RequestErrors.BAD_REQUEST "user cannot be determined" next ctx
+    }
 
 let getAllInstances (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx
@@ -63,15 +67,19 @@ let getRequestStatus (apiCtx:API.APIContext) (requestId:PendingRequest.RequestId
 
 open Domain.Common.Validation
 
-let snapshot (apiCtx:API.APIContext) (user:string) endpoint (instance:string, masterPDB:string, version:int, name:string) next (ctx:HttpContext) = task {
-    let! request = API.snapshotMasterPDBVersion apiCtx user instance masterPDB version name
-    match request with
+let returnRequest endpoint requestValidation : HttpHandler =
+    match requestValidation with
     | Valid reqId -> 
-        ctx.SetHttpHeader HeaderNames.Location (sprintf "%s/request/%O" endpoint reqId) 
-        return! Successful.accepted (text "Request accepted. Please poll the resource in response header's Location.") next ctx
+        setHttpHeader HeaderNames.Location (sprintf "%s/request/%O" endpoint reqId) 
+        >=> Successful.accepted (text "Request accepted. Please poll the resource in response header's Location.")
     | Invalid errors -> 
-        return! RequestErrors.badRequest (text (System.String.Join("; ", errors))) next ctx
-}
+        RequestErrors.badRequest (text (System.String.Join("; ", errors)))
+
+let snapshot (apiCtx:API.APIContext) (instance:string, masterPDB:string, version:int, name:string) =
+    withUser (fun user next ctx -> task {
+        let! requestValidation = API.snapshotMasterPDBVersion apiCtx user instance masterPDB version name
+        return! returnRequest apiCtx.Endpoint requestValidation next ctx
+    })
 
 let getPendingChanges (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
     let! pendingChangesMaybe = API.getPendingChanges apiCtx
@@ -93,5 +101,47 @@ let getPendingChanges (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
                 |> Encode.optional (Encode.listWith encodeOpenMasterPDB) "lockedPDBs" (if (pendingChanges.OpenMasterPDBs.IsEmpty) then None else Some x.OpenMasterPDBs)
             )
             return! text (pendingChanges |> serializeWith encodePendingChanges JsonFormattingOptions.Pretty) next ctx
-            //return! json pendingChanges next ctx
 }
+
+let enterReadOnlyMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
+    do! API.enterReadOnlyMode apiCtx
+    return! text "the system is now read-only" next ctx
+}
+
+let exitReadOnlyMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
+    do! API.exitReadOnlyMode apiCtx
+    return! text "the system is now read-write" next ctx
+}
+
+let isReadOnlyMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
+    let! readOnly = API.isReadOnlyMode apiCtx
+    return! text (sprintf "the system is %s" (if readOnly then "read-only" else "read-write")) next ctx
+}
+
+let prepareMasterPDBForModification (apiCtx:API.APIContext) pdb = withUser (fun user next ctx -> task {
+    let version = ctx.TryGetQueryStringValue "version"
+    match version with
+    | Some version -> 
+        let (ok, version) = System.Int32.TryParse version
+        if ok then
+            let! requestValidation = API.prepareMasterPDBForModification apiCtx user pdb version
+            return! returnRequest apiCtx.Endpoint requestValidation next ctx
+        else 
+            return! RequestErrors.BAD_REQUEST "the current version must an integer" next ctx
+    | None ->
+        return! RequestErrors.BAD_REQUEST "the current version must be provided" next ctx
+})
+
+let commitMasterPDB (apiCtx:API.APIContext) pdb = withUser (fun user next ctx -> task {
+    let! comment = ctx.ReadBodyFromRequestAsync()
+    if (comment <> "") then
+        let! requestValidation = API.commitMasterPDB apiCtx user pdb comment
+        return! returnRequest apiCtx.Endpoint requestValidation next ctx
+    else
+        return! RequestErrors.BAD_REQUEST "a comment must be provided" next ctx
+})
+
+let rollbackMasterPDB (apiCtx:API.APIContext) pdb = withUser (fun user next ctx -> task {
+    let! requestValidation = API.rollbackMasterPDB apiCtx user pdb
+    return! returnRequest apiCtx.Endpoint requestValidation next ctx
+})
