@@ -7,6 +7,7 @@ open Compensable
 open Application.Oracle
 open Microsoft.Extensions.Logging
 open Domain.Common
+open System.Globalization
 
 type PDBCompensableAction = CompensableAction<string, Oracle.ManagedDataAccess.Client.OracleException>
 type PDBCompensableAsyncAction = CompensableAsyncAction<string, Oracle.ManagedDataAccess.Client.OracleException>
@@ -263,6 +264,18 @@ let getPDBOnServer connAsDBA (name:string) = async {
         return Error ex
 }
 
+let getPDBOnServerLike connAsDBA (like:string) = async {
+    try
+        let! result = 
+            Sql.asyncExecReader 
+                connAsDBA 
+                (sprintf "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs where upper(Name) like '%s'" (like.ToUpper()))
+                [] 
+        return result |> Sql.map (Sql.asRecord<RawOraclePDB> "") |> Seq.toList |> Ok
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return Error ex
+}
+
 let PDBExistsOnServer connAsDBA (name:string) = async {
     try
         let! result = 
@@ -281,6 +294,21 @@ let pdbSnapshots connAsDBA (name:string) = async {
             Sql.asyncExecReader
                 connAsDBA
                 (sprintf @"select name from v$pdbs where SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where upper(name)='%s')" (name.ToUpper()))
+                []
+        return result |> Sql.map (fun d -> (string)d?name.Value) |> List.ofSeq |> Ok
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return Error ex
+}
+
+let pdbSnapshotsOlderThan connAsDBA (olderThan:System.TimeSpan) (name:string) = async {
+    try
+        let! result = 
+            Sql.asyncExecReader
+                connAsDBA
+                (sprintf 
+                    @"select name from v$pdbs where creation_time <= SYSDATE - %s and SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where upper(name)='%s')" 
+                    (olderThan.TotalDays.ToString("F15", CultureInfo.InvariantCulture.NumberFormat))
+                    (name.ToUpper()))
                 []
         return result |> Sql.map (fun d -> (string)d?name.Value) |> List.ofSeq |> Ok
     with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
@@ -307,12 +335,12 @@ let toOraclePDBResultAsync result = async {
     return toOraclePDBResult r
 }
 
-let deletePDBWithSnapshots (logger:ILogger) connAsDBA (name:string) = async {
+let deletePDBWithSnapshots (logger:ILogger) connAsDBA (olderThan:System.TimeSpan) (name:string) = async {
     logger.LogDebug("Deleting PDB {PDB} and dependant snapshots", name)
-    let! snapshotsMaybe = pdbSnapshots connAsDBA name
+    let! snapshotsMaybe = pdbSnapshotsOlderThan connAsDBA olderThan name
     match snapshotsMaybe with
     | Ok snapshots -> 
-        let! r = snapshots |> List.map (fun snapshot -> deletePDB logger connAsDBA true snapshot) |> Async.Parallel
+        let! r = snapshots |> List.map (fun snapshot -> deletePDB logger connAsDBA true snapshot) |> Async.Sequential
         let errors = r |> List.ofArray |> List.choose toErrorOption
         if (errors.Length > 0) then 
             return Error (exn (sprintf "some snapshots could not be deleted : %s" (System.String.Join("; ", errors))))
@@ -358,6 +386,6 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
         member this.PDBSnapshots name =
             pdbSnapshots connAsDBA name
             |> toOraclePDBResultAsync
-        member this.DeletePDBWithSnapshots name =
-            deletePDBWithSnapshots this.Logger connAsDBA name
+        member this.DeletePDBWithSnapshots (olderThan:System.TimeSpan) name =
+            deletePDBWithSnapshots this.Logger connAsDBA olderThan name
         

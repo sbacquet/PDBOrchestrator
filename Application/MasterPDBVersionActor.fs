@@ -68,9 +68,6 @@ let masterPDBVersionActorBody
                 return! loop ()
 
             | HaraKiri ->
-                let! ((_, result):WithRequestId<OraclePDBResult>) = 
-                    oracleLongTaskExecutor <? DeletePDBWithSnapshots (System.Guid.Empty, snapshotSourceName)
-                result |> Result.mapError (fun error -> ctx.Log.Value.Error(error.ToString())) |> ignore
                 retype ctx.Self <! Akka.Actor.PoisonPill.Instance
                 return! loop ()
 
