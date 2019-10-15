@@ -10,27 +10,20 @@ open Application.OracleDiskIntensiveActor
 open Application.Oracle
 open Application.Common
 open System
+open Application.GlobalParameters
 
 type Command =
 | Snapshot of WithRequestId<string, string, string, string> // responds with WithRequestId<OraclePDBResult>
-| HaraKiri
+| CollectGarbage // no response
+| HaraKiri // no response
 
 type CommandToParent =
 | KillVersion of int
 
-let getSnapshotSourceName (pdb:string) (masterPDBVersion:MasterPDBVersion) = sprintf "%s_V%03d" (pdb.ToUpper()) masterPDBVersion.Number
-
-#if DEBUG
-let cDefaultTimeout = -1
-let cImportTimeout = -1
-let cInactivityTimeout = TimeSpan.FromSeconds(15.)
-#else
-let cDefaultTimeout = 5000
-let cImportTimeout = int(Math.Round(TimeSpan.FromMinutes(20.).TotalMilliseconds)) // TODO config
-let cInactivityTimeout = TimeSpan.FromHours(12.) // TODO config
-#endif
+let getSnapshotSourceName (pdb:string) (masterPDBVersion:MasterPDBVersion) (suffix:string) = sprintf "%s_V%03d_%s" (pdb.ToUpper()) masterPDBVersion.Number (suffix.ToUpper())
 
 let masterPDBVersionActorBody 
+    (parameters:GlobalParameters)
     (oracleAPI:#Application.Oracle.IOracleAPI) 
     (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 
     (oracleDiskIntensiveTaskExecutor:IActorRef<OracleDiskIntensiveActor.Command>) 
@@ -38,7 +31,7 @@ let masterPDBVersionActorBody
     (masterPDBVersion:MasterPDBVersion) 
     (ctx : Actor<_>) =
 
-    let snapshotSourceName = getSnapshotSourceName masterPDBName masterPDBVersion
+    let snapshotSourceName = getSnapshotSourceName masterPDBName masterPDBVersion parameters.ServerInstanceName
 
     let rec loop () = actor {
 
@@ -49,13 +42,13 @@ let masterPDBVersionActorBody
         | :? Command as command ->
             match command with
             | Snapshot (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotName, snapshotDest) -> 
-                let snapshotSourceExistsMaybe = oracleAPI.PDBExists snapshotSourceName |> runWithinElseDefault cDefaultTimeout (Error (exn "timeout reached"))
+                let snapshotSourceExistsMaybe = oracleAPI.PDBExists snapshotSourceName |> runWithinElseDefault parameters.ShortTimeout (Error (exn "timeout reached"))
                 match snapshotSourceExistsMaybe with
                 | Ok snapshotSourceExists ->
                     if (not snapshotSourceExists) then
                         let importResult:WithRequestId<OraclePDBResult> = 
                             oracleDiskIntensiveTaskExecutor <? ImportPDB (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotSourceName)
-                            |> runWithin cImportTimeout id (fun () -> (requestId, Error (exn (sprintf "timeout reached while importing %s" snapshotSourceName))))
+                            |> runWithin parameters.VeryLongTimeout id (fun () -> (requestId, Error (exn (sprintf "timeout reached while importing %s" snapshotSourceName))))
                         match snd importResult with
                         | Error _ -> 
                             sender <! importResult
@@ -67,27 +60,45 @@ let masterPDBVersionActorBody
                 | Error ex -> sender <! (requestId, Error ex)
                 return! loop ()
 
-            | HaraKiri ->
-                retype ctx.Self <! Akka.Actor.PoisonPill.Instance
+            | CollectGarbage ->
+                ctx.Log.Value.Info("Collecting garbage of PDB {pdb} version {pdbversion}", masterPDBName, masterPDBVersion.Number)
+                let like = getSnapshotSourceName masterPDBName masterPDBVersion "%"
+                let! thisVersionSourcePDBs = oracleAPI.GetPDBNamesLike like
+                match thisVersionSourcePDBs with
+                | Ok pdbs -> 
+                    let results = 
+                        pdbs |> List.map (fun pdb -> 
+                            let r = 
+                                oracleAPI.DeletePDBWithSnapshots parameters.GarbageCollectionDelay pdb 
+                                |> runWithinElseDefault 
+                                    parameters.LongTimeout 
+                                    (sprintf "timeout reached while deleting %s and its snapshots" masterPDBName |> exn |> Error)
+                            (pdb, r) 
+                        )
+                    results |> List.iter (fun (_, result) -> result |> Result.mapError (fun error -> ctx.Log.Value.Error(error.ToString())) |> ignore)
+                    let isDeleted = results |> List.exists (fun (pdb, result) -> pdb.ToUpper() = snapshotSourceName.ToUpper() && match result with | Ok r -> r | Error _ -> false)
+                    if isDeleted then retype (ctx.Parent()) <! KillVersion masterPDBVersion.Number
+                | Error error -> 
+                    ctx.Log.Value.Error(error.ToString())
+                ctx.Log.Value.Info("Collected garbage of PDB {pdb} version {pdbversion}", masterPDBName, masterPDBVersion.Number)
                 return! loop ()
 
-        | :? Akka.Actor.ReceiveTimeout ->
-            ctx.SetReceiveTimeout None
-            ctx.Log.Value.Warning("Version {pdbversion} of {pdb} is not used for {0} => kill the actor", masterPDBVersion.Number, masterPDBName, cInactivityTimeout)
-            retype (ctx.Parent()) <! KillVersion masterPDBVersion.Number
-            return! loop ()
+            | HaraKiri ->
+                ctx.Log.Value.Info("Actor for version {pdbversion} of {pdb} is stopped", masterPDBVersion.Number, masterPDBName)
+                retype ctx.Self <! Akka.Actor.PoisonPill.Instance
+                return! loop ()
 
         | _ -> return! loop ()
     }
 
-    ctx.SetReceiveTimeout (Some cInactivityTimeout)
     loop ()
 
-let spawn (oracleAPI:#Application.Oracle.IOracleAPI) longTaskExecutor oracleDiskIntensiveTaskExecutor (masterPDBName:string) (masterPDBVersion:MasterPDBVersion) (actorFactory:IActorRefFactory) =
+let spawn parameters (oracleAPI:#Application.Oracle.IOracleAPI) longTaskExecutor oracleDiskIntensiveTaskExecutor (masterPDBName:string) (masterPDBVersion:MasterPDBVersion) (actorFactory:IActorRefFactory) =
 
     (Akkling.Spawn.spawnAnonymous actorFactory
         <| props (
             masterPDBVersionActorBody 
+                parameters
                 oracleAPI
                 longTaskExecutor 
                 oracleDiskIntensiveTaskExecutor 

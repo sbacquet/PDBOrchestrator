@@ -246,7 +246,7 @@ type RawOraclePDB = {
 
 let getPDBsOnServer connAsDBA = async {
     try
-        let! result = Sql.asyncExecReader connAsDBA "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs" [] 
+        use! result = Sql.asyncExecReader connAsDBA "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs" [] 
         return result |> Sql.map (Sql.asRecord<RawOraclePDB> "") |> Ok
     with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
         return Error ex
@@ -254,7 +254,7 @@ let getPDBsOnServer connAsDBA = async {
 
 let getPDBOnServer connAsDBA (name:string) = async {
     try
-        let! result = 
+        use! result = 
             Sql.asyncExecReader 
                 connAsDBA 
                 (sprintf "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs where upper(Name)='%s'" (name.ToUpper()))
@@ -264,9 +264,22 @@ let getPDBOnServer connAsDBA (name:string) = async {
         return Error ex
 }
 
+let getPDBNamesLike connAsDBA (like:string) = async {
+    try
+        let! result =
+            Sql.asyncExecReader 
+                connAsDBA 
+                (sprintf "select name from v$pdbs where upper(name) like '%s'" (like.ToUpper()))
+                [] 
+        let names : string list = result |> Seq.ofDataReader |> Seq.map (fun dr -> (dr?NAME).Value) |> Seq.toList
+        return Ok names
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return Error ex
+}
+
 let getPDBOnServerLike connAsDBA (like:string) = async {
     try
-        let! result = 
+        use! result = 
             Sql.asyncExecReader 
                 connAsDBA 
                 (sprintf "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs where upper(Name) like '%s'" (like.ToUpper()))
@@ -290,7 +303,7 @@ let PDBExistsOnServer connAsDBA (name:string) = async {
 
 let pdbSnapshots connAsDBA (name:string) = async {
     try
-        let! result = 
+        use! result = 
             Sql.asyncExecReader
                 connAsDBA
                 (sprintf @"select name from v$pdbs where SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where upper(name)='%s')" (name.ToUpper()))
@@ -302,7 +315,7 @@ let pdbSnapshots connAsDBA (name:string) = async {
 
 let pdbSnapshotsOlderThan connAsDBA (olderThan:System.TimeSpan) (name:string) = async {
     try
-        let! result = 
+        use! result = 
             Sql.asyncExecReader
                 connAsDBA
                 (sprintf 
@@ -335,6 +348,17 @@ let toOraclePDBResultAsync result = async {
     return toOraclePDBResult r
 }
 
+// Delete a PDB that can possibly be a snapshot source (check if snapshots first)
+let deleteSourcePDB (logger:ILogger) connAsDBA (name:string) = async {
+    let! hasSnapshotsMaybe = pdbHasSnapshots connAsDBA name
+    match hasSnapshotsMaybe with
+    | Ok hasSnapshots ->
+        match hasSnapshots with
+        | false -> return! deletePDB logger connAsDBA true name |> toOraclePDBResultAsync
+        | true -> return Error (exn "PDB cannot be deleted because open snapshots have been created from it")
+    | Error error -> return Error (upcast error)
+}
+
 let deletePDBWithSnapshots (logger:ILogger) connAsDBA (olderThan:System.TimeSpan) (name:string) = async {
     logger.LogDebug("Deleting PDB {PDB} and dependant snapshots", name)
     let! snapshotsMaybe = pdbSnapshotsOlderThan connAsDBA olderThan name
@@ -345,8 +369,15 @@ let deletePDBWithSnapshots (logger:ILogger) connAsDBA (olderThan:System.TimeSpan
         if (errors.Length > 0) then 
             return Error (exn (sprintf "some snapshots could not be deleted : %s" (System.String.Join("; ", errors))))
         else
-            let! r = deletePDB logger connAsDBA true name
-            return r |> toOraclePDBResult
+            let! hasSnapshotsMaybe = pdbHasSnapshots connAsDBA name
+            match hasSnapshotsMaybe with
+            | Ok hasSnapshots ->
+                if not hasSnapshots then
+                    let! r = deletePDB logger connAsDBA true name
+                    return r |> Result.map (fun _ -> true) |> toOraclePDBResult
+                else
+                    return Ok false
+            | Error error -> return Error (error :> exn)
     | Error error -> return Error (error :> exn)
 }
 
@@ -359,15 +390,8 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
         member this.ClosePDB name =
             closePDB this.Logger connAsDBA name
             |> toOraclePDBResultAsync
-        member this.DeletePDB name = async {
-            let! hasSnapshotsMaybe = pdbHasSnapshots connAsDBA name
-            match hasSnapshotsMaybe with
-            | Ok hasSnapshots ->
-                match hasSnapshots with
-                | false -> return! deletePDB this.Logger connAsDBA true name |> toOraclePDBResultAsync
-                | true -> return Error (exn "PDB cannot be deleted because open snapshots have been created from it")
-            | Error error -> return Error (upcast error)
-        }
+        member this.DeletePDB name =
+            deleteSourcePDB this.Logger connAsDBA name
         member this.ExportPDB manifest name = 
             exportPDB this.Logger connAsDBA manifest name
             |> toOraclePDBResultAsync
@@ -388,4 +412,7 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
             |> toOraclePDBResultAsync
         member this.DeletePDBWithSnapshots (olderThan:System.TimeSpan) name =
             deletePDBWithSnapshots this.Logger connAsDBA olderThan name
+        member this.GetPDBNamesLike like = 
+            getPDBNamesLike connAsDBA like
+            |> toOraclePDBResultAsync
         

@@ -31,6 +31,7 @@ type AdminCommand =
 | EnterReadOnlyMode // responds with bool=true
 | ExitReadOnlyMode // responds with bool=false
 | IsReadOnlyMode // responds with bool
+| CollectGarbage // no response
 
 let pendingChangeCommandFilter = function
 | GetState
@@ -61,21 +62,21 @@ type RequestStatus =
 | CompletedOk of string
 | CompletedWithError of string
 
-let spawnCollaborators getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo state (ctx : Actor<_>) = {
+let spawnCollaborators parameters getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo state (ctx : Actor<_>) = {
     OracleInstanceActors =
         state.OracleInstanceNames 
         |> List.map (fun instanceName -> 
             let instance = oracleInstanceRepo.Get instanceName
-            instanceName, ctx |> OracleInstanceActor.spawn getOracleAPI (getMasterPDBRepo instance) instance
+            instanceName, ctx |> OracleInstanceActor.spawn parameters getOracleAPI (getMasterPDBRepo instance) instance
            )
         |> Map.ofList
 }
 
 let createMasterPDBError error : MasterPDBCreationResult = InvalidRequest [ error ]
 
-let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo initialState (ctx : Actor<_>) =
+let orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo initialState (ctx : Actor<_>) =
 
-    let collaborators = ctx |> spawnCollaborators getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState
+    let collaborators = ctx |> spawnCollaborators parameters getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState
 
     let rec loop (orchestrator : Orchestrator) (pendingRequests:PendingUserRequestMap<Command>) (completedRequests : CompletedUserRequestMap<RequestStatus>) (readOnly:bool) = actor {
 
@@ -229,6 +230,11 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
                 ctx.Sender() <! readOnly
                 return! loop orchestrator pendingRequests completedRequests readOnly
 
+            | CollectGarbage ->
+                collaborators.OracleInstanceActors |> Map.iter (fun _ actor -> retype actor <! OracleInstanceActor.CollectGarbage)
+                ctx.Log.Value.Info("Garbage collection requested")
+                return! loop orchestrator pendingRequests completedRequests readOnly
+
         | :? WithRequestId<MasterPDBCreationResult> as responseToCreateMasterPDB ->
             let (requestId, result) = responseToCreateMasterPDB
             let requestMaybe = pendingRequests |> Map.tryFind requestId
@@ -300,8 +306,8 @@ let orchestratorActorBody getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepos
 
 let [<Literal>]cOrchestratorActorName = "Orchestrator"
 
-let spawn getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo initialState actorFactory =
+let spawn parameters getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo initialState actorFactory =
     let actor = 
         Akkling.Spawn.spawn actorFactory cOrchestratorActorName 
-        <| props (orchestratorActorBody getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState)
+        <| props (orchestratorActorBody parameters getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState)
     actor.Retype<Command>()

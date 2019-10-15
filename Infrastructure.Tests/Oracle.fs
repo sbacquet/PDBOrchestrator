@@ -120,7 +120,8 @@ let ``Delete snapshots older than 15 seconds`` () =
         let! snapshots = oracleAPI.PDBSnapshots "source" |> Async.RunSynchronously
         let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot!") else Ok "# snapshots is 1, good"
         Async.Sleep(1000*(seconds+5)) |> Async.RunSynchronously
-        let! _ = oracleAPI.DeletePDBWithSnapshots (TimeSpan.FromSeconds((float)seconds)) "source" |> Async.RunSynchronously
+        let! deleted = oracleAPI.DeletePDBWithSnapshots (TimeSpan.FromSeconds((float)seconds)) "source" |> Async.RunSynchronously
+        let! _ = if deleted then Ok "deleted properly" else Error (exn "Source not deleted ??!!")
         let! stillExists = oracleAPI.PDBExists "snapshot" |> Async.RunSynchronously
         let! _ = if stillExists then Error (exn "Snapshot not deleted ??!!") else Ok "Snapshot deleted"
         let! hasSnapshots = oracleAPI.PDBHasSnapshots "source" |> Async.RunSynchronously

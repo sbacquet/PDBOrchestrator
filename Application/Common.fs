@@ -2,10 +2,12 @@
 
 open Akkling
 open Akka.Actor
+open System
 
 type ActorName = ActorName of string
 
-let runWithinElseTimeoutException timeout cont = Async.RunSynchronously(cont, timeout)
+let runWithinElseTimeoutException (timeout:System.TimeSpan option) cont = 
+    Async.RunSynchronously(cont, match timeout with | Some t -> (int)t.TotalMilliseconds | None -> -1)
 
 let runWithin timeout ok error cont = 
     try
@@ -18,20 +20,6 @@ let runWithinElseDefault timeout defaultValue cont = runWithin timeout id (fun (
 let runWithinElseError timeout error cont = runWithin timeout Ok (fun () -> Error error) cont
 
 let runWithinElseDefaultError timeout cont = runWithinElseError timeout "operation timed out" cont
-
-let resolveActor (ActorName name) (ctx:Actor<_>) =
-    try
-        let actor = 
-            (select ctx name).ResolveOne(System.TimeSpan.FromSeconds(1.))
-            |> runWithinElseTimeoutException 1100 
-        if actor.Path.Address = Akka.Actor.Address.AllSystems then 
-            Error (sprintf @"unresolvable actor name ""%s""" name) 
-        else 
-            Ok actor
-    with 
-    | _ -> Error (sprintf @"cannot find any actor with name ""%s"" under ""%s""" name ctx.Self.Path.Name)
-
-let resolveSiblingActor (ActorName name) = resolveActor (ActorName (sprintf "../%s" name))
 
 type IRepository<'K, 'T> =
     abstract member Get : 'K -> 'T

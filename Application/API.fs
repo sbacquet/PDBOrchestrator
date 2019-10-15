@@ -67,3 +67,5 @@ let exitReadOnlyMode (ctx:APIContext) : Async<unit> =
 let isReadOnlyMode (ctx:APIContext) : Async<bool> =
     retype ctx.Orchestrator <? OrchestratorActor.IsReadOnlyMode
 
+let collectGarbage (ctx:APIContext) =
+    retype ctx.Orchestrator <! OrchestratorActor.CollectGarbage

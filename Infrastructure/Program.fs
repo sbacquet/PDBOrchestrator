@@ -50,6 +50,9 @@ module Rest =
                 routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.commitMasterPDB apiCtx)
                 // Snapshot
                 routef "/instance/%s/masterpdb/%s/%i/snapshot/%s" (HttpHandlers.snapshot apiCtx)
+
+                // Routes for admins
+                route "/garbagecollection" >=> HttpHandlers.collectGarbage apiCtx
             ]
             PUT >=> choose [
                 // Prepare for edition
@@ -92,7 +95,12 @@ module Rest =
 
 [<EntryPoint>]
 let main args =
-    Serilog.Log.Logger <- LoggerConfiguration().WriteTo.Console().CreateLogger()
+#if DEBUG
+    let logLevel = Events.LogEventLevel.Debug
+#else
+    let logLevel = Events.LogEventLevel.Information
+#endif
+    Serilog.Log.Logger <- LoggerConfiguration().WriteTo.Console().MinimumLevel.Is(logLevel).CreateLogger()
     let akkaConfig = 
         Akkling.Configuration.parse @"
     akka { 
@@ -100,6 +108,17 @@ let main args =
     }"
 
     let config = Rest.buildConfiguration args
+    let parameters = config |> Configuration.configToGlobalParameters
+    let validParameters = 
+        match parameters with
+        | Invalid errors -> 
+            Serilog.Log.Logger.Error("The configuration is invalid : {0}", String.Join("; ", errors))
+#if DEBUG
+            Console.WriteLine("Press a key to exit...")
+            Console.ReadKey() |> ignore
+#endif
+            exit 1
+        | Valid parameters -> parameters
 
     let rootFolder = config.GetValue("root", System.Environment.CurrentDirectory)
     let orchestratorName = "orchestrator"
@@ -112,7 +131,7 @@ let main args =
     let orchestrator = orchestratorRepo.Get orchestratorName
 
     use system = Akkling.System.create "pdb-orchestrator-system" akkaConfig
-    let orchestratorActor = system |> OrchestratorActor.spawn getOracleAPI oracleInstanceRepo getMasterPDBRepo orchestrator
+    let orchestratorActor = system |> OrchestratorActor.spawn validParameters getOracleAPI oracleInstanceRepo getMasterPDBRepo orchestrator
     let port = if config.["port"] = null then 59275 else (Int32.Parse(config.["port"]))
     let apiContext = API.consAPIContext system orchestratorActor loggerFactory (Rest.buildEndpoint config.["dnsname"] port)
 

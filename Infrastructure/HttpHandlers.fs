@@ -145,3 +145,8 @@ let rollbackMasterPDB (apiCtx:API.APIContext) pdb = withUser (fun user next ctx 
     let! requestValidation = API.rollbackMasterPDB apiCtx user pdb
     return! returnRequest apiCtx.Endpoint requestValidation next ctx
 })
+
+let collectGarbage (apiCtx:API.APIContext) = withUser (fun user next ctx -> task {
+    API.collectGarbage apiCtx
+    return! text "Garbage collecting initiated" next ctx
+})

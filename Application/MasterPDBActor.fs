@@ -7,6 +7,7 @@ open Application.PendingRequest
 open Application.Oracle
 open Akka.Actor
 open Domain.MasterPDBVersion
+open Application.GlobalParameters
 
 type Command =
 | GetState // responds with StateResult
@@ -16,6 +17,7 @@ type Command =
 | Commit of WithRequestId<string, string> // responds with WithRequestId<EditionDone>
 | Rollback of WithRequestId<string> // responds with WithRequestId<EditionDone>
 | SnapshotVersion of WithRequestId<int, string> // responds with WithRequest<SnapshotResult>
+| CollectGarbage // no response
 
 type PrepareForModificationResult = 
 | Locked of MasterPDB
@@ -37,13 +39,14 @@ type Collaborators = {
     OracleDiskIntensiveTaskExecutor : IActorRef<OracleDiskIntensiveActor.Command>
 }
 
-let getOrSpawnVersionActor (masterPDBName:string) (version:MasterPDBVersion) collaborators ctx =
+let getOrSpawnVersionActor parameters (masterPDBName:string) (version:MasterPDBVersion) collaborators ctx =
     let versionActorMaybe = collaborators.MasterPDBVersionActors |> Map.tryFind version.Number
     match versionActorMaybe with
     | Some versionActor -> collaborators, versionActor
     | None -> 
         let versionActor = 
             ctx |> MasterPDBVersionActor.spawn 
+                parameters
                 collaborators.OracleAPI
                 collaborators.OracleLongTaskExecutor
                 collaborators.OracleDiskIntensiveTaskExecutor
@@ -53,7 +56,7 @@ let getOrSpawnVersionActor (masterPDBName:string) (version:MasterPDBVersion) col
         { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Add(version.Number, versionActor) }, 
         versionActor
 
-let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor (initialMasterPDB : Domain.MasterPDB.MasterPDB) (ctx : Actor<_>) =
+let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleInstance) oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor (initialMasterPDB : Domain.MasterPDB.MasterPDB) (ctx : Actor<_>) =
 
     let rec loop (masterPDB:MasterPDB) (requests:RequestMap<Command>) collaborators = actor {
 
@@ -135,10 +138,37 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                     sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name))
                     return! loop masterPDB requests collaborators
                 | Some version -> 
-                    let newCollabs, versionActor = getOrSpawnVersionActor masterPDB.Name version collaborators ctx
+                    let newCollabs, versionActor = getOrSpawnVersionActor parameters masterPDB.Name version collaborators ctx
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
                     versionActor <! MasterPDBVersionActor.Snapshot (requestId, (manifestPath versionNumber), instance.SnapshotSourcePDBDestPath, snapshotName, instance.SnapshotPDBDestPath)
                     return! loop masterPDB newRequests newCollabs
+
+            | CollectGarbage ->
+                let! sourceVersionPDBsMaybe = collaborators.OracleAPI.GetPDBNamesLike (sprintf "%s_V%%_%%" masterPDB.Name)
+                match sourceVersionPDBsMaybe with
+                | Ok sourceVersionPDBs -> 
+                    let regex = System.Text.RegularExpressions.Regex((sprintf "^%s_V([\\d]+)_.+$" masterPDB.Name))
+                    let garbageVersion collabs sourceVersionPDB = 
+                        let ok, version = System.Int32.TryParse(regex.Replace(sourceVersionPDB, "$1"))
+                        if ok then 
+                            let versionPDBMaybe = masterPDB.Versions |> Map.tryFind version
+                            match versionPDBMaybe with
+                            | Some versionPDB -> 
+                                let newCollabs, versionActor = getOrSpawnVersionActor parameters masterPDB.Name versionPDB collabs ctx
+                                versionActor <! MasterPDBVersionActor.CollectGarbage
+                                newCollabs
+                            | None -> 
+                                ctx.Log.Value.Error("Cannot garbage PDB {0} because it does not correspond to a PDB version of {pdb}", sourceVersionPDB, masterPDB.Name)
+                                collabs
+                        else
+                            ctx.Log.Value.Error("PDB {0} has not a valid PDB version name", sourceVersionPDB)
+                            collabs
+                    let newCollabs = sourceVersionPDBs |> List.fold garbageVersion collaborators
+                    ctx.Log.Value.Info("Garbage collection of PDB {pdb} requested", masterPDB.Name)
+                    return! loop masterPDB requests newCollabs
+                | Error error ->
+                    ctx.Log.Value.Error("Unexpected error while garbaging {pdb} : {0}", masterPDB.Name, error)
+                    return! loop masterPDB requests collaborators
 
         | :? MasterPDBVersionActor.CommandToParent as commandToParent->
             match commandToParent with
@@ -146,7 +176,6 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
                 let versionActorMaybe = collaborators.MasterPDBVersionActors |> Map.tryFind version
                 match versionActorMaybe with
                 | Some versionActor -> 
-                    System.Diagnostics.Debug.Assert((versionActor = ctx.Sender().Retype<MasterPDBVersionActor.Command>()))
                     versionActor <! MasterPDBVersionActor.HaraKiri
                     let newCollabs = { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Remove(version) }
                     return! loop masterPDB requests newCollabs
@@ -231,13 +260,14 @@ let masterPDBActorBody oracleAPI (instance:OracleInstance) oracleLongTaskExecuto
 
 let masterPDBActorName (masterPDB:string) = Common.ActorName (sprintf "MasterPDB='%s'" (masterPDB.ToUpper() |> System.Uri.EscapeDataString))
 
-let spawn oracleAPI (instance:OracleInstance) (longTaskExecutor:IActorRef<Application.OracleLongTaskExecutor.Command>) (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>) (masterPDB : Domain.MasterPDB.MasterPDB) (actorFactory:IActorRefFactory) =
+let spawn parameters oracleAPI (instance:OracleInstance) (longTaskExecutor:IActorRef<Application.OracleLongTaskExecutor.Command>) (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>) (masterPDB : Domain.MasterPDB.MasterPDB) (actorFactory:IActorRefFactory) =
     
     let (Common.ActorName actorName) = masterPDBActorName masterPDB.Name
     
     Akkling.Spawn.spawn actorFactory actorName 
         <| props (
             masterPDBActorBody 
+                parameters
                 oracleAPI
                 instance 
                 longTaskExecutor 
