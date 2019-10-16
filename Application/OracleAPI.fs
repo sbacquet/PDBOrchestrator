@@ -4,6 +4,8 @@ open Domain.Common.Result
 
 type OraclePDBResult = Exceptional<string>
 
+type OraclePDBResultWithReqId = Application.PendingRequest.WithRequestId<OraclePDBResult>
+
 type IOracleAPI =
     //inherit System.IDisposable
     abstract member NewPDBFromDump : adminUserName:string -> adminUserPassword:string -> dest:string -> dumpPath:string -> schemas:string list -> targetSchemas:(string * string) list -> directory:string -> manifest:string -> name:string -> Async<OraclePDBResult>

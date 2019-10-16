@@ -7,21 +7,25 @@ open Akka.Routing
 open Application.GlobalParameters
 
 type Command =
-| ImportPDB of WithRequestId<string, string, string>
+| ImportPDB of WithOptionalRequestId<string, string, string>
 
 let oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
     let stopWatch = System.Diagnostics.Stopwatch()
 
     let rec loop () = actor {
+
         let! n = ctx.Receive()
+
         match n with
         | ImportPDB (requestId, manifest, dest, name) -> 
             stopWatch.Restart()
             let! result = oracleAPI.ImportPDB manifest dest name
             stopWatch.Stop()
             result |> Result.map (fun pdb -> ctx.Log.Value.Info("PDB {PDB} imported in {0} s", pdb, stopWatch.Elapsed.TotalSeconds)) |> ignore
-            ctx.Sender() <! (requestId, result)
+            match requestId with
+            | Some reqId -> ctx.Sender() <! (reqId, result)
+            | None -> ctx.Sender() <! result
             return! loop ()
     }
     loop ()

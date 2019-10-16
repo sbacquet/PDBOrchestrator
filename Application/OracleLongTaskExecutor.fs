@@ -18,11 +18,11 @@ type CreatePDBFromDumpParams = {
 }
 
 type Command =
-| CreatePDBFromDump of WithRequestId<CreatePDBFromDumpParams>
-| ClosePDB of WithRequestId<string>
-| SnapshotPDB of WithRequestId<string, string, string>
-| ExportPDB of WithRequestId<string, string>
-| DeletePDB of WithRequestId<string>
+| CreatePDBFromDump of WithOptionalRequestId<CreatePDBFromDumpParams> // responds with OraclePDBResultWithReqId
+| ClosePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
+| SnapshotPDB of WithOptionalRequestId<string, string, string> // responds with OraclePDBResultWithReqId
+| ExportPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
+| DeletePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
 
 let newManifestName (pdb:string) version =
     sprintf "%s_V%03d.XML" (pdb.ToUpper()) version
@@ -32,31 +32,47 @@ let oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
     let stopWatch = System.Diagnostics.Stopwatch()
 
     let rec loop () = actor {
+
         let! n = ctx.Receive()
+
         match n with
         | CreatePDBFromDump (requestId, parameters) -> 
             let! result = oracleAPI.NewPDBFromDump parameters.AdminUserName parameters.AdminUserPassword parameters.Destination parameters.DumpPath parameters.Schemas parameters.TargetSchemas parameters.Directory (newManifestName parameters.Name 1) parameters.Name
-            ctx.Sender() <! (requestId, result)
+            match requestId with
+            | Some reqId -> ctx.Sender() <! (reqId, result)
+            | None -> ctx.Sender() <! result
             return! loop ()
+
         | ClosePDB (requestId, name) -> 
             let! result = oracleAPI.ClosePDB name
-            ctx.Sender() <! (requestId, result)
+            match requestId with
+            | Some reqId -> ctx.Sender() <! (reqId, result)
+            | None -> ctx.Sender() <! result
             return! loop ()
+
         | SnapshotPDB (requestId, from, dest, name) -> 
             stopWatch.Restart()
             let! result = oracleAPI.SnapshotPDB from dest name
             stopWatch.Stop()
             result |> Result.map (fun snap -> ctx.Log.Value.Info("Snapshot {snapshot} created in {0} s", snap, stopWatch.Elapsed.TotalSeconds)) |> ignore
             let elapsed = stopWatch.Elapsed
-            ctx.Sender() <! (requestId, result)
+            match requestId with
+            | Some reqId -> ctx.Sender() <! (reqId, result)
+            | None -> ctx.Sender() <! result
             return! loop ()
+
         | ExportPDB (requestId, manifest, name) -> 
             let! result = oracleAPI.ExportPDB manifest name
-            ctx.Sender() <! (requestId, result)
+            match requestId with
+            | Some reqId -> ctx.Sender() <! (reqId, result)
+            | None -> ctx.Sender() <! result
             return! loop ()
+
         | DeletePDB (requestId, name) -> 
             let! result = oracleAPI.DeletePDB name
-            ctx.Sender() <! (requestId, result)
+            match requestId with
+            | Some reqId -> ctx.Sender() <! (reqId, result)
+            | None -> ctx.Sender() <! result
             return! loop ()
     }
     loop ()

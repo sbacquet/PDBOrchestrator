@@ -245,7 +245,7 @@ let oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (initialM
 
     let rec loop collaborators (instance : OracleInstance) (requests : RequestMap<Command>) (masterPDBRepo:IMasterPDBRepository) = actor {
 
-        logDebugf ctx "Number of pending requests : %d" requests.Count
+        ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
         let! msg = ctx.Receive()
 
         match msg with
@@ -301,7 +301,7 @@ let oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (initialM
                         Directory = instance.OracleDirectoryForDumps
                     }
                     let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                    collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (requestId, parameters2)
+                    collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (Some requestId, parameters2)
                     return! loop collaborators instance newRequests masterPDBRepo
                 | Invalid errors -> 
                     sender <! (requestId, InvalidRequest errors)
@@ -356,7 +356,7 @@ let oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (initialM
                 return! loop collaborators instance requests masterPDBRepo
 
         // Callback from Oracle executor
-        | :? WithRequestId<OraclePDBResult> as requestResponse ->
+        | :? OraclePDBResultWithReqId as requestResponse ->
             let (requestId, result) = requestResponse
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
             match requestMaybe with

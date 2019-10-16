@@ -90,7 +90,7 @@ let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleI
                 match newMasterPDBMaybe with
                 | Ok newMasterPDB -> 
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (requestId, (manifestPath version), instance.MasterPDBDestPath, masterPDB.Name)
+                    oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestPath version), instance.MasterPDBDestPath, masterPDB.Name)
                     sender <! (requestId, Locked newMasterPDB)
                     return! loop newMasterPDB newRequests collaborators
                 | Error error -> 
@@ -110,7 +110,7 @@ let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleI
                         return! loop masterPDB requests collaborators
                     else
                         let manifest = manifestPath (getNextAvailableVersion masterPDB)
-                        oracleLongTaskExecutor <! OracleLongTaskExecutor.ExportPDB (requestId, manifest, masterPDB.Name)
+                        oracleLongTaskExecutor <! OracleLongTaskExecutor.ExportPDB (Some requestId, manifest, masterPDB.Name)
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
                         return! loop masterPDB newRequests collaborators
 
@@ -127,7 +127,7 @@ let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleI
                         return! loop masterPDB requests collaborators
                     else
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                        oracleLongTaskExecutor <! OracleLongTaskExecutor.DeletePDB (requestId, masterPDB.Name)
+                        oracleLongTaskExecutor <! OracleLongTaskExecutor.DeletePDB (Some requestId, masterPDB.Name)
                         return! loop masterPDB newRequests collaborators
             
             | SnapshotVersion (requestId, versionNumber, snapshotName) ->
@@ -183,7 +183,7 @@ let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleI
                     ctx.Log.Value.Error("cannot find actor for PDB {pdb} version {pdbversion}", masterPDB.Name, version)
                     return! loop masterPDB requests collaborators
 
-        | :? WithRequestId<OraclePDBResult> as requestResponse ->
+        | :? OraclePDBResultWithReqId as requestResponse ->
 
             let (requestId, result) = requestResponse
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
