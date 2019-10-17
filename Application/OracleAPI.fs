@@ -1,6 +1,7 @@
 ﻿module Application.Oracle
 
 open Domain.Common.Result
+open Domain.Common.Validation
 
 type OraclePDBResult = Exceptional<string>
 
@@ -17,5 +18,5 @@ type IOracleAPI =
     abstract member PDBHasSnapshots : name:string -> Async<Exceptional<bool>>
     abstract member PDBSnapshots : name:string -> Async<Exceptional<string list>>
     abstract member PDBExists : name:string -> Async<Exceptional<bool>>
-    abstract member DeletePDBWithSnapshots : olderThan:System.TimeSpan -> name:string -> Async<Exceptional<bool>>
+    abstract member DeletePDBWithSnapshots : olderThan:System.TimeSpan -> name:string -> Async<Validation<bool,exn>>
     abstract member GetPDBNamesLike : like:string -> Async<Result<string list, exn>>

@@ -7,7 +7,7 @@ open Application.PendingRequest
 open Domain
 open Domain.OracleInstance
 open Domain.Common.Validation
-open Domain.Common.Result
+open Domain.Common
 open System
 open Application.Common
 open Application.GlobalParameters

@@ -151,7 +151,7 @@ type FakeOracleAPI() =
             return Ok true
         }
         member this.DeletePDBWithSnapshots _ name = async { 
-            return Ok false
+            return Valid false
         }
         member this.PDBSnapshots name = async {
             return Ok []

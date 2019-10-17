@@ -9,49 +9,44 @@ let toErrorOption = function Ok _ -> None | Error error -> Some error
 module Result =
     type ResultBuilder() =
         member __.Return(x) = Ok x
-
         member __.ReturnFrom(m: Result<_, _>) = m
-
         member __.Bind(m, f) = Result.bind f m
         member __.Bind((m, error): (Option<'T> * 'E), f) = m |> ofOption error |> Result.bind f
-
         member __.Zero() = None
 
-        member __.Combine(m, f) = Result.bind f m
+    let apply f x = f |> Result.bind (fun g -> x |> Result.map (fun y -> g y))
 
-        member __.Delay(f: unit -> _) = f
+    let rec traverse f list =
+        let (<*>) = apply
+        let cons head tail = head :: tail
+        let folder head tail = Ok cons <*> (f head) <*> tail
+        Ok [] |> List.foldBack folder list
 
-        member __.Run(f) = f()
-
-        member __.TryWith(m, h) =
-            try __.ReturnFrom(m)
-            with e -> h e
-
-        member __.TryFinally(m, compensation) =
-            try __.ReturnFrom(m)
-            finally compensation()
-
-        member __.Using(res:#System.IDisposable, body) =
-            __.TryFinally(body res, fun () -> match res with null -> () | disp -> disp.Dispose())
-
-        member __.While(guard, f) =
-            if not (guard()) then Ok () else
-            do f() |> ignore
-            __.While(guard, f)
-
-        member __.For(sequence:seq<_>, body) =
-            __.Using(sequence.GetEnumerator(), fun enum -> __.While(enum.MoveNext, __.Delay(fun () -> body enum.Current)))
-
-    let result = new ResultBuilder()
-
-    let apply f x = f |> Result.bind (fun g -> Ok (g x))
+    let sequence x = traverse id x
 
     type Exceptional<'R> = Result<'R, exn>
+
+let result = new Result.ResultBuilder()
 
 module Validation =
     type Validation<'T, 'E> =
     | Valid of 'T
     | Invalid of 'E list
+
+    let bind (f:'a -> Validation<'b,'e>) (vt:Validation<'a,'e>) : Validation<'b,'e> =
+        match vt with
+        | Valid t -> f t
+        | Invalid errors -> Invalid errors
+
+    let map f vt =
+        match vt with
+        | Valid t -> Valid (f t)
+        | Invalid errors -> Invalid errors
+
+    let mapError f vt =
+        match vt with
+        | Valid t -> Valid t
+        | Invalid errors -> Invalid (errors |> List.map f)
 
     let apply (vf: Validation<'T -> 'U, 'E>) (vt:Validation<'T, 'E>) : Validation<'U, 'E> =
         match vf, vt with
@@ -64,49 +59,76 @@ module Validation =
 
     let (<*>) = apply
 
+    let rec traverse f list =
+        let cons head tail = head :: tail
+        let folder head tail = retn cons <*> (f head) <*> tail
+        retn [] |> List.foldBack folder list
+
+    let sequence x = traverse id x
+
+    let ofResult result = 
+        match result with
+        | Ok r -> Valid r
+        | Error error -> Invalid [ error ]
+
+    let toResult validation concatErrors = 
+        match validation with
+        | Valid r -> Ok r
+        | Invalid errors -> Error (concatErrors errors)
+
 module Async =
     let map f xAsync = async {
-        // get the contents of xAsync 
         let! x = xAsync 
-        // apply the function and lift the result
         return f x
     }
 
+    // Sequential traverse/sequence
+#if !Async_Sequential_bug_fixed
     let retn x = async {
-        // lift x to an Async
         return x
     }
 
-    let apply fAsync xAsync = async {
-        // start the two asyncs in parallel
-        let! fChild = Async.StartChild fAsync
-        let! xChild = Async.StartChild xAsync
-
-        // wait for the results
-        let! f = fChild
-        let! x = xChild 
-
-        // apply the function to the results
-        return f x 
-    }
-
     let bind f xAsync = async {
-        // get the contents of xAsync 
         let! x = xAsync 
-        // apply the function but don't lift the result
-        // as f will return an Async
         return! f x
     }
 
+    let apply (f:Async<'a->'b>) (xAsync:Async<'a>) : Async<'b> =
+        f |> bind (fun g -> xAsync |> map g)
+
+    let traverseS f list =
+        let (<*>) = apply
+        let cons head tail = head :: tail
+        let folder head tail = retn cons <*> (f head) <*> tail
+        List.foldBack folder list (retn []) 
+
+    let sequenceS list = traverseS id list
+#else
+    let traverseS f list =
+        list 
+        |> List.map f 
+        |> Async.Sequential
+        |> map Array.toList 
+
+    let sequenceS (list:List<Async<_>>)  = list |> Async.Sequential |> map Array.toList
+#endif
+
+    // Parallel traverse/sequence
+    let traverseP f list =
+        list 
+        |> List.map f 
+        |> Async.Parallel
+        |> map Array.toList 
+
+    let sequenceP (list:List<Async<_>>)  = list |> Async.Parallel |> map Array.toList
+
 module AsyncResult =
-    let map f =  f |> Result.map |> Async.map 
 
-    let retn x = Ok x |> Async.retn
+    let map f =  f |> Result.map |> Async.map
 
-    let apply fAsyncResult xAsyncResult = 
-        fAsyncResult |> Async.bind (fun fResult -> 
-        xAsyncResult |> Async.map (fun xResult -> 
-        Result.apply fResult xResult))
+    let mapError f =  f |> Result.mapError |> Async.map 
+
+    let retn x = async { return Ok x }
 
     let bind f xAsyncResult = async {
         let! xResult = xAsyncResult 
@@ -115,35 +137,98 @@ module AsyncResult =
         | Error err -> return (Error err)
     }
 
+    // Monadic traverse
+    let traverseM f list =
+        let (>>=) x f = bind f x
+        let cons head tail = head :: tail
+        let folder head tail = 
+            f head >>= (fun h -> 
+            tail >>= (fun t ->
+            retn (cons h t) ))
+        List.foldBack folder list (retn []) 
+
+    let sequenceM list = traverseM id list
+
+    // Sequential traverse
+    let traverseS f list =
+        list |> Async.traverseS f |> Async.map Result.sequence
+
+    let sequenceS list = 
+        list |> Async.sequenceS |> Async.map Result.sequence
+
+    // Parallel traverse
+    let traverseP f list =
+        list |> Async.traverseP f |> Async.map Result.sequence
+
+    let sequenceP list = 
+        list |> Async.sequenceP |> Async.map Result.sequence
+
     type AsyncResultBuilder() =
         member __.Return(x) = retn x
         member __.ReturnFrom(m: Async<Result<_, _>>) = m
-        member __.Bind(m, f) = bind f m
-        member __.Zero() = async { return None }
+        member __.ReturnFrom(m: Result<_, _>) = async { return m }
+        member __.Bind(m:Async<Result<'a,'e>>, f:('a -> Async<Result<'b,'e>>)) : Async<Result<'b,'e>> = bind f m
+        member __.Bind(m:Result<'a,'e>, f:('a -> Async<Result<'b,'e>>)) : Async<Result<'b,'e>> = bind f (async { return m })
+        member __.Bind(_:unit, f:(unit -> Async<Result<'b,'e>>)) : Async<Result<'b,'e>> = bind f (async { return Ok () })
+        member __.Zero() = async { return Ok () }
 
-        member __.Combine(m, f) = bind f m
+let asyncResult = new AsyncResult.AsyncResultBuilder()
 
-        member __.Delay(f: unit -> _) = f
+module AsyncValidation =
+    open Validation
 
-        member __.Run(f) = f()
+    let map f = f |> Validation.map |> Async.map 
 
-        member __.TryWith(m, h) =
-            try __.ReturnFrom(m)
-            with e -> h e
+    let mapError f =  f |> Validation.mapError |> Async.map 
 
-        member __.TryFinally(m, compensation) =
-            try __.ReturnFrom(m)
-            finally compensation()
+    let retn x = async { return Valid x }
 
-        member __.Using(res:#System.IDisposable, body) =
-            __.TryFinally(body res, fun () -> match res with null -> () | disp -> disp.Dispose())
+    let bind f xAsyncValidation = async {
+        let! xResult = xAsyncValidation 
+        match xResult with
+        | Valid x -> return! f x
+        | Invalid errors -> return (Invalid errors)
+    }
 
-        member __.While(guard, f) =
-            if not (guard()) then async { return Ok () } else
-            do f() |> ignore
-            __.While(guard, f)
+    let ofAsyncResult x = Async.map ofResult x
 
-        member __.For(sequence:seq<_>, body) =
-            __.Using(sequence.GetEnumerator(), fun enum -> __.While(enum.MoveNext, __.Delay(fun () -> body enum.Current)))
+    let toAsyncResult x = Async.map toResult x
 
-let asyncresult = new AsyncResult.AsyncResultBuilder()
+    // Monadic traverse
+    let traverseM f list =
+        let (>>=) x f = bind f x
+        let cons head tail = head :: tail
+        let folder head tail = 
+            f head >>= (fun h -> 
+            tail >>= (fun t ->
+            retn (cons h t) ))
+        List.foldBack folder list (retn []) 
+
+    let sequenceM list = traverseM id list
+
+    // Sequential traverse
+    let traverseS f list =
+        list |> Async.traverseS f |> Async.map Validation.sequence
+
+    let sequenceS list = 
+        list |> Async.sequenceS |> Async.map Validation.sequence
+
+    // Parallel traverse
+    let traverseP f list =
+        list |> Async.traverseP f |> Async.map Validation.sequence
+
+    let sequenceP list = 
+        list |> Async.sequenceP |> Async.map Validation.sequence
+
+    type AsyncValidationBuilder() =
+        member __.Return(x) = retn x
+        member __.ReturnFrom(m: Async<Validation<_, _>>) = m
+        member __.Bind(m:Async<Validation<'a,'e>>, f:('a -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f m
+        member __.Bind(m:Validation<'a,'e>, f:('a -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f (async { return m })
+        member __.Bind(m:Async<Result<'a,'e>>, f:('a -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f (m |> ofAsyncResult)
+        member __.Bind(m:Result<'a,'e>, f:('a -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f (async { return m |> Validation.ofResult })
+        member __.Bind(_:unit, f:(unit -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f (async { return Validation.retn () })
+        member __.Zero() = async { return Valid () }
+
+let asyncValidation = new AsyncValidation.AsyncValidationBuilder()
+

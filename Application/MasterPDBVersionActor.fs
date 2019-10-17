@@ -43,7 +43,7 @@ let masterPDBVersionActorBody
         | :? Command as command ->
             match command with
             | Snapshot (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotName, snapshotDest) -> 
-                let! result = asyncresult {
+                let! result = asyncResult {
                     let! snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName
                     let! _ = 
                         if (not snapshotSourceExists) then
@@ -59,23 +59,13 @@ let masterPDBVersionActorBody
             | CollectGarbage ->
                 ctx.Log.Value.Info("Collecting garbage of PDB {pdb} version {pdbversion}", masterPDBName, masterPDBVersion.Number)
                 let like = getSnapshotSourceName masterPDBName masterPDBVersion "%"
-                let! thisVersionSourcePDBs = oracleAPI.GetPDBNamesLike like
-                match thisVersionSourcePDBs with
-                | Ok pdbs -> 
-                    let results = 
-                        pdbs |> List.map (fun pdb -> 
-                            let r = 
-                                oracleAPI.DeletePDBWithSnapshots parameters.GarbageCollectionDelay pdb 
-                                |> runWithinElseDefault 
-                                    parameters.LongTimeout 
-                                    (sprintf "timeout reached while deleting %s and its snapshots" masterPDBName |> exn |> Error)
-                            (pdb, r) 
-                        )
-                    results |> List.iter (fun (_, result) -> result |> Result.mapError (fun error -> ctx.Log.Value.Error(error.ToString())) |> ignore)
-                    let isDeleted = results |> List.exists (fun (pdb, result) -> pdb.ToUpper() = snapshotSourceName.ToUpper() && match result with | Ok r -> r | Error _ -> false)
+                let! _ = asyncValidation {
+                    let! thisVersionSourcePDBs = oracleAPI.GetPDBNamesLike like
+                    let! isSourceDeletedList = thisVersionSourcePDBs |> AsyncValidation.traverseS (oracleAPI.DeletePDBWithSnapshots parameters.GarbageCollectionDelay)
+                    let sourceAndIsDeleted = List.zip thisVersionSourcePDBs isSourceDeletedList
+                    let isDeleted = sourceAndIsDeleted |> List.exists (fun (pdb, deleted) -> deleted && pdb.ToUpper() = snapshotSourceName.ToUpper())
                     if isDeleted then retype (ctx.Parent()) <! KillVersion masterPDBVersion.Number
-                | Error error -> 
-                    ctx.Log.Value.Error(error.ToString())
+                }
                 ctx.Log.Value.Info("Collected garbage of PDB {pdb} version {pdbversion}", masterPDBName, masterPDBVersion.Number)
                 return! loop ()
 
