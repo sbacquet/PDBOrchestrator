@@ -112,31 +112,3 @@ let ``Cannot delete version 1`` () =
     match result with
     | Ok _ -> failwith "version 1 cannot be deleted!"
     | Error e -> ()
-
-[<Fact>]
-let ``Can lock an unlocked version`` () =
-    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" "comment version 1"
-    let result = pdb |> lock "me"
-    match result with
-    | Ok pdb -> Assert.Equal("me", pdb.LockState.Value.Locker)
-    | Error e -> failwith e
-
-[<Fact>]
-let ``Can lock and unlock repeatedly`` () =
-    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" "comment version 1"
-    let result = 
-        pdb 
-        |> lock "me" |> Result.bind unlock 
-        |> Result.bind (lock "me2") |> Result.bind unlock 
-        |> Result.bind (lock "me3") |> Result.bind unlock
-    match result with
-    | Ok pdb -> Assert.True(pdb.LockState.IsNone)
-    | Error e -> failwith e
-
-[<Fact>]
-let ``Cannot lock a locked version`` () =
-    let pdb = newMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] "me" "comment version 1"
-    let result = pdb |> lock "me" |> Result.bind (lock "other")
-    match result with
-    | Ok _ -> failwith "should not be able to lock a locked version"
-    | Error _ -> ()

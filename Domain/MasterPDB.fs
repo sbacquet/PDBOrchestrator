@@ -86,9 +86,8 @@ let deleteVersion versionNumber masterPDB =
             Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name)
 
 let lock user masterPDB =
-    match masterPDB.LockState with
-    | Some lockInfo -> Error (sprintf "%s is already locked by %s" masterPDB.Name lockInfo.Locker)
-    | None -> Ok { masterPDB with LockState = Some (consLockInfo user System.DateTime.Now) }
+    if masterPDB.LockState.IsSome then failwith (sprintf "master PDB %s should not be locked !" masterPDB.Name)
+    { masterPDB with LockState = Some (consLockInfo user System.DateTime.Now) }
 
 let unlock masterPDB =
     match masterPDB.LockState with

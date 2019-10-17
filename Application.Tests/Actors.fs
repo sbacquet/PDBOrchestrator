@@ -309,15 +309,6 @@ let ``Lock master PDB`` () = test <| fun tck ->
     
     retype masterPDBActor <! MasterPDBActor.PrepareForModification (newRequestId(), 1, "me")
 
-    let lockedMess = expectMsgFilter tck (fun (mess:obj) -> 
-        match mess with
-        | :? WithRequestId<PrepareForModificationResult> as result ->
-            match snd result with
-            | Locked _ -> true
-            | _ -> false
-        | _ -> false
-    )
-
     let preparedMess = expectMsgFilter tck (fun (mess:obj) -> 
         match mess with
         | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as result -> 
@@ -341,7 +332,6 @@ let ``OracleInstance locks master PDB`` () = test <| fun tck ->
 
     match result with
     | Prepared _ -> ()
-    | Locked _ -> failwith "this Locked event shoud not be recevied by orchestrator"
     | PreparationFailure error -> failwith error
 
 [<Fact>]

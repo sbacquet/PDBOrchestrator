@@ -404,18 +404,14 @@ let oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (initialM
         | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as preparationResult ->
             let (requestId, result) = preparationResult
             match result with
-            | MasterPDBActor.Locked lockedMasterPDB -> 
-                // Persist the state of the PDB
-                let newMasterPDBRepo = masterPDBRepo.Put lockedMasterPDB.Name lockedMasterPDB
-                // Keep the request in the map, because Prepared or PreparationFailure will come last
-                return! loop collaborators instance requests newMasterPDBRepo
-
-            | MasterPDBActor.Prepared _ ->
+            | MasterPDBActor.Prepared lockedMasterPDB ->
                 let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
                 match requestMaybe with
                 | Some request -> 
+                    // Persist the state of the PDB
+                    let newMasterPDBRepo = masterPDBRepo.Put lockedMasterPDB.Name lockedMasterPDB
                     retype request.Requester <! preparationResult
-                    return! loop collaborators instance newRequests masterPDBRepo
+                    return! loop collaborators instance newRequests newMasterPDBRepo
                 | None -> 
                     logError ctx "internal error"
                     return! loop collaborators instance newRequests masterPDBRepo

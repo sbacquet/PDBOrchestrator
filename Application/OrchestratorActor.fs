@@ -264,7 +264,6 @@ let orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#IOracleIn
             | Some request ->
                 let status = 
                     match result with
-                    | MasterPDBActor.Locked _ -> CompletedWithError "internal error"
                     | MasterPDBActor.Prepared pdb -> CompletedOk (sprintf "master PDB %s prepared successfully for edition" pdb.Name)
                     | MasterPDBActor.PreparationFailure error -> CompletedWithError (sprintf "error while preparing master PDB for edition : %s" error)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
