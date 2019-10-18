@@ -6,3 +6,4 @@ Chiron
 Akka.Logger.Serilog
 Serilog.Sinks.Console
 Serilog.Extensions.Logging
+Serilog.Settings.Configuration

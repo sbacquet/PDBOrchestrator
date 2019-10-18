@@ -17,3 +17,4 @@ nuget Chiron prerelease
 nuget Serilog.Sinks.Console
 nuget Giraffe
 nuget Microsoft.AspNetCore.App
+nuget Serilog.Settings.Configuration

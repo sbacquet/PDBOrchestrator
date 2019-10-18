@@ -89,17 +89,23 @@ module Rest =
             .AddGiraffe() |> ignore
 
     let buildConfiguration (args:string[]) =
-        ConfigurationBuilder()
-            .AddCommandLine(args)
-            .Build()
+        let builder = ConfigurationBuilder().AddJsonFile("appsettings.json", optional=true)
+        let aspnetcoreEnv = System.Environment.GetEnvironmentVariable "ASPNETCORE_ENVIRONMENT"
+        let builder = 
+            if (not (System.String.IsNullOrEmpty aspnetcoreEnv)) then
+                builder.AddJsonFile(sprintf "appsettings.%s.json" aspnetcoreEnv, optional=true)
+            else builder
+        builder.
+            AddCommandLine(args).
+            Build()
 
 [<EntryPoint>]
 let main args =
 #if DEBUG
-    let logLevel = Events.LogEventLevel.Debug
     let akkaConfig = Akkling.Configuration.parse @"
     akka { 
-        loglevel=DEBUG,  loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] 
+        loglevel=DEBUG
+        loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] 
         actor {
             debug {
                 receive = off
@@ -109,17 +115,18 @@ let main args =
         }
     }"
 #else
-    let logLevel = Events.LogEventLevel.Information
     let akkaConfig = 
         Akkling.Configuration.parse @"akka { loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] }"
 #endif
+    let config = Rest.buildConfiguration args
     Serilog.Log.Logger <- 
         LoggerConfiguration().
-            WriteTo.Console(outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}]{LogSource} {Message:lj}{NewLine}{Exception}").
-            MinimumLevel.Is(logLevel).
+            ReadFrom.Configuration(config).
+#if DEBUG
+            MinimumLevel.Is(Events.LogEventLevel.Debug).
+#endif
             CreateLogger()
 
-    let config = Rest.buildConfiguration args
     let parameters = config |> Configuration.configToGlobalParameters
     let validParameters = 
         match parameters with
