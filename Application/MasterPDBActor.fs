@@ -65,7 +65,7 @@ let private masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance
 
         let manifestPath = Domain.MasterPDB.manifestPath instance.MasterPDBManifestsPath masterPDB.Name
 
-        logDebugf ctx "Number of pending requests : %d" requests.Count
+        ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
         let! (msg:obj) = ctx.Receive()
         
         match msg with
@@ -158,6 +158,7 @@ let private masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance
                 let! sourceVersionPDBsMaybe = collaborators.OracleAPI.GetPDBNamesLike (sprintf "%s_V%%_%%" masterPDB.Name)
                 match sourceVersionPDBsMaybe with
                 | Ok sourceVersionPDBs -> 
+                    ctx.Log.Value.Info("Garbage collection of PDB {pdb} requested", masterPDB.Name)
                     let regex = System.Text.RegularExpressions.Regex((sprintf "^%s_V([\\d]+)_.+$" masterPDB.Name))
                     let garbageVersion collabs sourceVersionPDB = 
                         let ok, version = System.Int32.TryParse(regex.Replace(sourceVersionPDB, "$1"))
@@ -175,7 +176,6 @@ let private masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance
                             ctx.Log.Value.Error("PDB {0} has not a valid PDB version name", sourceVersionPDB)
                             collabs
                     let newCollabs = sourceVersionPDBs |> List.fold garbageVersion collaborators
-                    ctx.Log.Value.Info("Garbage collection of PDB {pdb} requested", masterPDB.Name)
                     return! loop masterPDB requests newCollabs transientState
                 | Error error ->
                     ctx.Log.Value.Error("Unexpected error while garbaging {pdb} : {0}", masterPDB.Name, error)

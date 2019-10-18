@@ -78,8 +78,8 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
 
     let rec loop (orchestrator : Orchestrator) (pendingRequests:PendingUserRequestMap<Command>) (completedRequests : CompletedUserRequestMap<RequestStatus>) (readOnly:bool) = actor {
 
-        logDebugf ctx "Number of pending requests : %d" pendingRequests.Count
-        logDebugf ctx "Number of completed requests : %d" completedRequests.Count
+        ctx.Log.Value.Debug("Number of pending requests : {0}", pendingRequests.Count)
+        ctx.Log.Value.Debug("Number of completed requests : {0}", completedRequests.Count)
 
         let! (msg:obj) = ctx.Receive()
 
@@ -229,8 +229,8 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
                 return! loop orchestrator pendingRequests completedRequests readOnly
 
             | CollectGarbage ->
-                collaborators.OracleInstanceActors |> Map.iter (fun _ actor -> retype actor <! OracleInstanceActor.CollectGarbage)
                 ctx.Log.Value.Info("Garbage collection requested")
+                collaborators.OracleInstanceActors |> Map.iter (fun _ actor -> retype actor <! OracleInstanceActor.CollectGarbage)
                 return! loop orchestrator pendingRequests completedRequests readOnly
 
         | :? WithRequestId<MasterPDBCreationResult> as responseToCreateMasterPDB ->

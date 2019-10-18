@@ -56,7 +56,7 @@ let test, (loggerFactory : ILoggerFactory) =
     if (System.Diagnostics.Debugger.IsAttached) then
         Serilog.Log.Logger <- 
             (new LoggerConfiguration()).
-                WriteTo.Trace(outputTemplate="[{SourceContext}] {Message}{NewLine}").
+                WriteTo.Trace(outputTemplate="{LogSource} {Message}{NewLine}").
                 MinimumLevel.Debug().
                 CreateLogger()
         let config = ConfigurationFactory.ParseString @"
@@ -64,9 +64,9 @@ let test, (loggerFactory : ILoggerFactory) =
             loglevel=DEBUG,  loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] 
             actor {
                 debug {
-                    receive = on
+                    receive = off
                     unhandled = on
-                    lifecycle = on
+                    lifecycle = off
                 }
             }
         }"

@@ -102,9 +102,9 @@ let main args =
         loglevel=DEBUG,  loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] 
         actor {
             debug {
-                receive = on
+                receive = off
                 unhandled = on
-                lifecycle = on
+                lifecycle = off
             }
         }
     }"
@@ -113,7 +113,11 @@ let main args =
     let akkaConfig = 
         Akkling.Configuration.parse @"akka { loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] }"
 #endif
-    Serilog.Log.Logger <- LoggerConfiguration().WriteTo.Console().MinimumLevel.Is(logLevel).CreateLogger()
+    Serilog.Log.Logger <- 
+        LoggerConfiguration().
+            WriteTo.Console(outputTemplate="[{Timestamp:HH:mm:ss} {Level:u3}]{LogSource} {Message:lj}{NewLine}{Exception}").
+            MinimumLevel.Is(logLevel).
+            CreateLogger()
 
     let config = Rest.buildConfiguration args
     let parameters = config |> Configuration.configToGlobalParameters
@@ -138,7 +142,7 @@ let main args =
     let getOracleAPI (instance:OracleInstance) = Oracle.OracleAPI(loggerFactory, Oracle.connAsDBAFromInstance instance, Oracle.connAsDBAInFromInstance instance)
     let orchestrator = orchestratorRepo.Get orchestratorName
 
-    use system = Akkling.System.create "pdb-orchestrator-system" akkaConfig
+    use system = Akkling.System.create "sys" akkaConfig
     let orchestratorActor = system |> OrchestratorActor.spawn validParameters getOracleAPI oracleInstanceRepo getMasterPDBRepo orchestrator
     let port = if config.["port"] = null then 59275 else (Int32.Parse(config.["port"]))
     let apiContext = API.consAPIContext system orchestratorActor loggerFactory (Rest.buildEndpoint config.["dnsname"] port)
