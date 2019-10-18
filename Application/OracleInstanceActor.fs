@@ -335,10 +335,11 @@ let oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (initialM
                 if (not masterPDBOk) then 
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
                     return! loop collaborators instance requests masterPDBRepo
-                let masterPDBActor = collaborators.MasterPDBActors.[pdb]
-                let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                retype masterPDBActor <! MasterPDBActor.Rollback (requestId, user)
-                return! loop collaborators instance newRequests masterPDBRepo
+                else
+                    let masterPDBActor = collaborators.MasterPDBActors.[pdb]
+                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                    retype masterPDBActor <! MasterPDBActor.Rollback (requestId, user)
+                    return! loop collaborators instance newRequests masterPDBRepo
 
             | SnapshotMasterPDBVersion (requestId, masterPDBName, versionNumber, snapshotName) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.SnapshotResult>>()
@@ -346,9 +347,10 @@ let oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (initialM
                 if (not masterPDBOk) then 
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
                     return! loop collaborators instance requests masterPDBRepo
-                let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
-                retype masterPDBActor <<! MasterPDBActor.SnapshotVersion (requestId, versionNumber, snapshotName)
-                return! loop collaborators instance requests masterPDBRepo
+                else
+                    let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
+                    retype masterPDBActor <<! MasterPDBActor.SnapshotVersion (requestId, versionNumber, snapshotName)
+                    return! loop collaborators instance requests masterPDBRepo
 
             | CollectGarbage ->
                 collaborators.MasterPDBActors |> Map.iter (fun _ pdbActor -> retype pdbActor <! MasterPDBActor.CollectGarbage)

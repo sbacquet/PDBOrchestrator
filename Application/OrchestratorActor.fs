@@ -33,7 +33,7 @@ type AdminCommand =
 | IsReadOnlyMode // responds with bool
 | CollectGarbage // no response
 
-let pendingChangeCommandFilter = function
+let private pendingChangeCommandFilter = function
 | GetState
 | GetInstanceState _
 | GetMasterPDBState _
@@ -52,7 +52,7 @@ type PendingChanges = {
 
 let consPendingChanges commands openMasterPDBs = { Commands = commands |> Seq.toList; OpenMasterPDBs = openMasterPDBs }
 
-type Collaborators = {
+type private Collaborators = {
     OracleInstanceActors: Map<string, IActorRef<obj>>
 }
 
@@ -62,7 +62,7 @@ type RequestStatus =
 | CompletedOk of string
 | CompletedWithError of string
 
-let spawnCollaborators parameters getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo state (ctx : Actor<_>) = {
+let private spawnCollaborators parameters getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo state (ctx : Actor<_>) = {
     OracleInstanceActors =
         state.OracleInstanceNames 
         |> List.map (fun instanceName -> 
@@ -72,9 +72,7 @@ let spawnCollaborators parameters getOracleAPI (oracleInstanceRepo:#IOracleInsta
         |> Map.ofList
 }
 
-let createMasterPDBError error : MasterPDBCreationResult = InvalidRequest [ error ]
-
-let orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo initialState (ctx : Actor<_>) =
+let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo initialState (ctx : Actor<_>) =
 
     let collaborators = ctx |> spawnCollaborators parameters getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState
 

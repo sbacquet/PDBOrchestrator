@@ -31,14 +31,14 @@ type EditionDone = Result<MasterPDB, string>
 
 type SnapshotResult = Result<string * int * string, string>
 
-type Collaborators = {
+type private Collaborators = {
     OracleAPI: IOracleAPI
     MasterPDBVersionActors: Map<int, IActorRef<MasterPDBVersionActor.Command>>
     OracleLongTaskExecutor: IActorRef<OracleLongTaskExecutor.Command>
     OracleDiskIntensiveTaskExecutor : IActorRef<OracleDiskIntensiveActor.Command>
 }
 
-let getOrSpawnVersionActor parameters (masterPDBName:string) (version:MasterPDBVersion) collaborators ctx =
+let private getOrSpawnVersionActor parameters (masterPDBName:string) (version:MasterPDBVersion) collaborators ctx =
     let versionActorMaybe = collaborators.MasterPDBVersionActors |> Map.tryFind version.Number
     match versionActorMaybe with
     | Some versionActor -> collaborators, versionActor
@@ -55,11 +55,11 @@ let getOrSpawnVersionActor parameters (masterPDBName:string) (version:MasterPDBV
         { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Add(version.Number, versionActor) }, 
         versionActor
 
-type TransientState = {
-    Locking: bool
+type private TransientState = {
+    EditionOperationInProgress: bool
 }
 
-let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleInstance) oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor (initialMasterPDB : Domain.MasterPDB.MasterPDB) (ctx : Actor<_>) =
+let private masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleInstance) oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor (initialMasterPDB : Domain.MasterPDB.MasterPDB) (ctx : Actor<_>) =
 
     let rec loop (masterPDB:MasterPDB) (requests:RequestMap<Command>) collaborators transientState = actor {
 
@@ -86,21 +86,21 @@ let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleI
             | PrepareForModification (requestId, version, _) as command ->
                 let sender = ctx.Sender().Retype<WithRequestId<PrepareForModificationResult>>()
 
-                if (transientState.Locking) then
-                    sender <! (requestId, PreparationFailure (sprintf "PDB %s is already being locked" masterPDB.Name))
-                    return! loop masterPDB requests collaborators transientState
-
-                let latestVersion = masterPDB |> getLatestAvailableVersion
-                if (latestVersion.Number <> version) then 
-                    sender <! (requestId, PreparationFailure (sprintf "version %d is not the latest version (%d) of \"%s\"" version latestVersion.Number masterPDB.Name))
-                    return! loop masterPDB requests collaborators transientState
                 if masterPDB |> isLocked then
                     sender <! (requestId, PreparationFailure (sprintf "PDB %s is already locked" masterPDB.Name))
                     return! loop masterPDB requests collaborators transientState
                 else
-                    let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestPath version), instance.MasterPDBDestPath, masterPDB.Name)
-                    return! loop masterPDB newRequests collaborators { transientState with Locking = true }
+                    let latestVersion = masterPDB |> getLatestAvailableVersion
+                    if (latestVersion.Number <> version) then 
+                        sender <! (requestId, PreparationFailure (sprintf "version %d is not the latest version (%d) of \"%s\"" version latestVersion.Number masterPDB.Name))
+                        return! loop masterPDB requests collaborators transientState
+                    elif (transientState.EditionOperationInProgress) then
+                        sender <! (requestId, PreparationFailure (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
+                        return! loop masterPDB requests collaborators transientState
+                    else
+                        let newRequests = requests |> registerRequest requestId command (ctx.Sender())
+                        oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestPath version), instance.MasterPDBDestPath, masterPDB.Name)
+                        return! loop masterPDB newRequests collaborators { transientState with EditionOperationInProgress = true }
 
             | Commit (requestId, unlocker, _) ->
                 let sender = ctx.Sender().Retype<WithRequestId<EditionDone>>()
@@ -113,11 +113,14 @@ let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleI
                     if (lockInfo.Locker <> unlocker) then
                         sender <! (requestId, Error (sprintf "you (%s) are not the editor (%s) of master PDB %s" unlocker lockInfo.Locker masterPDB.Name))
                         return! loop masterPDB requests collaborators transientState
+                    elif (transientState.EditionOperationInProgress) then
+                        sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
+                        return! loop masterPDB requests collaborators transientState
                     else
                         let manifest = manifestPath (getNextAvailableVersion masterPDB)
                         oracleLongTaskExecutor <! OracleLongTaskExecutor.ExportPDB (Some requestId, manifest, masterPDB.Name)
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                        return! loop masterPDB newRequests collaborators transientState
+                        return! loop masterPDB newRequests collaborators { transientState with EditionOperationInProgress = true }
 
             | Rollback (requestId, unlocker) ->
                 let sender = ctx.Sender().Retype<WithRequestId<EditionDone>>()
@@ -130,10 +133,13 @@ let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleI
                     if (lockInfo.Locker <> unlocker) then
                         sender <! (requestId, Error (sprintf "you (%s) are not the editor (%s) of master PDB %s" unlocker lockInfo.Locker masterPDB.Name))
                         return! loop masterPDB requests collaborators transientState
+                    elif (transientState.EditionOperationInProgress) then
+                        sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
+                        return! loop masterPDB requests collaborators transientState
                     else
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
                         oracleLongTaskExecutor <! OracleLongTaskExecutor.DeletePDB (Some requestId, masterPDB.Name)
-                        return! loop masterPDB newRequests collaborators transientState
+                        return! loop masterPDB newRequests collaborators { transientState with EditionOperationInProgress = true }
             
             | SnapshotVersion (requestId, versionNumber, snapshotName) ->
                 let sender = ctx.Sender().Retype<WithRequestId<SnapshotResult>>()
@@ -206,10 +212,10 @@ let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleI
                     | Ok _ ->
                         let newMasterPDB = masterPDB |> lock locker
                         sender <! (requestId, Prepared newMasterPDB)
-                        return! loop newMasterPDB newRequests collaborators { transientState with Locking = false }
+                        return! loop newMasterPDB newRequests collaborators { transientState with EditionOperationInProgress = false }
                     | Error error ->
                         sender <! (requestId, PreparationFailure (error.ToString()))
-                    return! loop masterPDB newRequests collaborators transientState
+                        return! loop masterPDB newRequests collaborators { transientState with EditionOperationInProgress = false }
 
                 | Commit (_, unlocker, comment) ->
                     let sender = request.Requester.Retype<WithRequestId<EditionDone>>()
@@ -219,13 +225,13 @@ let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleI
                         match newMasterPDBMaybe with
                         | Ok newMasterPDB ->
                             sender <! (requestId, Ok newMasterPDB)
-                            return! loop newMasterPDB newRequests collaborators transientState
+                            return! loop newMasterPDB newRequests collaborators { transientState with EditionOperationInProgress = false }
                         | Error error -> 
                             sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name (error.ToString())))
-                            return! loop masterPDB newRequests collaborators transientState
+                            return! loop masterPDB newRequests collaborators { transientState with EditionOperationInProgress = false }
                     | Error error ->
                         sender <! (requestId, Error (sprintf "cannot commit %s : %s" masterPDB.Name (error.ToString())))
-                        return! loop masterPDB newRequests collaborators transientState
+                        return! loop masterPDB newRequests collaborators { transientState with EditionOperationInProgress = false }
 
                 | Rollback _ ->
                     let sender = request.Requester.Retype<WithRequestId<EditionDone>>()
@@ -235,13 +241,13 @@ let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleI
                         match newMasterPDBMaybe with
                         | Ok newMasterPDB ->
                             sender <! (requestId, Ok newMasterPDB)
-                            return! loop newMasterPDB newRequests collaborators transientState
+                            return! loop newMasterPDB newRequests collaborators { transientState with EditionOperationInProgress = false }
                         | Error error -> 
                             sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name (error.ToString())))
-                            return! loop masterPDB newRequests collaborators transientState
+                            return! loop masterPDB newRequests collaborators { transientState with EditionOperationInProgress = false }
                     | Error error ->
                         sender <! (requestId, Error (sprintf "cannot rollback %s : %s" masterPDB.Name (error.ToString())))
-                        return! loop masterPDB newRequests collaborators transientState
+                        return! loop masterPDB newRequests collaborators { transientState with EditionOperationInProgress = false }
 
                 | SnapshotVersion (_, versionNumber, snapshotName) ->
                     let sender = request.Requester.Retype<WithRequestId<SnapshotResult>>()
@@ -263,9 +269,9 @@ let masterPDBActorBody (parameters:GlobalParameters) oracleAPI (instance:OracleI
         OracleLongTaskExecutor = oracleLongTaskExecutor
         OracleDiskIntensiveTaskExecutor = oracleDiskIntensiveTaskExecutor 
     }
-    loop initialMasterPDB Map.empty collaborators { Locking = false }
+    loop initialMasterPDB Map.empty collaborators { EditionOperationInProgress = false }
 
-let masterPDBActorName (masterPDB:string) = Common.ActorName (sprintf "MasterPDB='%s'" (masterPDB.ToUpper() |> System.Uri.EscapeDataString))
+let private masterPDBActorName (masterPDB:string) = Common.ActorName (sprintf "MasterPDB='%s'" (masterPDB.ToUpper() |> System.Uri.EscapeDataString))
 
 let spawn parameters oracleAPI (instance:OracleInstance) (longTaskExecutor:IActorRef<Application.OracleLongTaskExecutor.Command>) (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>) (masterPDB : Domain.MasterPDB.MasterPDB) (actorFactory:IActorRefFactory) =
     

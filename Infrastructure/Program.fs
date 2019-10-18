@@ -97,15 +97,23 @@ module Rest =
 let main args =
 #if DEBUG
     let logLevel = Events.LogEventLevel.Debug
+    let akkaConfig = Akkling.Configuration.parse @"
+    akka { 
+        loglevel=DEBUG,  loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] 
+        actor {
+            debug {
+                receive = on
+                unhandled = on
+                lifecycle = on
+            }
+        }
+    }"
 #else
     let logLevel = Events.LogEventLevel.Information
+    let akkaConfig = 
+        Akkling.Configuration.parse @"akka { loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] }"
 #endif
     Serilog.Log.Logger <- LoggerConfiguration().WriteTo.Console().MinimumLevel.Is(logLevel).CreateLogger()
-    let akkaConfig = 
-        Akkling.Configuration.parse @"
-    akka { 
-        loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] 
-    }"
 
     let config = Rest.buildConfiguration args
     let parameters = config |> Configuration.configToGlobalParameters

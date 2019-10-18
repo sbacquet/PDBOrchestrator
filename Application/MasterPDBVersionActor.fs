@@ -23,7 +23,7 @@ type CommandToParent =
 
 let getSnapshotSourceName (pdb:string) (masterPDBVersion:MasterPDBVersion) (suffix:string) = sprintf "%s_V%03d_%s" (pdb.ToUpper()) masterPDBVersion.Number (suffix.ToUpper())
 
-let masterPDBVersionActorBody 
+let private masterPDBVersionActorBody 
     (parameters:GlobalParameters)
     (oracleAPI:#Application.Oracle.IOracleAPI) 
     (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 

@@ -9,7 +9,7 @@ open Application.GlobalParameters
 type Command =
 | ImportPDB of WithOptionalRequestId<string, string, string>
 
-let oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
+let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
     let stopWatch = System.Diagnostics.Stopwatch()
 
