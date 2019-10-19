@@ -50,9 +50,6 @@ let execAsync result conn a = async {
 let P = Sql.Parameter.make
 let (=>) a b = Sql.Parameter.make(a, b)
 
-let (>>=) r f = Result.bind f r
-let (>=>) f1 f2 = fun x -> f1 x >>= f2
-
 let createPDB (logger:ILogger) connAsDBA adminUserName adminUserPassword dest keepOpen (name:string) = asyncResult {
     logger.LogDebug("Creating PDB {PDB}", name)
     let closeSql = if (keepOpen) then "" else sprintf @"execute immediate 'alter pluggable database %s close immediate';" name
@@ -100,15 +97,14 @@ let closePDB (logger:ILogger) connAsDBA (name:string) = async {
     let! result = 
         sprintf @"ALTER PLUGGABLE DATABASE %s CLOSE IMMEDIATE" name
         |> execAsync name connAsDBA
+    logger.LogDebug("Closed PDB {PDB}", name)
     return
         match result with
         | Ok result -> 
-            logger.LogDebug("Closed PDB {PDB}", name)
             Ok result
         | Error ex -> 
             match ex.Number with
             | 65020 -> 
-                logger.LogDebug("PDB {PDB} already closed", name)
                 Ok name // already closed -> ignore it
             | _ -> 
                 Error ex
@@ -143,6 +139,11 @@ let openPDBCompensable (logger:ILogger) connAsDBA readWrite =
         (openPDB logger connAsDBA readWrite) 
         (closePDB logger connAsDBA)
 
+let closePDBCompensable (logger:ILogger) connAsDBA readWrite = 
+    compensableAsync 
+        (closePDB logger connAsDBA)
+        (openPDB logger connAsDBA readWrite) 
+
 let importSchemasInPDB (logger:ILogger) connAsDBA (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) name = async {
     return Ok name // TODO
 }
@@ -154,22 +155,24 @@ let createAndGrantPDB (logger:ILogger) connAsDBA connAsDBAIn keepOpen adminUserN
         notCompensableAsync (if keepOpen then (fun name -> async { return Ok name }) else closePDB logger connAsDBA)
     ] |> composeAsync logger
 
-let exportPDB (logger:ILogger) connAsDBA manifest name = asyncResult {
-    let export (pdb:string) =
-        logger.LogDebug("Exporting PDB {PDB}", pdb)
-        sprintf 
-            @"
-    BEGIN
-        execute immediate 'ALTER PLUGGABLE DATABASE %s UNPLUG INTO ''%s''';
-        execute immediate 'DROP PLUGGABLE DATABASE %s KEEP DATAFILES';
-    END;
-     "
-            pdb manifest pdb
-        |> execAsync pdb connAsDBA
-    
-    let! _ = closePDB logger connAsDBA name
-    return! export name
-}
+let exportPDB (logger:ILogger) connAsDBA manifest (name:string) = 
+    logger.LogDebug("Exporting PDB {PDB}", name)
+    sprintf 
+        @"
+BEGIN
+    execute immediate 'ALTER PLUGGABLE DATABASE %s UNPLUG INTO ''%s''';
+    execute immediate 'DROP PLUGGABLE DATABASE %s KEEP DATAFILES';
+END;
+    "
+        name manifest name
+    |> execAsync name connAsDBA
+
+let closeAndExportPDB (logger:ILogger) connAsDBA manifest = 
+    [
+        closePDBCompensable logger connAsDBA true
+        notCompensableAsync (exportPDB logger connAsDBA manifest)
+    ] |> composeAsync logger
+
 
 let createManifestFromDump (logger:ILogger) connAsDBA connAsDBAIn adminUserName adminUserPassword dest (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) (manifest:string) = 
     [
@@ -370,28 +373,6 @@ let deleteSourcePDB (logger:ILogger) connAsDBA (name:string) = async {
     | Error error -> return Error (upcast error)
 }
 
-let deletePDBWithSnapshots2 (logger:ILogger) connAsDBA (olderThan:System.TimeSpan) (name:string) = async {
-    logger.LogDebug("Deleting PDB {PDB} and dependant snapshots", name)
-    let! snapshotsMaybe = pdbSnapshotsOlderThan connAsDBA olderThan name
-    match snapshotsMaybe with
-    | Ok snapshots -> 
-        let! r = snapshots |> List.map (fun snapshot -> deletePDB logger connAsDBA true snapshot) |> Async.Sequential
-        let errors = r |> List.ofArray |> List.choose toErrorOption
-        if (errors.Length > 0) then 
-            return Error (exn (sprintf "some snapshots could not be deleted : %s" (System.String.Join("; ", errors))))
-        else
-            let! hasSnapshotsMaybe = pdbHasSnapshots connAsDBA name
-            match hasSnapshotsMaybe with
-            | Ok hasSnapshots ->
-                if not hasSnapshots then
-                    let! r = deletePDB logger connAsDBA true name
-                    return r |> Result.map (fun _ -> true) |> toOraclePDBResult
-                else
-                    return Ok false
-            | Error error -> return Error (error :> exn)
-    | Error error -> return Error (error :> exn)
-}
-
 let deletePDBWithSnapshots (logger:ILogger) connAsDBA (olderThan:System.TimeSpan) (name:string) = asyncValidation {
     logger.LogDebug("Deleting PDB {0} and dependant snapshots", name)
     let mapError (x:Async<Result<'a,OracleException>>) : Async<Result<'a,exn>> = AsyncResult.mapError (fun ex -> ex :> exn) x
@@ -419,37 +400,48 @@ let deletePDBWithSnapshots (logger:ILogger) connAsDBA (olderThan:System.TimeSpan
 }
 
 type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager, connAsDBAIn : string -> Sql.ConnectionManager) = 
+
     member __.Logger = loggerFactory.CreateLogger("Oracle API")
+
     interface IOracleAPI with
-        member this.NewPDBFromDump adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name =
-            createManifestFromDump this.Logger connAsDBA connAsDBAIn adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name
+        member __.NewPDBFromDump adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name =
+            createManifestFromDump __.Logger connAsDBA connAsDBAIn adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name
             |> toOraclePDBResultAsync
-        member this.ClosePDB name =
-            closePDB this.Logger connAsDBA name
+
+        member __.ClosePDB name =
+            closePDB __.Logger connAsDBA name
             |> toOraclePDBResultAsync
-        member this.DeletePDB name =
-            deleteSourcePDB this.Logger connAsDBA name
-        member this.ExportPDB manifest name = 
-            exportPDB this.Logger connAsDBA manifest name
+
+        member __.DeletePDB name =
+            deleteSourcePDB __.Logger connAsDBA name
+
+        member __.ExportPDB manifest name = 
+            closeAndExportPDB __.Logger connAsDBA manifest name
             |> toOraclePDBResultAsync
-        member this.ImportPDB manifest dest name = 
-            importAndOpen this.Logger connAsDBA manifest dest name
+
+        member __.ImportPDB manifest dest name = 
+            importAndOpen __.Logger connAsDBA manifest dest name
             |> toOraclePDBResultAsync
-        member this.SnapshotPDB from dest name = 
-            snapshotAndOpenPDB this.Logger connAsDBA from dest name
+
+        member __.SnapshotPDB from dest name = 
+            snapshotAndOpenPDB __.Logger connAsDBA from dest name
             |> toOraclePDBResultAsync
-        member this.PDBHasSnapshots name = 
+
+        member __.PDBHasSnapshots name = 
             pdbHasSnapshots connAsDBA name
             |> toOraclePDBResultAsync
-        member this.PDBExists name = 
+
+        member __.PDBExists name = 
             PDBExistsOnServer connAsDBA name
             |> toOraclePDBResultAsync
-        member this.PDBSnapshots name =
+
+        member __.PDBSnapshots name =
             pdbSnapshots connAsDBA name
             |> toOraclePDBResultAsync
-        member this.DeletePDBWithSnapshots (olderThan:System.TimeSpan) name =
-            deletePDBWithSnapshots this.Logger connAsDBA olderThan name
-        member this.GetPDBNamesLike like = 
+
+        member __.DeletePDBWithSnapshots (olderThan:System.TimeSpan) name =
+            deletePDBWithSnapshots __.Logger connAsDBA olderThan name
+
+        member __.GetPDBNamesLike like = 
             getPDBNamesLike connAsDBA like
             |> toOraclePDBResultAsync
-        
