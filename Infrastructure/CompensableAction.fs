@@ -43,7 +43,7 @@ let compose (logger:ILogger) (actions : CompensableAction<'T, 'E> list) input =
 let composeAsync (logger:ILogger) (actions : CompensableAsyncAction<'T, 'E> list) input = async {
     let folder (oldResultAsync : Async<Result<'T,'E> * (AsyncCompensation<'T> list)>) (compAction : CompensableAsyncAction<'T, 'E>) : Async<Result<'T,'E> * (AsyncCompensation<'T> list)> = async {
         let! oldResult = oldResultAsync
-        match (oldResult) with
+        match oldResult with
         | Ok oldValue, comps ->
             let action, comp = compAction
             let! result = action oldValue
