@@ -36,10 +36,10 @@ let consCreateMasterPDBParams name dump schemas targetSchemas user date comment 
 let newCreateMasterPDBParams name dump schemas targetSchemas user comment = 
     consCreateMasterPDBParams name dump schemas targetSchemas user System.DateTime.Now comment
 
-type CreateMasterPDBParamsValidation = Validation<CreateMasterPDBParams, string>
+type private CreateMasterPDBParamsValidation = Validation<CreateMasterPDBParams, string>
 
 [<RequireQualifiedAccess>]
-module Validation =
+module private Validation =
     let validatePDB oracleInstance name =
         if (oracleInstance |> masterPDBAlreadyExists name) then
             Invalid [ sprintf "a PDB named \"%s\" already exists" name ]
@@ -121,14 +121,14 @@ type MasterPDBCreationResult =
 | MasterPDBCreated of Domain.MasterPDB.MasterPDB
 | MasterPDBCreationFailure of string
 
-type Collaborators = {
+type private Collaborators = {
     OracleAPI: IOracleAPI
     OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
     OracleDiskIntensiveTaskExecutor : IActorRef<Application.OracleDiskIntensiveActor.Command>
     MasterPDBActors: Map<string, IActorRef<obj>>
 }
 
-let addMasterPDBToCollaborators parameters ctx (instance : OracleInstance) (masterPDB:Domain.MasterPDB.MasterPDB) collaborators = 
+let private addMasterPDBToCollaborators parameters ctx (instance : OracleInstance) (masterPDB:Domain.MasterPDB.MasterPDB) collaborators = 
     logDebugf ctx "Adding MasterPDB %s to collaborators" masterPDB.Name
     { collaborators with 
         MasterPDBActors = 
@@ -145,7 +145,7 @@ let addMasterPDBToCollaborators parameters ctx (instance : OracleInstance) (mast
     }
 
 // Spawn actor for a new master PDBs
-let addNewMasterPDB parameters (ctx : Actor<obj>) (instance : OracleInstance) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:IMasterPDBRepository) = result {
+let private addNewMasterPDB parameters (ctx : Actor<obj>) (instance : OracleInstance) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:IMasterPDBRepository) = result {
     let! newState = instance |> OracleInstance.addMasterPDB masterPDB.Name
     let newMasterPDBRepo = masterPDBRepo.Put masterPDB.Name masterPDB
     let newCollaborators = 
@@ -164,7 +164,7 @@ let addNewMasterPDB parameters (ctx : Actor<obj>) (instance : OracleInstance) co
     return newState, newCollaborators, newMasterPDBRepo
 }
 
-let expand timeout (masterPDBActors: Map<string, IActorRef<obj>>) (instance:OracleInstance) = 
+let private expand timeout (masterPDBActors: Map<string, IActorRef<obj>>) (instance:OracleInstance) = 
     let masterPDBsMaybe = 
         instance.MasterPDBs 
         |> List.map (fun pdb -> retype masterPDBActors.[pdb] <? MasterPDBActor.GetInternalState)
@@ -185,7 +185,7 @@ let expand timeout (masterPDBActors: Map<string, IActorRef<obj>>) (instance:Orac
     })
 
     
-let collapse (expandedInstance:OracleInstanceExpanded) : OracleInstance = {
+let private collapse (expandedInstance:OracleInstanceExpanded) : OracleInstance = {
     Name = expandedInstance.Name
     Server = expandedInstance.Server
     Port = expandedInstance.Port
@@ -200,7 +200,7 @@ let collapse (expandedInstance:OracleInstanceExpanded) : OracleInstance = {
 }
 
 
-let updateMasterPDBs parameters (ctx : Actor<obj>) (instanceToImport : OracleInstanceExpanded) (collaborators:Collaborators) (masterPDBRepo:IMasterPDBRepository) (instance : OracleInstance) = result {
+let private updateMasterPDBs parameters (ctx : Actor<obj>) (instanceToImport : OracleInstanceExpanded) (collaborators:Collaborators) (masterPDBRepo:IMasterPDBRepository) (instance : OracleInstance) = result {
     let masterPDBs = instanceToImport.MasterPDBs
     let existingMasterPDBs = collaborators.MasterPDBActors |> Map.toSeq |> Seq.map (fun (name, _) -> name) |> Set.ofSeq
     let newMasterPDBs = masterPDBs |> List.map (fun pdb -> pdb.Name) |> Set.ofList
@@ -223,7 +223,7 @@ let updateMasterPDBs parameters (ctx : Actor<obj>) (instanceToImport : OracleIns
 }
 
 // Spawn actors for master PDBs that already exist
-let spawnCollaborators parameters getOracleAPI (masterPDBRepo:IMasterPDBRepository) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
+let private spawnCollaborators parameters getOracleAPI (masterPDBRepo:IMasterPDBRepository) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
     let oracleAPI = getOracleAPI instance
     let oracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn parameters oracleAPI
     let oracleDiskIntensiveTaskExecutor = ctx |> Application.OracleDiskIntensiveActor.spawn parameters oracleAPI
@@ -237,11 +237,11 @@ let spawnCollaborators parameters getOracleAPI (masterPDBRepo:IMasterPDBReposito
             |> Map.ofList
     }
 
-let oracleInstanceActorName (instance : OracleInstance) = 
+let private oracleInstanceActorName (instance : OracleInstance) = 
     Common.ActorName 
         (sprintf "OracleInstance='%s'" (instance.Name.ToUpper() |> System.Uri.EscapeDataString))
 
-let oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (initialMasterPDBRepo:IMasterPDBRepository) initialInstance (ctx : Actor<obj>) =
+let private oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (initialMasterPDBRepo:IMasterPDBRepository) initialInstance (ctx : Actor<obj>) =
 
     let rec loop collaborators (instance : OracleInstance) (requests : RequestMap<Command>) (masterPDBRepo:IMasterPDBRepository) = actor {
 
