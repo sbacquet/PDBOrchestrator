@@ -122,30 +122,13 @@ type MasterPDBCreationResult =
 | MasterPDBCreationFailure of string
 
 type private Collaborators = {
-    OracleAPI: IOracleAPI
     OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
     OracleDiskIntensiveTaskExecutor : IActorRef<Application.OracleDiskIntensiveActor.Command>
     MasterPDBActors: Map<string, IActorRef<obj>>
 }
 
-let private addMasterPDBToCollaborators parameters ctx (instance : OracleInstance) (masterPDB:Domain.MasterPDB.MasterPDB) collaborators = 
-    logDebugf ctx "Adding MasterPDB %s to collaborators" masterPDB.Name
-    { collaborators with 
-        MasterPDBActors = 
-            collaborators.MasterPDBActors.Add(
-                masterPDB.Name, 
-                ctx |> MasterPDBActor.spawn 
-                    parameters
-                    collaborators.OracleAPI
-                    instance 
-                    collaborators.OracleLongTaskExecutor 
-                    collaborators.OracleDiskIntensiveTaskExecutor 
-                    masterPDB
-            )
-    }
-
 // Spawn actor for a new master PDBs
-let private addNewMasterPDB parameters (ctx : Actor<obj>) (instance : OracleInstance) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:IMasterPDBRepository) = result {
+let private addNewMasterPDB parameters (oracleAPI:IOracleAPI) (ctx : Actor<obj>) (instance : OracleInstance) collaborators (masterPDB:Domain.MasterPDB.MasterPDB) (masterPDBRepo:IMasterPDBRepository) = result {
     let! newState = instance |> OracleInstance.addMasterPDB masterPDB.Name
     let newMasterPDBRepo = masterPDBRepo.Put masterPDB.Name masterPDB
     let newCollaborators = 
@@ -155,7 +138,7 @@ let private addNewMasterPDB parameters (ctx : Actor<obj>) (instance : OracleInst
                     masterPDB.Name, 
                     ctx |> MasterPDBActor.spawn 
                         parameters
-                        collaborators.OracleAPI
+                        oracleAPI
                         instance 
                         collaborators.OracleLongTaskExecutor 
                         collaborators.OracleDiskIntensiveTaskExecutor 
@@ -200,7 +183,7 @@ let private collapse (expandedInstance:OracleInstanceExpanded) : OracleInstance 
 }
 
 
-let private updateMasterPDBs parameters (ctx : Actor<obj>) (instanceToImport : OracleInstanceExpanded) (collaborators:Collaborators) (masterPDBRepo:IMasterPDBRepository) (instance : OracleInstance) = result {
+let private updateMasterPDBs parameters (oracleAPI:IOracleAPI) (ctx : Actor<obj>) (instanceToImport : OracleInstanceExpanded) (collaborators:Collaborators) (masterPDBRepo:IMasterPDBRepository) (instance : OracleInstance) = result {
     let masterPDBs = instanceToImport.MasterPDBs
     let existingMasterPDBs = collaborators.MasterPDBActors |> Map.toSeq |> Seq.map (fun (name, _) -> name) |> Set.ofSeq
     let newMasterPDBs = masterPDBs |> List.map (fun pdb -> pdb.Name) |> Set.ofList
@@ -209,7 +192,7 @@ let private updateMasterPDBs parameters (ctx : Actor<obj>) (instanceToImport : O
     let masterPDBMap = masterPDBs |> List.map (fun pdb -> (pdb.Name, pdb)) |> Map.ofList
 
     let folder result pdb = 
-        result |> Result.bind (fun (inst, collabs, repo) -> addNewMasterPDB parameters ctx inst collabs masterPDBMap.[pdb] repo)
+        result |> Result.bind (fun (inst, collabs, repo) -> addNewMasterPDB parameters oracleAPI ctx inst collabs masterPDBMap.[pdb] repo)
         
     let! x = masterPDBsToAdd |> Set.fold folder (Ok (instance, collaborators, masterPDBRepo))
 
@@ -223,12 +206,10 @@ let private updateMasterPDBs parameters (ctx : Actor<obj>) (instanceToImport : O
 }
 
 // Spawn actors for master PDBs that already exist
-let private spawnCollaborators parameters getOracleAPI (masterPDBRepo:IMasterPDBRepository) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
-    let oracleAPI = getOracleAPI instance
+let private spawnCollaborators parameters oracleAPI (masterPDBRepo:IMasterPDBRepository) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
     let oracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn parameters oracleAPI
     let oracleDiskIntensiveTaskExecutor = ctx |> Application.OracleDiskIntensiveActor.spawn parameters oracleAPI
     {
-        OracleAPI = oracleAPI
         OracleLongTaskExecutor = oracleLongTaskExecutor
         OracleDiskIntensiveTaskExecutor = oracleDiskIntensiveTaskExecutor
         MasterPDBActors = 
@@ -241,9 +222,21 @@ let private oracleInstanceActorName (instance : OracleInstance) =
     Common.ActorName 
         (sprintf "OracleInstance='%s'" (instance.Name.ToUpper() |> System.Uri.EscapeDataString))
 
-let private oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (initialMasterPDBRepo:IMasterPDBRepository) initialInstance (ctx : Actor<obj>) =
+type private State = {
+    Instance: OracleInstance
+    Collaborators: Collaborators
+    Requests: RequestMap<Command>
+    MasterPDBRepo: IMasterPDBRepository
+}
 
-    let rec loop collaborators (instance : OracleInstance) (requests : RequestMap<Command>) (masterPDBRepo:IMasterPDBRepository) = actor {
+let private oracleInstanceActorBody (parameters:GlobalParameters) (oracleAPI:IOracleAPI) (initialMasterPDBRepo:IMasterPDBRepository) initialInstance (ctx : Actor<obj>) =
+
+    let rec loop state = actor {
+
+        let instance = state.Instance
+        let collaborators = state.Collaborators
+        let requests = state.Requests
+        let masterPDBRepo = state.MasterPDBRepo
 
         ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
         let! msg = ctx.Receive()
@@ -253,9 +246,9 @@ let private oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (
             match command with
             | GetState ->
                 let sender = ctx.Sender().Retype<StateResult>()
-                let! state = instance |> Application.DTO.OracleInstance.toDTO collaborators.MasterPDBActors
-                sender <! stateOk state
-                return! loop collaborators instance requests masterPDBRepo
+                let! instanceDTO = instance |> Application.DTO.OracleInstance.toDTO collaborators.MasterPDBActors
+                sender <! stateOk instanceDTO
+                return! loop state
 
             | GetMasterPDBState pdb ->
                 let sender = ctx.Sender().Retype<Application.MasterPDBActor.StateResult>()
@@ -265,25 +258,25 @@ let private oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (
                     masterPDBActor <<! MasterPDBActor.GetState
                 else
                     sender <! MasterPDBActor.stateError (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name)
-                return! loop collaborators instance requests masterPDBRepo
+                return! loop state
 
-            | SetInternalState newState -> 
-                let updateResult = updateMasterPDBs parameters ctx newState collaborators masterPDBRepo instance
+            | SetInternalState newInstance -> 
+                let updateResult = updateMasterPDBs parameters oracleAPI ctx newInstance collaborators masterPDBRepo instance
                 match updateResult with
                 | Ok (inst, collabs, repo) ->
-                    let! state = inst |> Application.DTO.OracleInstance.toDTO collabs.MasterPDBActors
-                    ctx.Sender() <! stateOk state
-                    return! loop collabs inst requests repo
+                    let! instanceDTO = inst |> Application.DTO.OracleInstance.toDTO collabs.MasterPDBActors
+                    ctx.Sender() <! stateOk instanceDTO
+                    return! loop { state with Instance = inst; Collaborators = collabs; MasterPDBRepo = repo }
                 | Error error ->
                     ctx.Sender() <! stateError error
-                    return! loop collaborators instance requests masterPDBRepo
+                    return! loop state
 
             | TransferInternalState target ->
                 let expandedInstanceMaybe = instance |> expand parameters.ShortTimeout collaborators.MasterPDBActors
                 match expandedInstanceMaybe with
                 | Ok expandedInstance -> retype target <<! SetInternalState expandedInstance
                 | Error error -> ctx.Sender() <! stateError error
-                return! loop collaborators instance requests masterPDBRepo
+                return! loop state
 
             | CreateMasterPDB (requestId, parameters) as command ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBCreationResult>>()
@@ -302,60 +295,60 @@ let private oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (
                     }
                     let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
                     collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (Some requestId, parameters2)
-                    return! loop collaborators instance newRequests masterPDBRepo
+                    return! loop { state with Requests = newRequests }
                 | Invalid errors -> 
                     sender <! (requestId, InvalidRequest errors)
-                    return! loop collaborators instance requests masterPDBRepo
+                    return! loop state
 
             | PrepareMasterPDBForModification (requestId, pdb, version, user) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.PrepareForModificationResult>>()
                 let masterPDBOk = instance.MasterPDBs |> List.contains pdb
                 if (not masterPDBOk) then 
                     sender <! (requestId, MasterPDBActor.PreparationFailure (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
-                    return! loop collaborators instance requests masterPDBRepo
+                    return! loop state
                 let masterPDBActor = collaborators.MasterPDBActors.[pdb]
                 let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
                 retype masterPDBActor <! MasterPDBActor.PrepareForModification (requestId, version, user)
-                return! loop collaborators instance newRequests masterPDBRepo
+                return! loop { state with Requests = newRequests }
 
             | CommitMasterPDB (requestId, pdb, locker, comment) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionDone>>()
                 let masterPDBOk = instance.MasterPDBs |> List.contains pdb
                 if (not masterPDBOk) then 
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
-                    return! loop collaborators instance requests masterPDBRepo
+                    return! loop state
                 let masterPDBActor = collaborators.MasterPDBActors.[pdb]
                 let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
                 retype masterPDBActor <! MasterPDBActor.Commit (requestId, locker, comment)
-                return! loop collaborators instance newRequests masterPDBRepo
+                return! loop { state with Requests = newRequests }
 
             | RollbackMasterPDB (requestId, user, pdb) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionDone>>()
                 let masterPDBOk = instance.MasterPDBs |> List.contains pdb
                 if (not masterPDBOk) then 
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
-                    return! loop collaborators instance requests masterPDBRepo
+                    return! loop state
                 else
                     let masterPDBActor = collaborators.MasterPDBActors.[pdb]
                     let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
                     retype masterPDBActor <! MasterPDBActor.Rollback (requestId, user)
-                    return! loop collaborators instance newRequests masterPDBRepo
+                    return! loop { state with Requests = newRequests }
 
             | SnapshotMasterPDBVersion (requestId, masterPDBName, versionNumber, snapshotName) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.SnapshotResult>>()
                 let masterPDBOk = instance.MasterPDBs |> List.contains masterPDBName
                 if (not masterPDBOk) then 
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
-                    return! loop collaborators instance requests masterPDBRepo
+                    return! loop state
                 else
                     let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
                     retype masterPDBActor <<! MasterPDBActor.SnapshotVersion (requestId, versionNumber, snapshotName)
-                    return! loop collaborators instance requests masterPDBRepo
+                    return! loop state
 
             | CollectGarbage ->
                 collaborators.MasterPDBActors |> Map.iter (fun _ pdbActor -> retype pdbActor <! MasterPDBActor.CollectGarbage)
                 ctx.Log.Value.Info("Garbage collection of instance {instance} requested", instance.Name)
-                return! loop collaborators instance requests masterPDBRepo
+                return! loop state
 
         // Callback from Oracle executor
         | :? OraclePDBResultWithReqId as requestResponse ->
@@ -364,7 +357,7 @@ let private oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (
             match requestMaybe with
             | None -> 
                 logError ctx (sprintf "internal error : request %s not found" (requestId.ToString()))
-                return! loop collaborators instance newRequests masterPDBRepo
+                return! loop { state with Requests = newRequests }
 
             | Some request ->
                 match request.Command with 
@@ -381,61 +374,63 @@ let private oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (
                         let newStateResult = 
                             addNewMasterPDB 
                                 parameters
+                                oracleAPI
                                 ctx 
                                 instance
                                 collaborators 
                                 masterPDB
                                 masterPDBRepo
                         requester <! (requestId, MasterPDBCreated masterPDB)
-                        let newState, newCollabs, newMasterPDBRepo = 
+                        let newInstance, newCollabs, newMasterPDBRepo = 
                             match newStateResult with
                             | Ok s -> s
                             | Error error -> 
                                 logErrorf ctx "error when registering new master PDB %s : %s" commandParameters.Name error
                                 instance, collaborators, masterPDBRepo
-                        return! loop newCollabs newState newRequests newMasterPDBRepo
+                        return! loop { state with Instance = newInstance; Collaborators = newCollabs; Requests = newRequests; MasterPDBRepo = newMasterPDBRepo }
                     | Error error -> 
                         logErrorf ctx "PDB %s failed to create with error %A" commandParameters.Name error
                         requester <! (requestId, MasterPDBCreationFailure (error.ToString()))
-                        return! loop collaborators instance newRequests masterPDBRepo
+                        return! loop { state with Requests = newRequests }
                 | _ -> 
                     ctx.Log.Value.Error "critical error"
-                    return! loop collaborators instance requests masterPDBRepo
+                    return! loop state
 
         // Callback from Master PDB actor in response to PrepareForModification
         | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as preparationResult ->
             let (requestId, result) = preparationResult
+            let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
+
             match result with
             | MasterPDBActor.Prepared lockedMasterPDB ->
-                let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
                 match requestMaybe with
                 | Some request -> 
                     // Persist the state of the PDB
                     let newMasterPDBRepo = masterPDBRepo.Put lockedMasterPDB.Name lockedMasterPDB
                     retype request.Requester <! preparationResult
-                    return! loop collaborators instance newRequests newMasterPDBRepo
+                    return! loop { state with Requests = newRequests; MasterPDBRepo = newMasterPDBRepo }
                 | None -> 
                     logError ctx "internal error"
-                    return! loop collaborators instance newRequests masterPDBRepo
+                    return! loop { state with Requests = newRequests }
 
             | MasterPDBActor.PreparationFailure _ ->
-                let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
                 match requestMaybe with
                 | Some request -> 
                     retype request.Requester <! preparationResult
-                    return! loop collaborators instance newRequests masterPDBRepo
+                    return! loop { state with Requests = newRequests }
                 | None -> 
                     logError ctx "internal error"
-                    return! loop collaborators instance newRequests masterPDBRepo
+                    return! loop { state with Requests = newRequests }
 
         // Callback from Master PDB actor in response to Commit or Rollback
         | :? WithRequestId<MasterPDBActor.EditionDone> as editionResult ->
             let (requestId, result) = editionResult
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
+
             match requestMaybe with
             | None -> 
                 logWarningf ctx "internal error : request %s not found" <| requestId.ToString()
-                return! loop collaborators instance requests masterPDBRepo
+                return! loop state
 
             | Some request -> 
             match result with
@@ -443,19 +438,24 @@ let private oracleInstanceActorBody (parameters:GlobalParameters) getOracleAPI (
                     // Persist the state of the PDB
                     let newMasterPDBRepo = masterPDBRepo.Put unlockedMasterPDB.Name unlockedMasterPDB
                     retype request.Requester <! editionResult
-                    return! loop collaborators instance newRequests newMasterPDBRepo
+                    return! loop { state with Requests = newRequests; MasterPDBRepo = newMasterPDBRepo }
 
                 | Error error ->
                     retype request.Requester <! editionResult
-                    return! loop collaborators instance newRequests masterPDBRepo
+                    return! loop { state with Requests = newRequests }
 
-        | _ -> return! loop collaborators instance requests masterPDBRepo
+        | _ -> return! loop state
     }
-    let collaborators = ctx |> spawnCollaborators parameters getOracleAPI initialMasterPDBRepo initialInstance
-    loop collaborators initialInstance Map.empty initialMasterPDBRepo
 
-let spawn parameters getOracleAPI initialMasterPDBRepo initialInstance actorFactory =
+    let collaborators = ctx |> spawnCollaborators parameters oracleAPI initialMasterPDBRepo initialInstance
+
+    loop { Instance = initialInstance; Collaborators = collaborators; Requests = Map.empty; MasterPDBRepo = initialMasterPDBRepo }
+
+
+let spawn parameters oracleAPI initialMasterPDBRepo initialInstance actorFactory =
+
     let (Common.ActorName actorName) = oracleInstanceActorName initialInstance
+
     Akkling.Spawn.spawn actorFactory actorName 
-    <| props (oracleInstanceActorBody parameters getOracleAPI initialMasterPDBRepo initialInstance)
+    <| props (oracleInstanceActorBody parameters oracleAPI initialMasterPDBRepo initialInstance)
 

@@ -189,7 +189,7 @@ let masterPDBMap2 =
     ] |> Map.ofList
 
 let spawnOrchestratorActor = OrchestratorActor.spawn parameters (fun _ -> fakeOracleAPI)
-let spawnOracleInstanceActor = OracleInstanceActor.spawn parameters (fun _ -> fakeOracleAPI)
+let spawnOracleInstanceActor = OracleInstanceActor.spawn parameters fakeOracleAPI
 let spawnMasterPDBActor = MasterPDBActor.spawn parameters fakeOracleAPI
 
 [<Fact>]
