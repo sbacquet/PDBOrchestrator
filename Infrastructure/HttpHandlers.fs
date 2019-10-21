@@ -14,7 +14,7 @@ let withUser f : HttpHandler =
     fun next (ctx:HttpContext) -> task {
         let user = 
             if (ctx.User.Identity.Name = null) then None else Some ctx.User.Identity.Name
-            |> Option.orElse (ctx.TryGetRequestHeader "user")
+            |> Option.orElse (ctx.TryGetRequestHeader "user") // TODO: remove this line when authentication implemented
         match user with
         | Some user -> return! f user next ctx
         | None -> return! RequestErrors.BAD_REQUEST "user cannot be determined" next ctx
@@ -57,7 +57,7 @@ let getRequestStatus (apiCtx:API.APIContext) (requestId:PendingRequest.RequestId
                 |> Encode.required Encode.string "data" data
             | OrchestratorActor.CompletedWithError error -> 
                 jObj 
-                |> Encode.required Encode.string "status" "Completed"
+                |> Encode.required Encode.string "status" "Completed with error"
                 |> Encode.required Encode.string "error" error
             | _ -> jObj // cannot happen
         )
@@ -89,6 +89,32 @@ let getPendingChanges (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
         match pendingChangesPerhaps with
         | None -> return! Successful.NO_CONTENT next ctx
         | Some pendingChanges -> 
+            let encodeOrchestratorCommand = Encode.buildWith (fun (command:OrchestratorActor.Command) jObj ->
+                let description = 
+                    match command with
+                    | OrchestratorActor.GetState ->
+                        "Get global state"
+                    | OrchestratorActor.GetInstanceState instance ->
+                        sprintf "Get state of instance %s" instance
+                    | OrchestratorActor.GetMasterPDBState (instance, pdb) ->
+                        sprintf "Get state of master PDB %s on instance %s" pdb instance
+                    | OrchestratorActor.Synchronize instance ->
+                        sprintf "Synchronize state of primary instance with %s" instance
+                    | OrchestratorActor.CreateMasterPDB (user, parameters) ->
+                        sprintf "Create master PDB %s from dump %s" parameters.Name parameters.Dump
+                    | OrchestratorActor.PrepareMasterPDBForModification (user, pdb, version) ->
+                        sprintf "Prepare master PDB %s for modifications" pdb
+                    | OrchestratorActor.CommitMasterPDB (user, pdb, comment) ->
+                        sprintf "Commit modifications done in master PDB %s" pdb
+                    | OrchestratorActor.RollbackMasterPDB (user, pdb) ->
+                        sprintf "Roll back modification done in %s" pdb
+                    | OrchestratorActor.SnapshotMasterPDBVersion (user, instance, pdb, version, name) ->
+                        sprintf "Snapshot version %d of master PDB %s to PDB %s" version pdb name
+                    | OrchestratorActor.GetRequest requestId ->
+                        sprintf "Get request from id %O" requestId
+                jObj 
+                |> Encode.required Encode.string "description" description
+            )
             let encodeOpenMasterPDB = Encode.buildWith (fun (x:string * Domain.MasterPDB.LockInfo) jObj ->
                 let name, lockInfo = x
                 jObj 
@@ -97,8 +123,8 @@ let getPendingChanges (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
             )
             let encodePendingChanges = Encode.buildWith (fun (x:OrchestratorActor.PendingChanges) jObj ->
                 jObj 
-                |> Encode.optional Encode.stringList "pendingChangeCommands" (if (pendingChanges.Commands.IsEmpty) then None else (Some (x.Commands |> List.map (sprintf "%A"))))
-                |> Encode.optional (Encode.listWith encodeOpenMasterPDB) "lockedPDBs" (if (pendingChanges.OpenMasterPDBs.IsEmpty) then None else Some x.OpenMasterPDBs)
+                |> Encode.optional (Encode.listWith encodeOrchestratorCommand) "pendingChangeCommands" (if (x.Commands.IsEmpty) then None else Some x.Commands)
+                |> Encode.optional (Encode.listWith encodeOpenMasterPDB) "lockedPDBs" (if (x.OpenMasterPDBs.IsEmpty) then None else Some x.OpenMasterPDBs)
             )
             return! text (pendingChanges |> serializeWith encodePendingChanges JsonFormattingOptions.Pretty) next ctx
 }
