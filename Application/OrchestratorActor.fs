@@ -74,6 +74,7 @@ let private spawnCollaborators parameters getOracleAPI (oracleInstanceRepo:#IOra
 
 type private State = {
     Orchestrator : Orchestrator
+    Collaborators : Collaborators
     PendingRequests :PendingUserRequestMap<Command>
     CompletedRequests : CompletedUserRequestMap<RequestStatus>
     ReadOnly : bool
@@ -81,11 +82,10 @@ type private State = {
 
 let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo initialState (ctx : Actor<_>) =
 
-    let collaborators = ctx |> spawnCollaborators parameters getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState
-
     let rec loop state = actor {
         
         let orchestrator = state.Orchestrator
+        let collaborators = state.Collaborators
         let pendingRequests = state.PendingRequests
         let completedRequests = state.CompletedRequests
         let readOnly = state.ReadOnly
@@ -312,7 +312,10 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
         | _ -> return! loop state
     }
 
-    loop { Orchestrator = initialState; PendingRequests = Map.empty; CompletedRequests = Map.empty; ReadOnly = false }
+    let collaborators = ctx |> spawnCollaborators parameters getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState
+
+    loop { Orchestrator = initialState; Collaborators = collaborators; PendingRequests = Map.empty; CompletedRequests = Map.empty; ReadOnly = false }
+
 
 let [<Literal>]cOrchestratorActorName = "Orchestrator"
 
