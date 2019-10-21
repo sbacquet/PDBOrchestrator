@@ -306,10 +306,11 @@ let private oracleInstanceActorBody (parameters:GlobalParameters) (oracleAPI:IOr
                 if (not masterPDBOk) then 
                     sender <! (requestId, MasterPDBActor.PreparationFailure (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
                     return! loop state
-                let masterPDBActor = collaborators.MasterPDBActors.[pdb]
-                let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                retype masterPDBActor <! MasterPDBActor.PrepareForModification (requestId, version, user)
-                return! loop { state with Requests = newRequests }
+                else
+                    let masterPDBActor = collaborators.MasterPDBActors.[pdb]
+                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                    retype masterPDBActor <! MasterPDBActor.PrepareForModification (requestId, version, user)
+                    return! loop { state with Requests = newRequests }
 
             | CommitMasterPDB (requestId, pdb, locker, comment) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionDone>>()
@@ -317,10 +318,11 @@ let private oracleInstanceActorBody (parameters:GlobalParameters) (oracleAPI:IOr
                 if (not masterPDBOk) then 
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
                     return! loop state
-                let masterPDBActor = collaborators.MasterPDBActors.[pdb]
-                let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                retype masterPDBActor <! MasterPDBActor.Commit (requestId, locker, comment)
-                return! loop { state with Requests = newRequests }
+                else
+                    let masterPDBActor = collaborators.MasterPDBActors.[pdb]
+                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                    retype masterPDBActor <! MasterPDBActor.Commit (requestId, locker, comment)
+                    return! loop { state with Requests = newRequests }
 
             | RollbackMasterPDB (requestId, user, pdb) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionDone>>()

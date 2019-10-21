@@ -240,7 +240,7 @@ let private masterPDBActorBody
                             return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                         | Error error -> 
                             sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name (error.ToString())))
-                        return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
+                            return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
                     | Error error ->
                         sender <! (requestId, Error (sprintf "cannot commit %s : %s" masterPDB.Name (error.ToString())))
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
@@ -256,7 +256,7 @@ let private masterPDBActorBody
                             return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                         | Error error -> 
                             sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name (error.ToString())))
-                        return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
+                            return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
                     | Error error ->
                         sender <! (requestId, Error (sprintf "cannot rollback %s : %s" masterPDB.Name (error.ToString())))
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
