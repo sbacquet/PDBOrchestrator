@@ -43,7 +43,7 @@ module Rest =
 
                 // Routes for admins
                 route "/pendingchanges" >=> HttpHandlers.getPendingChanges apiCtx
-                route "/read-only-mode" >=> HttpHandlers.isReadOnlyMode apiCtx
+                route "/mode" >=> HttpHandlers.getMode apiCtx
             ]
             POST >=> choose [
                 // Commit edition
@@ -58,13 +58,12 @@ module Rest =
                 // Prepare for edition
                 routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.prepareMasterPDBForModification apiCtx)
                 // Routes for admins
-                route "/read-only-mode" >=> HttpHandlers.enterReadOnlyMode apiCtx
+                route "/mode/maintenance" >=> HttpHandlers.enterReadOnlyMode apiCtx
+                route "/mode/normal" >=> HttpHandlers.enterNormalMode apiCtx
             ]
             DELETE >=> choose [
                 // Rollback edition
                 routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
-                // Routes for admins
-                route "/read-only-mode" >=> HttpHandlers.exitReadOnlyMode apiCtx
             ]
             RequestErrors.BAD_REQUEST "Unknown HTTP request"
         ]

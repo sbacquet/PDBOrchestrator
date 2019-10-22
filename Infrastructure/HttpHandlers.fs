@@ -17,7 +17,7 @@ let withUser f : HttpHandler =
             |> Option.orElse (ctx.TryGetRequestHeader "user") // TODO: remove this line when authentication implemented
         match user with
         | Some user -> return! f user next ctx
-        | None -> return! RequestErrors.BAD_REQUEST "user cannot be determined" next ctx
+        | None -> return! RequestErrors.badRequest (text "User cannot be determined.") next ctx
     }
 
 let getAllInstances (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
@@ -43,7 +43,7 @@ let getRequestStatus (apiCtx:API.APIContext) (requestId:PendingRequest.RequestId
     let! (_, requestStatus) = API.getRequestStatus apiCtx requestId
     match requestStatus with
     | OrchestratorActor.NotFound -> 
-        return! RequestErrors.notFound (text (sprintf "No request found with id = %O" requestId)) next ctx
+        return! RequestErrors.notFound (text <| sprintf "No request found with id = %O." requestId) next ctx
     | _ ->
         let encodeRequestStatus = Encode.buildWith (fun (x:OrchestratorActor.RequestStatus) jObj ->
             let jObj = jObj |> Encode.required Encode.string "requestId" (sprintf "%O" requestId)
@@ -71,9 +71,9 @@ let returnRequest endpoint requestValidation : HttpHandler =
     match requestValidation with
     | Valid reqId -> 
         setHttpHeader HeaderNames.Location (sprintf "%s/request/%O" endpoint reqId) 
-        >=> Successful.accepted (text "Request accepted. Please poll the resource in response header's Location.")
+        >=> Successful.accepted (text "Your request is accepted. Please poll the resource in response header's Location.")
     | Invalid errors -> 
-        RequestErrors.badRequest (text (System.String.Join("; ", errors)))
+        RequestErrors.notAcceptable (text <| sprintf "Your request cannot be accepted : %s." (System.String.Join("; ", errors)))
 
 let snapshot (apiCtx:API.APIContext) (instance:string, masterPDB:string, version:int, name:string) =
     withUser (fun user next ctx -> task {
@@ -130,18 +130,24 @@ let getPendingChanges (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
 }
 
 let enterReadOnlyMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
-    do! API.enterReadOnlyMode apiCtx
-    return! text "the system is now read-only" next ctx
+    let! switched = API.enterReadOnlyMode apiCtx
+    if (switched) then
+        return! text "The system is now in maintenance mode." next ctx
+    else
+        return! RequestErrors.notAcceptable (text "The system was already in maintenance mode.") next ctx
 }
 
-let exitReadOnlyMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
-    do! API.exitReadOnlyMode apiCtx
-    return! text "the system is now read-write" next ctx
+let enterNormalMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
+    let! switched = API.enterNormalMode apiCtx
+    if (switched) then
+        return! text "The system is now in normal mode." next ctx
+    else
+        return! RequestErrors.notAcceptable (text "The system was already in normal mode.") next ctx
 }
 
-let isReadOnlyMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
+let getMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
     let! readOnly = API.isReadOnlyMode apiCtx
-    return! text (sprintf "the system is %s" (if readOnly then "read-only" else "read-write")) next ctx
+    return! text (if readOnly then @"""maintenance""" else @"""normal""") next ctx
 }
 
 let prepareMasterPDBForModification (apiCtx:API.APIContext) pdb = withUser (fun user next ctx -> task {
@@ -153,9 +159,9 @@ let prepareMasterPDBForModification (apiCtx:API.APIContext) pdb = withUser (fun 
             let! requestValidation = API.prepareMasterPDBForModification apiCtx user pdb version
             return! returnRequest apiCtx.Endpoint requestValidation next ctx
         else 
-            return! RequestErrors.BAD_REQUEST "the current version must an integer" next ctx
+            return! RequestErrors.badRequest (text "The current version must an integer.") next ctx
     | None ->
-        return! RequestErrors.BAD_REQUEST "the current version must be provided" next ctx
+        return! RequestErrors.badRequest (text "The current version must be provided.") next ctx
 })
 
 let commitMasterPDB (apiCtx:API.APIContext) pdb = withUser (fun user next ctx -> task {
@@ -164,7 +170,7 @@ let commitMasterPDB (apiCtx:API.APIContext) pdb = withUser (fun user next ctx ->
         let! requestValidation = API.commitMasterPDB apiCtx user pdb comment
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     else
-        return! RequestErrors.BAD_REQUEST "a comment must be provided" next ctx
+        return! RequestErrors.badRequest (text "A comment must be provided.") next ctx
 })
 
 let rollbackMasterPDB (apiCtx:API.APIContext) pdb = withUser (fun user next ctx -> task {
@@ -174,5 +180,5 @@ let rollbackMasterPDB (apiCtx:API.APIContext) pdb = withUser (fun user next ctx 
 
 let collectGarbage (apiCtx:API.APIContext) = withUser (fun user next ctx -> task {
     API.collectGarbage apiCtx
-    return! text "Garbage collecting initiated" next ctx
+    return! text "Garbage collecting initiated." next ctx
 })

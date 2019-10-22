@@ -58,11 +58,11 @@ let commitMasterPDB (ctx:APIContext) user pdb comment : Async<RequestValidation>
 let getPendingChanges (ctx:APIContext) : Async<Result<Option<PendingChanges>,string>> =
     retype ctx.Orchestrator <? OrchestratorActor.GetPendingChanges
 
-let enterReadOnlyMode (ctx:APIContext) : Async<unit> =
-    retype ctx.Orchestrator <? OrchestratorActor.EnterReadOnlyMode |> Async.Ignore
+let enterReadOnlyMode (ctx:APIContext) : Async<bool> =
+    retype ctx.Orchestrator <? OrchestratorActor.EnterReadOnlyMode
 
-let exitReadOnlyMode (ctx:APIContext) : Async<unit> =
-    retype ctx.Orchestrator <? OrchestratorActor.ExitReadOnlyMode |> Async.Ignore
+let enterNormalMode (ctx:APIContext) : Async<bool> =
+    retype ctx.Orchestrator <? OrchestratorActor.EnterNormalMode
 
 let isReadOnlyMode (ctx:APIContext) : Async<bool> =
     retype ctx.Orchestrator <? OrchestratorActor.IsReadOnlyMode

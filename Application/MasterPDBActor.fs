@@ -95,11 +95,14 @@ let private masterPDBActorBody
             | SetInternalState newMasterPDB ->
                 return! loop { state with MasterPDB = newMasterPDB }
 
-            | PrepareForModification (requestId, version, _) as command ->
+            | PrepareForModification (requestId, version, user) as command ->
                 let sender = ctx.Sender().Retype<WithRequestId<PrepareForModificationResult>>()
 
                 if masterPDB |> isLocked then
                     sender <! (requestId, PreparationFailure (sprintf "PDB %s is already locked" masterPDB.Name))
+                    return! loop state
+                elif not <| UserRights.canLockPDB masterPDB (UserRights.normalUser user) then
+                    sender <! (requestId, PreparationFailure (sprintf "user %s is not authorized to lock PDB %s" user masterPDB.Name))
                     return! loop state
                 else
                     let latestVersion = masterPDB |> getLatestAvailableVersion
@@ -122,8 +125,8 @@ let private masterPDBActorBody
                     sender <! (requestId, Error (sprintf "the master PDB %s is not being edited" masterPDB.Name))
                     return! loop state
                 | Some lockInfo ->
-                    if (lockInfo.Locker <> unlocker) then
-                        sender <! (requestId, Error (sprintf "you (%s) are not the editor (%s) of master PDB %s" unlocker lockInfo.Locker masterPDB.Name))
+                    if not <| UserRights.canUnlockPDB lockInfo (UserRights.normalUser unlocker) then
+                        sender <! (requestId, Error (sprintf "user %s is not authorized to unlock PDB %s" unlocker masterPDB.Name))
                         return! loop state
                     elif (state.EditionOperationInProgress) then
                         sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
@@ -142,8 +145,8 @@ let private masterPDBActorBody
                     sender <! (requestId, Error (sprintf "the master PDB %s is not being edited" masterPDB.Name))
                     return! loop state
                 | Some lockInfo ->
-                    if (lockInfo.Locker <> unlocker) then
-                        sender <! (requestId, Error (sprintf "you (%s) are not the editor (%s) of master PDB %s" unlocker lockInfo.Locker masterPDB.Name))
+                    if not <| UserRights.canUnlockPDB lockInfo (UserRights.normalUser unlocker) then
+                        sender <! (requestId, Error (sprintf "user %s is not authorized to unlock PDB %s" unlocker masterPDB.Name))
                         return! loop state
                     elif (state.EditionOperationInProgress) then
                         sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))

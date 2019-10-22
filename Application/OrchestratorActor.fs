@@ -28,22 +28,24 @@ type Command =
 
 type AdminCommand =
 | GetPendingChanges // responds with Result<Option<PendingChanges>,string>
-| EnterReadOnlyMode // responds with bool=true
-| ExitReadOnlyMode // responds with bool=false
+| EnterReadOnlyMode // responds with bool
+| EnterNormalMode // responds with bool
 | IsReadOnlyMode // responds with bool
 | CollectGarbage // no response
 
-let private pendingChangeCommandFilter = function
+let private pendingChangeCommandFilter mapper = function
 | GetState
 | GetInstanceState _
 | GetMasterPDBState _
 | SnapshotMasterPDBVersion _
 | GetRequest _
-| Synchronize _ -> false
-| CreateMasterPDB _
-| PrepareMasterPDBForModification _
-| CommitMasterPDB _
-| RollbackMasterPDB _ -> true
+| Synchronize _ -> 
+    false
+| CreateMasterPDB (user, _)
+| PrepareMasterPDBForModification (user, _, _)
+| CommitMasterPDB (user, _, _)
+| RollbackMasterPDB (user, _) -> 
+    mapper user
 
 type PendingChanges = {
     Commands : Command list
@@ -98,9 +100,15 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
         match msg with
         | :? Command as command ->
             let sender = ctx.Sender().Retype<RequestValidation>()
-            if (readOnly && pendingChangeCommandFilter command) then
-                sender <! RequestValidation.Invalid [ "this command cannot be accepted in read-only mode" ]
+
+            // Check if command is compatible with maintenance mode
+            let pendingChangeCommandAcceptable user = UserRights.isAdmin (UserRights.normalUser user)
+            if (readOnly && pendingChangeCommandFilter (pendingChangeCommandAcceptable >> not) command) then
+                sender <! RequestValidation.Invalid [ "the command cannot be run in maintenance mode" ]
                 return! loop state
+            
+            else // Do not remove this line !!
+
             let getInstanceName instanceName = if instanceName = "primary" then orchestrator.PrimaryInstance else instanceName
             
             match command with
@@ -180,7 +188,7 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
                 else
-                    sender <! Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
+                    sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
                     return! loop state
 
             | GetRequest requestId ->
@@ -200,7 +208,7 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
                         sender <! (requestId, request.Status)
                         logDebugf ctx "Request %s completed => removed from the list" (requestId.ToString())
                         return! loop { state with CompletedRequests = completedRequests |> Map.remove requestId }
-            
+
         | :? AdminCommand as command ->
             match command with
             | GetPendingChanges ->
@@ -208,7 +216,7 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
                     pendingRequests 
                     |> Map.toSeq
                     |> Seq.map (fun (_, request) -> request.Command)
-                    |> Seq.filter pendingChangeCommandFilter
+                    |> Seq.filter (pendingChangeCommandFilter (fun _ -> true))
                 
                 let primaryInstance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                 let! (primaryInstanceState:OracleInstanceActor.StateResult) = primaryInstance <? OracleInstanceActor.GetState
@@ -229,12 +237,14 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
                 return! loop state
 
             | EnterReadOnlyMode ->
-                ctx.Sender() <! true
-                return! loop { state with ReadOnly = true }
-
-            | ExitReadOnlyMode ->
-                ctx.Sender() <! false
-                return! loop { state with ReadOnly = false }
+                if (state.ReadOnly) then
+                    ctx.Sender() <! false
+                    ctx.Log.Value.Warning("The server is already in maintenance mode.")
+                    return! loop state
+                else
+                    ctx.Sender() <! true
+                    ctx.Log.Value.Warning("The server is now in maintenance mode.")
+                    return! loop { state with ReadOnly = true }
 
             | IsReadOnlyMode ->
                 ctx.Sender() <! readOnly
@@ -244,6 +254,17 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
                 ctx.Log.Value.Info("Garbage collection requested")
                 collaborators.OracleInstanceActors |> Map.iter (fun _ actor -> retype actor <! OracleInstanceActor.CollectGarbage)
                 return! loop state
+
+            | EnterNormalMode ->
+                if (state.ReadOnly) then
+                    ctx.Sender() <! true
+                    ctx.Log.Value.Info("The server is now in normal mode.")
+                    return! 
+                        loop { state with ReadOnly = false }
+                else
+                    ctx.Log.Value.Info("The server is already in normal mode.")
+                    ctx.Sender() <! false
+                    return! loop state
 
         | :? WithRequestId<MasterPDBCreationResult> as responseToCreateMasterPDB ->
             let (requestId, result) = responseToCreateMasterPDB
@@ -314,7 +335,13 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
 
     let collaborators = ctx |> spawnCollaborators parameters getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState
 
-    loop { Orchestrator = initialState; Collaborators = collaborators; PendingRequests = Map.empty; CompletedRequests = Map.empty; ReadOnly = false }
+    loop { 
+        Orchestrator = initialState
+        Collaborators = collaborators
+        PendingRequests = Map.empty
+        CompletedRequests = Map.empty
+        ReadOnly = false 
+    }
 
 
 let [<Literal>]cOrchestratorActorName = "Orchestrator"
