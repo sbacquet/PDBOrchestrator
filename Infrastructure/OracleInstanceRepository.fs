@@ -20,7 +20,7 @@ let loadOracleInstance folder name : OracleInstance =
 let saveOracleInstance folder name pdb = 
     Directory.CreateDirectory (instanceFolder folder name) |> ignore
     use stream = File.CreateText (instancePath folder name)
-    let json = pdb |> OracleInstanceJson.oracleInstancetoJson
+    let json = pdb |> OracleInstanceJson.oracleInstanceToJson
     stream.Write json
     stream.Flush()
 

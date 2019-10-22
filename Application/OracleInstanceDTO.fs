@@ -8,11 +8,19 @@ type OracleInstanceState = {
     Name: string
     Server: string
     Port: int option
-    MasterPDBManifestsPath: string
-    TestPDBManifestsPath: string
     OracleDirectoryForDumps: string
     MasterPDBs: MasterPDBState list
 }
+
+let consOracleInstanceState name server port directory masterPDBs = 
+    { 
+        Name = name
+        Server = server
+        Port = port
+        OracleDirectoryForDumps = directory
+        MasterPDBs = masterPDBs 
+    }
+
 
 let getResult (state:MasterPDBActor.StateResult) : MasterPDBState =
     match state with
@@ -27,13 +35,11 @@ let toDTO (masterPDBActors:Map<string, IActorRef<obj>>) (oracleInstance : Domain
                 return getResult state
                })
             |> Async.Parallel
-    return {
-        Name = oracleInstance.Name
-        Server = oracleInstance.Server
-        Port = oracleInstance.Port
-        MasterPDBManifestsPath = oracleInstance.MasterPDBManifestsPath
-        TestPDBManifestsPath = oracleInstance.SnapshotPDBDestPath
-        OracleDirectoryForDumps = oracleInstance.OracleDirectoryForDumps
-        MasterPDBs = masterPDBs |> Array.toList
-    }
+    return 
+        consOracleInstanceState 
+            oracleInstance.Name 
+            oracleInstance.Server 
+            oracleInstance.Port 
+            oracleInstance.OracleDirectoryForDumps 
+            (masterPDBs |> Array.toList)
 }

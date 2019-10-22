@@ -9,6 +9,7 @@ open Application
 open Chiron.Serialization.Json
 open Chiron.Formatting
 open Microsoft.Net.Http.Headers
+open Infrastructure.DTOJSON
 
 let withUser f : HttpHandler =
     fun next (ctx:HttpContext) -> task {
@@ -22,13 +23,13 @@ let withUser f : HttpHandler =
 
 let getAllInstances (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx
-    return! json state next ctx
+    return! text (Orchestrator.orchestratorToJson state) next ctx
 }
 
 let getInstance (apiCtx:API.APIContext) (name:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx name
     match stateMaybe with
-    | Ok state -> return! json state next ctx
+    | Ok state -> return! (text (OracleInstance.oracleInstanceToJson state)) next ctx
     | Error error -> return! RequestErrors.notFound (text error) next ctx
 }
 

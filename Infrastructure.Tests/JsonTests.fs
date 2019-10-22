@@ -34,7 +34,7 @@ let ``Serialize and deserialize Oracle instance`` () =
         OracleDirectoryForDumps = "xxxxx"
         MasterPDBs = [ "test1"; "test2" ]
     }
-    let json = instance1 |> OracleInstanceJson.oracleInstancetoJson
+    let json = instance1 |> OracleInstanceJson.oracleInstanceToJson
     let instance1' = json |> OracleInstanceJson.jsonToOracleInstance
     match instance1' with
     | JPass i -> Assert.Equal(instance1, i)

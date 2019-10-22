@@ -75,6 +75,6 @@ let jsonToOracleInstance json =
     use aesAlg = Aes.Create()
     json |> Json.deserializeWith (decodeOracleInstance aesAlg) 
 
-let oracleInstancetoJson pdb =
+let oracleInstanceToJson pdb =
     use aesAlg = Aes.Create()
     pdb |> Json.serializeWith (encodeOracleInstance aesAlg) JsonFormattingOptions.Pretty
