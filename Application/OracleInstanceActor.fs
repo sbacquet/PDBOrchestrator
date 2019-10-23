@@ -119,7 +119,7 @@ let stateError error : StateResult = Error error
 type MasterPDBCreationResult = 
 | InvalidRequest of string list
 | MasterPDBCreated of Domain.MasterPDB.MasterPDB
-| MasterPDBCreationFailure of string
+| MasterPDBCreationFailure of string * string
 
 type private Collaborators = {
     OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
@@ -392,7 +392,7 @@ let private oracleInstanceActorBody (parameters:GlobalParameters) (oracleAPI:IOr
                         return! loop { state with Instance = newInstance; Collaborators = newCollabs; Requests = newRequests; MasterPDBRepo = newMasterPDBRepo }
                     | Error error -> 
                         logErrorf ctx "PDB %s failed to create with error %A" commandParameters.Name error
-                        requester <! (requestId, MasterPDBCreationFailure (error.ToString()))
+                        requester <! (requestId, MasterPDBCreationFailure (commandParameters.Name, error.ToString()))
                         return! loop { state with Requests = newRequests }
                 | _ -> 
                     ctx.Log.Value.Error "critical error"

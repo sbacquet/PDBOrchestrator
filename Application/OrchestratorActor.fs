@@ -103,7 +103,7 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
 
             // Check if command is compatible with maintenance mode
             let pendingChangeCommandAcceptable user = UserRights.isAdmin (UserRights.normalUser user)
-            if (readOnly && pendingChangeCommandFilter (pendingChangeCommandAcceptable >> not) command) then
+            if (readOnly && pendingChangeCommandFilter (not << pendingChangeCommandAcceptable) command) then
                 sender <! RequestValidation.Invalid [ "the command cannot be run in maintenance mode" ]
                 return! loop state
             
@@ -278,8 +278,8 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
                     match result with
                     | InvalidRequest errors -> 
                         CompletedWithError (sprintf "invalid request : %s" (System.String.Join("; ", errors |> List.toArray)))
-                    | MasterPDBCreationFailure error -> 
-                        CompletedWithError error
+                    | MasterPDBCreationFailure (pdb, error) -> 
+                        CompletedWithError (sprintf "error while creating master PDB %s : %s" pdb error)
                     | MasterPDBCreated pdb ->
                         CompletedOk (sprintf "master PDB %s created successfully" pdb.Name)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
