@@ -296,7 +296,7 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
                 let status = 
                     match result with
                     | MasterPDBActor.Prepared pdb -> CompletedOk (sprintf "master PDB %s prepared successfully for edition" pdb.Name)
-                    | MasterPDBActor.PreparationFailure error -> CompletedWithError (sprintf "error while preparing master PDB for edition : %s" error)
+                    | MasterPDBActor.PreparationFailure (pdb, error) -> CompletedWithError (sprintf "error while preparing master PDB %s for edition : %s" pdb error)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 

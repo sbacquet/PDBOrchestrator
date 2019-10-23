@@ -332,7 +332,7 @@ let ``OracleInstance locks master PDB`` () = test <| fun tck ->
 
     match result with
     | Prepared _ -> ()
-    | PreparationFailure error -> failwith error
+    | PreparationFailure (_, error) -> failwith error
 
 [<Fact>]
 let ``API edits and rolls back master PDB`` () = test <| fun tck ->

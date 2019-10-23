@@ -304,7 +304,7 @@ let private oracleInstanceActorBody (parameters:GlobalParameters) (oracleAPI:IOr
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.PrepareForModificationResult>>()
                 let masterPDBOk = instance.MasterPDBs |> List.contains pdb
                 if (not masterPDBOk) then 
-                    sender <! (requestId, MasterPDBActor.PreparationFailure (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
+                    sender <! (requestId, MasterPDBActor.PreparationFailure (pdb, sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
                     return! loop state
                 else
                     let masterPDBActor = collaborators.MasterPDBActors.[pdb]

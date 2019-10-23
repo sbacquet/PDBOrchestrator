@@ -21,7 +21,7 @@ type Command =
 
 type PrepareForModificationResult = 
 | Prepared of MasterPDB
-| PreparationFailure of string
+| PreparationFailure of string * string
 
 type StateResult = Result<Application.DTO.MasterPDB.MasterPDBState, string>
 let stateOk state : StateResult = Ok state
@@ -99,18 +99,18 @@ let private masterPDBActorBody
                 let sender = ctx.Sender().Retype<WithRequestId<PrepareForModificationResult>>()
 
                 if masterPDB |> isLocked then
-                    sender <! (requestId, PreparationFailure (sprintf "PDB %s is already locked" masterPDB.Name))
+                    sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "PDB %s is already locked" masterPDB.Name))
                     return! loop state
                 elif not <| UserRights.canLockPDB masterPDB (UserRights.normalUser user) then
-                    sender <! (requestId, PreparationFailure (sprintf "user %s is not authorized to lock PDB %s" user masterPDB.Name))
+                    sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "user %s is not authorized to lock PDB %s" user masterPDB.Name))
                     return! loop state
                 else
                     let latestVersion = masterPDB |> getLatestAvailableVersion
                     if (latestVersion.Number <> version) then 
-                        sender <! (requestId, PreparationFailure (sprintf "version %d is not the latest version (%d) of \"%s\"" version latestVersion.Number masterPDB.Name))
+                        sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "version %d is not the latest version (%d) of \"%s\"" version latestVersion.Number masterPDB.Name))
                         return! loop state
                     elif (state.EditionOperationInProgress) then
-                        sender <! (requestId, PreparationFailure (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
+                        sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
                         return! loop state
                     else
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
@@ -229,7 +229,7 @@ let private masterPDBActorBody
                         sender <! (requestId, Prepared newMasterPDB)
                         return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                     | Error error ->
-                        sender <! (requestId, PreparationFailure (error.ToString()))
+                        sender <! (requestId, PreparationFailure (masterPDB.Name, error.ToString()))
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
 
                 | Commit (_, unlocker, comment) ->
