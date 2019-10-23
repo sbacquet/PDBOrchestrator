@@ -70,6 +70,8 @@ let private masterPDBActorBody
     (initialMasterPDB : Domain.MasterPDB.MasterPDB) 
     (ctx : Actor<_>) =
 
+    let editionPDBName = initialMasterPDB.Name
+
     let rec loop state = actor {
 
         let masterPDB = state.MasterPDB
@@ -81,6 +83,28 @@ let private masterPDBActorBody
         let! (msg:obj) = ctx.Receive()
         
         match msg with
+        | :? LifecycleEvent as event ->
+            match event with
+            | LifecycleEvent.PreStart ->
+                ctx.Log.Value.Debug("Checking integrity...")
+                let! editionPDBExists = oracleAPI.PDBExists editionPDBName
+                match editionPDBExists, masterPDB.LockState.IsSome with
+                | Ok true, false ->
+                    ctx.Log.Value.Warning("Master PDB is not locked whereas its edition PDB exists on server => deleting the PDB...")
+                    let! _ = oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, editionPDBName)
+                    return! loop state
+                | Ok false, true ->
+                    ctx.Log.Value.Warning("Master PDB is declared as locked whereas its edition PDB does not exist on server => unlocked it")
+                    return! loop { state with MasterPDB = { masterPDB with LockState = None } }
+                | Ok _, _->
+                    ctx.Log.Value.Debug("Integrity OK.")
+                    return! loop state
+                | Error error, _ ->
+                    ctx.Log.Value.Error("Cannot check integrity : {0}", error)
+                    return! loop state
+            | _ ->
+                return! unhandled()
+
         | :? Command as command -> 
             match command with
             | GetState -> 
@@ -114,7 +138,7 @@ let private masterPDBActorBody
                         return! loop state
                     else
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                        oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestPath version), instance.MasterPDBDestPath, masterPDB.Name)
+                        oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestPath version), instance.MasterPDBDestPath, editionPDBName)
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
 
             | Commit (requestId, unlocker, _) ->
@@ -133,7 +157,7 @@ let private masterPDBActorBody
                         return! loop state
                     else
                         let manifest = manifestPath (getNextAvailableVersion masterPDB)
-                        oracleLongTaskExecutor <! OracleLongTaskExecutor.ExportPDB (Some requestId, manifest, masterPDB.Name)
+                        oracleLongTaskExecutor <! OracleLongTaskExecutor.ExportPDB (Some requestId, manifest, editionPDBName)
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
 
@@ -153,7 +177,7 @@ let private masterPDBActorBody
                         return! loop state
                     else
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                        oracleLongTaskExecutor <! OracleLongTaskExecutor.DeletePDB (Some requestId, masterPDB.Name)
+                        oracleLongTaskExecutor <! OracleLongTaskExecutor.DeletePDB (Some requestId, editionPDBName)
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
             
             | SnapshotVersion (requestId, versionNumber, snapshotName) ->
@@ -275,7 +299,7 @@ let private masterPDBActorBody
 
                 | _ -> failwithf "Fatal error"
 
-        | _ -> return! loop state
+        | _ -> return! unhandled()
     }
 
     let collaborators = { 
