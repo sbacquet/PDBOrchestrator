@@ -4,10 +4,10 @@ open Microsoft.Extensions.Configuration
 open Domain.Common.Validation
 
 let validateServerInstanceName (config:IConfigurationRoot) =
-    let configEntry = "ServerInstanceName"
-    let name = config.GetValue(configEntry, "A")
+    let configEntry = "UniqueName"
+    let name = config.GetValue configEntry
     if (System.String.IsNullOrWhiteSpace(name))
-    then Invalid [ sprintf "config entry %s must not be empty" configEntry ]
+    then Invalid [ sprintf "config entry %s must not be empty, and must be unique for every server instance" configEntry ]
     else Valid name
 
 let validateShortTimeout (config:IConfigurationRoot) =

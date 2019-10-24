@@ -3,26 +3,19 @@
 open Infrastructure
 open Application.Common
 open Microsoft.Extensions.Logging
-open Serilog.Extensions.Logging
 open Domain.OracleInstance
-open Domain.Orchestrator
 open Application
-open Application.OrchestratorActor
 open Serilog
-open Akka.Actor
 open Akkling
 open Domain.Common.Validation
 open System
-open Microsoft.AspNetCore
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
-open Microsoft.AspNetCore.Http
-open Microsoft.Extensions.Options
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Configuration
 open Giraffe
 
-let loggerFactory = new SerilogLoggerFactory(dispose=true) :> ILoggerFactory
+let loggerFactory = new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory
 
 [<RequireQualifiedAccess>]
 module Rest =
@@ -78,7 +71,7 @@ module Rest =
             //.UseAuthentication()
             .UseGiraffe(webApp apiCtx) |> ignore
 
-    let configureServices (config : IConfiguration) (services : IServiceCollection) =
+    let configureServices (services : IServiceCollection) =
         services
             .AddSingleton(typeof<ILoggerFactory>, loggerFactory)
             .AddGiraffe() |> ignore
@@ -176,7 +169,7 @@ let main args =
         .UseKestrel(fun options -> options.Listen(System.Net.IPAddress.IPv6Any, port))
         .UseIISIntegration()
         .Configure(Action<IApplicationBuilder> (Rest.configureApp apiContext))
-        .ConfigureServices(Rest.configureServices config)
+        .ConfigureServices(Rest.configureServices)
         .Build()
         .Run()
 

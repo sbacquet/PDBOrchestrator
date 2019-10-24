@@ -17,8 +17,7 @@
     },
     "Infrastructure": {
       "commandName": "Project",
-      "commandLineArgs": "Root=d:\\Documents\\git_repos\\PDBOrchestrator\\Infrastructure.Tests\\integration",
-      "workingDirectory": "d:\\Documents\\git_repos\\PDBOrchestrator\\Infrastructure\\bin\\Debug\\netcoreapp2.2\\",
+      "commandLineArgs": "Root=..\\Infrastructure.Tests\\integration UniqueName=A",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },
