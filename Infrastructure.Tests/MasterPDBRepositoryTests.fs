@@ -10,28 +10,28 @@ let [<Literal>]testFolder = __SOURCE_DIRECTORY__ + @"\tests\masterPDBs"
 [<Fact>]
 let ``Put and get master PDB`` () =
     let pdbName = "test1"
-    let repo = loadMasterPDBRepository testFolder [] :> IMasterPDBRepository
+    let repo = MasterPDBRepository(testFolder, pdbName) :> IMasterPDBRepository
     let pdb = newMasterPDB pdbName [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
-    let repo' = repo.Put pdbName pdb
-    let pdb' = repo'.Get pdbName
+    let repo' = repo.Put pdb
+    let pdb' = repo'.Get()
     Assert.Equal(pdb, pdb')
 
 [<Fact>]
 let ``Save and load master PDB`` () =
     let pdbName = "test2"
-    let repo = loadMasterPDBRepository testFolder [] :> IMasterPDBRepository
+    let repo = MasterPDBRepository(testFolder, pdbName) :> IMasterPDBRepository
     let pdb = newMasterPDB pdbName [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
-    repo.Put pdbName pdb |> ignore
-    let repo2 = loadMasterPDBRepository testFolder [ pdbName ] :> IMasterPDBRepository
-    let pdb2 = repo2.Get pdbName
+    repo.Put pdb |> ignore
+    let repo2 = MasterPDBRepository(testFolder, pdbName) :> IMasterPDBRepository
+    let pdb2 = repo2.Get()
     Assert.Equal(pdb, pdb2)
 
 [<Fact>]
 let ``Update master PDB`` () =
     let pdbName = "test3"
-    let repo = loadMasterPDBRepository testFolder [] :> IMasterPDBRepository
+    let repo = MasterPDBRepository(testFolder, pdbName) :> IMasterPDBRepository
     let pdb = newMasterPDB pdbName [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
-    let repo' = repo.Put pdbName pdb
-    let repo'' = repo'.Put pdbName { pdb with LockState = Some (newLockInfo "me") }
-    let pdb' = repo''.Get pdbName
+    let repo' = repo.Put pdb
+    let repo'' = repo'.Put { pdb with LockState = Some (newLockInfo "me") }
+    let pdb' = repo''.Get()
     Assert.Equal("me", pdb'.LockState.Value.Locker)

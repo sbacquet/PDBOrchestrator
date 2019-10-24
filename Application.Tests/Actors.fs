@@ -161,10 +161,10 @@ type FakeOracleAPI() =
 
 let fakeOracleAPI = FakeOracleAPI()
 
-type FakeOracleInstanceRepo(map : Map<string, OracleInstance>) =
+type FakeOracleInstanceRepo(instance) =
     interface IOracleInstanceRepository with
-        member this.Get pdb = map |> Map.find pdb
-        member this.Put name pdb = upcast FakeOracleInstanceRepo (map.Add(name, pdb))
+        member __.Get () = instance
+        member __.Put newInstance = upcast FakeOracleInstanceRepo newInstance
 
 let allInstances = 
     [
@@ -172,10 +172,13 @@ let allInstances =
         "server2", instance2
     ] |> Map.ofList
 
-type FakeMasterPDBRepo(map : Map<string, MasterPDB>) =
+let getInstanceRepo name = 
+    FakeOracleInstanceRepo allInstances.[name] :> IOracleInstanceRepository
+
+type FakeMasterPDBRepo(pdb: MasterPDB) =
     interface IMasterPDBRepository with
-        member this.Get pdb = map |> Map.find pdb
-        member this.Put name pdb = upcast FakeMasterPDBRepo (map.Add(name, pdb))
+        member __.Get () = pdb
+        member __.Put newPDB = upcast FakeMasterPDBRepo newPDB
 
 let masterPDBMap1 =
     [ 
@@ -188,34 +191,42 @@ let masterPDBMap2 =
         "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "comment2")
     ] |> Map.ofList
 
-let spawnOrchestratorActor = OrchestratorActor.spawn parameters (fun _ -> fakeOracleAPI)
-let spawnOracleInstanceActor = OracleInstanceActor.spawn parameters fakeOracleAPI
-let spawnMasterPDBActor = MasterPDBActor.spawn parameters fakeOracleAPI
+let getMasterPDBRepo (instance:OracleInstance) name = 
+    match instance.Name with
+    | "server1" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
+    | "server2" ->  FakeMasterPDBRepo masterPDBMap2.[name] :> IMasterPDBRepository
+    | name -> failwithf "Oracle instance %s does not exist" name
 
-[<Fact>]
-let ``Test state transfer`` () = test <| fun tck ->
-    let aref1 = tck |> spawnOracleInstanceActor (FakeMasterPDBRepo masterPDBMap1) instance1
-    let aref2 = tck |> spawnOracleInstanceActor (FakeMasterPDBRepo masterPDBMap2) instance2
-
-    let state : OracleInstanceActor.StateResult = retype aref1 <? OracleInstanceActor.TransferInternalState aref2 |> run
-    state |> Result.mapError (fun error -> failwith error) |> ignore
-    ()
+let newMasterPDBRepo _ pdb = FakeMasterPDBRepo pdb :> IMasterPDBRepository
 
 let orchestratorState = {
     OracleInstanceNames = [ "server1"; "server2" ]
     PrimaryInstance = "server1"
 }
 
-let getMasterPDBRepo (instance:OracleInstance) = 
-    match instance.Name with
-    | "server1" -> FakeMasterPDBRepo masterPDBMap1
-    | "server2" -> FakeMasterPDBRepo masterPDBMap2
-    | name -> failwithf "Oracle instance %s does not exist" name
+type FakeOrchestratorRepo(orchestrator) =
+    interface IOrchestratorRepository with
+        member __.Get () = orchestrator
+        member __.Put newOrchestrator = upcast FakeOrchestratorRepo newOrchestrator
+
+let orchestratorRepo = FakeOrchestratorRepo(orchestratorState)
+
+let spawnOrchestratorActor = OrchestratorActor.spawn parameters (fun _ -> fakeOracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+let spawnOracleInstanceActor = OracleInstanceActor.spawn parameters (fun _ -> fakeOracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo
+let spawnMasterPDBActor = MasterPDBActor.spawn parameters fakeOracleAPI
+
+[<Fact>]
+let ``Test state transfer`` () = test <| fun tck ->
+    let aref1 = spawnOracleInstanceActor tck "server1"
+    let aref2 = spawnOracleInstanceActor tck "server2"
+
+    let state : OracleInstanceActor.StateResult = retype aref1 <? OracleInstanceActor.TransferInternalState aref2 |> run
+    state |> Result.mapError (fun error -> failwith error) |> ignore
+    ()
 
 [<Fact>]
 let ``API synchronizes state`` () = test <| fun tck ->
-    let instanceRepo = FakeOracleInstanceRepo allInstances
-    let orchestrator = tck |> spawnOrchestratorActor instanceRepo getMasterPDBRepo orchestratorState
+    let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
     let state = API.synchronizePrimaryInstanceWith ctx "server2" |> run
     state |> Result.mapError (fun error -> failwith error) |> ignore
@@ -223,7 +234,7 @@ let ``API synchronizes state`` () = test <| fun tck ->
 
 [<Fact>]
 let ``Oracle instance actor creates PDB`` () = test <| fun tck ->
-    let oracleActor = tck |> spawnOracleInstanceActor (FakeMasterPDBRepo masterPDBMap2) instance2
+    let oracleActor = spawnOracleInstanceActor tck "server2"
 
     let stateBefore : OracleInstanceActor.StateResult = retype oracleActor <? OracleInstanceActor.GetState |> runQuick
     match stateBefore with
@@ -279,8 +290,7 @@ let throwIfRequestNotCompletedOk (ctx:API.APIContext) request =
 
 [<Fact>]
 let ``API creates PDB`` () = test <| fun tck ->
-    let instanceRepo = FakeOracleInstanceRepo allInstances
-    let orchestrator = tck |> spawnOrchestratorActor instanceRepo getMasterPDBRepo orchestratorState
+    let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
     let stateBefore = API.getState ctx |> runQuick
@@ -302,21 +312,20 @@ let ``API creates PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``Lock master PDB`` () = test <| fun tck ->
-    let pdb1 = newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
-    let masterPDBActor = tck |> spawnMasterPDBActor instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor pdb1
+    let masterPDBActor = tck |> spawnMasterPDBActor instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
     retype masterPDBActor <! MasterPDBActor.PrepareForModification (newRequestId(), 1, "me")
 
-    let preparedMess = expectMsgFilter tck (fun (mess:obj) -> 
+    expectMsgFilter tck (fun (mess:obj) -> 
         match mess with
         | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as result -> 
             match snd result with
             | Prepared _ -> true
             | _ -> false
         | _ -> false
-    )
+    ) |> ignore
 
     let (_, result) : WithRequestId<MasterPDBActor.EditionDone> = 
         retype masterPDBActor <? MasterPDBActor.Rollback (newRequestId(), "me") |> run
@@ -325,7 +334,7 @@ let ``Lock master PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``OracleInstance locks master PDB`` () = test <| fun tck ->
-    let oracleActor = tck |> spawnOracleInstanceActor (FakeMasterPDBRepo masterPDBMap1) instance1
+    let oracleActor = spawnOracleInstanceActor tck "server1"
 
     let (_, result) : WithRequestId<MasterPDBActor.PrepareForModificationResult> = 
         retype oracleActor <? OracleInstanceActor.PrepareMasterPDBForModification (newRequestId(), "test1", 1, "me") |> run
@@ -336,8 +345,7 @@ let ``OracleInstance locks master PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``API edits and rolls back master PDB`` () = test <| fun tck ->
-    let instanceRepo = FakeOracleInstanceRepo allInstances
-    let orchestrator = tck |> spawnOrchestratorActor instanceRepo getMasterPDBRepo orchestratorState
+    let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
     let request = API.prepareMasterPDBForModification ctx "me" "test1" 1 |> runQuick
@@ -348,8 +356,7 @@ let ``API edits and rolls back master PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``API edits and commits master PDB`` () = test <| fun tck ->
-    let instanceRepo = FakeOracleInstanceRepo allInstances
-    let orchestrator = tck |> spawnOrchestratorActor instanceRepo getMasterPDBRepo orchestratorState
+    let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
     let request = API.prepareMasterPDBForModification ctx "me" "test1" 1 |> runQuick
@@ -365,25 +372,23 @@ let ``API edits and commits master PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``MasterPDB snapshots a version`` () = test <| fun tck ->
-    let pdb1 = newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
-    let masterPDBActor = tck |> spawnMasterPDBActor instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor pdb1
+    let masterPDBActor = tck |> spawnMasterPDBActor instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
     let (_, result):WithRequestId<SnapshotResult> = retype masterPDBActor <? MasterPDBActor.SnapshotVersion (newRequestId(), 1, "snapshot") |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
 
 [<Fact>]
 let ``OracleInstance snapshots PDB`` () = test <| fun tck ->
-    let oracleActor = tck |> spawnOracleInstanceActor (FakeMasterPDBRepo masterPDBMap1) instance1
+    let oracleActor = spawnOracleInstanceActor tck "server1"
 
     let (_, result):WithRequestId<SnapshotResult> = retype oracleActor <? OracleInstanceActor.SnapshotMasterPDBVersion (newRequestId(), "test1", 1, "snapshot") |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
 
 [<Fact>]
 let ``API snapshots PDB`` () = test <| fun tck ->
-    let instanceRepo = FakeOracleInstanceRepo allInstances
-    let orchestrator = tck |> spawnOrchestratorActor instanceRepo getMasterPDBRepo orchestratorState
+    let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
     let request = API.snapshotMasterPDBVersion ctx "me" "server1" "test1" 1 "snapshot" |> runQuick
@@ -391,8 +396,7 @@ let ``API snapshots PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``API gets no pending changes`` () = test <| fun tck ->
-    let instanceRepo = FakeOracleInstanceRepo allInstances
-    let orchestrator = tck |> spawnOrchestratorActor instanceRepo getMasterPDBRepo orchestratorState
+    let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
     API.snapshotMasterPDBVersion ctx "me" "server1" "test1" 1 "snap1" |> runQuick |> ignore
     let pendingChangesMaybe = API.getPendingChanges ctx |> runQuick
@@ -402,17 +406,18 @@ let ``API gets no pending changes`` () = test <| fun tck ->
 
 [<Fact>]
 let ``API gets pending changes`` () = test <| fun tck ->
-    let instanceRepo = FakeOracleInstanceRepo allInstances
-    let getMasterPDBRepo (instance:OracleInstance) = 
+    let getMasterPDBRepo (instance:OracleInstance) name = 
         match instance.Name with
         | "server1" -> 
             let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newLockInfo "lockman" |> Some)
-            FakeMasterPDBRepo (masterPDBMap1 |> Map.add "test3" lockedMasterPDB)
-        | "server2" -> FakeMasterPDBRepo masterPDBMap2
+            match name with
+            | "test1" | "test2" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
+            | "locked" -> FakeMasterPDBRepo lockedMasterPDB :> IMasterPDBRepository
+            | name -> failwithf "Master PDB %s does not exist on instance %s" name instance.Name
         | name -> failwithf "Oracle instance %s does not exist" name
-    let instanceRepo = FakeOracleInstanceRepo ([ "server1", { instance1 with MasterPDBs = "test3" :: instance1.MasterPDBs }] |> Map.ofList)
-    let orchestratorState = { OracleInstanceNames = [ "server1" ]; PrimaryInstance = "server1" }
-    let orchestrator = tck |> spawnOrchestratorActor instanceRepo getMasterPDBRepo orchestratorState
+    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with MasterPDBs = "locked" :: instance1.MasterPDBs }) :> IOracleInstanceRepository
+    let orchestratorRepo = FakeOrchestratorRepo { OracleInstanceNames = [ "server1" ]; PrimaryInstance = "server1" }
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> fakeOracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
     // Enqueue a read-only request
     API.snapshotMasterPDBVersion ctx "me" "server1" "test1" 1 "snap1" |> runQuick |> ignore

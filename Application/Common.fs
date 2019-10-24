@@ -25,8 +25,12 @@ type IRepository<'K, 'T> =
     abstract member Get : 'K -> 'T
     abstract member Put : 'K -> 'T -> IRepository<'K, 'T>
 
-type IMasterPDBRepository = IRepository<string, Domain.MasterPDB.MasterPDB>
+type IUnitRepository<'T> =
+    abstract member Get : unit -> 'T
+    abstract member Put : 'T -> IUnitRepository<'T>
 
-type IOracleInstanceRepository = IRepository<string, Domain.OracleInstance.OracleInstance>
+type IMasterPDBRepository = IUnitRepository<Domain.MasterPDB.MasterPDB>
 
-type IOrchestratorRepository = IRepository<string, Domain.Orchestrator.Orchestrator>
+type IOracleInstanceRepository = IUnitRepository<Domain.OracleInstance.OracleInstance>
+
+type IOrchestratorRepository = IUnitRepository<Domain.Orchestrator.Orchestrator>

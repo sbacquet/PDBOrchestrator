@@ -17,23 +17,23 @@ let loadMasterPDB folder name : MasterPDB =
     | JPass masterPDB -> masterPDB
     | JFail error -> failwith (error.ToString())
 
-let loadMasterPDBs rootfolder (names:string list) =
-    names 
-    |> List.map (fun name -> name, loadMasterPDB rootfolder name)
-    |> Map.ofList
-
-let saveMasterPDB folder (cache:Map<string,MasterPDB>) name pdb = 
+let saveMasterPDB folder name pdb = 
     Directory.CreateDirectory (masterPDBFolder folder name) |> ignore
     use stream = File.CreateText (masterPDBPath folder name)
     let json = pdb |> MasterPDBJson.masterPDBtoJson
     stream.Write json
     stream.Flush()
-    cache |> Map.add name pdb
     
-type MasterPDBRepository(folder, cache) = 
+type MasterPDBRepository(folder, name) = 
     interface IMasterPDBRepository with
-        member this.Get name = cache |> Map.find name
-        member this.Put name pdb = upcast MasterPDBRepository(folder, pdb |> saveMasterPDB folder cache name)
+        member __.Get () = loadMasterPDB folder name
+        member __.Put pdb = 
+            pdb |> saveMasterPDB folder name
+            upcast __
 
-let loadMasterPDBRepository folder names = 
-    MasterPDBRepository(folder, loadMasterPDBs folder names)
+type NewMasterPDBRepository(folder, pdb) = 
+    interface IMasterPDBRepository with
+        member __.Get () = pdb
+        member __.Put pdb = 
+            let newRepo = MasterPDBRepository(folder, pdb.Name) :> IMasterPDBRepository
+            newRepo.Put pdb

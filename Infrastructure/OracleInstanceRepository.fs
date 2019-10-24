@@ -24,7 +24,9 @@ let saveOracleInstance folder name pdb =
     stream.Write json
     stream.Flush()
 
-type OracleInstanceRepository(folder) = 
+type OracleInstanceRepository(folder, name) = 
     interface IOracleInstanceRepository with
-        member this.Get name = loadOracleInstance folder name
-        member this.Put name pdb = saveOracleInstance folder name pdb; upcast this
+        member __.Get () = loadOracleInstance folder name
+        member __.Put pdb = 
+            pdb |> saveOracleInstance folder name
+            upcast __

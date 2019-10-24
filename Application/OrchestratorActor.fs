@@ -7,6 +7,7 @@ open Application.PendingRequest
 open Application.UserPendingRequest
 open Domain.Common.Validation
 open Application.Common
+open Domain.OracleInstance
 
 type OnInstance<'T> = WithUser<string, 'T>
 type OnInstance<'T1, 'T2> = WithUser<string, 'T1, 'T2>
@@ -64,15 +65,16 @@ type RequestStatus =
 | CompletedOk of string
 | CompletedWithError of string
 
-let private spawnCollaborators parameters getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo state (ctx : Actor<_>) = {
-    OracleInstanceActors =
-        state.OracleInstanceNames 
-        |> List.map (fun instanceName -> 
-            let instance = oracleInstanceRepo.Get instanceName
-            instanceName, ctx |> OracleInstanceActor.spawn parameters (getOracleAPI instance) (getMasterPDBRepo instance) instance
-           )
-        |> Map.ofList
-}
+let private spawnCollaborators parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo state (ctx : Actor<_>) = 
+    let spawnInstance = OracleInstanceActor.spawn parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo ctx
+    {
+        OracleInstanceActors =
+            state.OracleInstanceNames 
+            |> List.map (fun instanceName -> 
+                instanceName, spawnInstance instanceName
+               )
+            |> Map.ofList
+    }
 
 type private State = {
     Orchestrator : Orchestrator
@@ -82,7 +84,7 @@ type private State = {
     ReadOnly : bool
 }
 
-let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo initialState (ctx : Actor<_>) =
+let private orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo initialState (ctx : Actor<_>) =
 
     let rec loop state = actor {
         
@@ -333,7 +335,7 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
         | _ -> return! loop state
     }
 
-    let collaborators = ctx |> spawnCollaborators parameters getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState
+    let collaborators = ctx |> spawnCollaborators parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo initialState
 
     loop { 
         Orchestrator = initialState
@@ -346,8 +348,9 @@ let private orchestratorActorBody parameters getOracleAPI (oracleInstanceRepo:#I
 
 let [<Literal>]cOrchestratorActorName = "Orchestrator"
 
-let spawn parameters getOracleAPI (oracleInstanceRepo:#IOracleInstanceRepository) getMasterPDBRepo initialState actorFactory =
+let spawn parameters getOracleAPI (getOracleInstanceRepo:string->IOracleInstanceRepository) getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) actorFactory =
+    let initialState = repository.Get()
     let actor = 
         Akkling.Spawn.spawn actorFactory cOrchestratorActorName 
-        <| props (orchestratorActorBody parameters getOracleAPI oracleInstanceRepo getMasterPDBRepo initialState)
+        <| props (orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo initialState)
     actor.Retype<Command>()

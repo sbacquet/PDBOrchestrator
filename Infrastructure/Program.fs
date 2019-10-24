@@ -5,6 +5,7 @@ open Application.Common
 open Microsoft.Extensions.Logging
 open Serilog.Extensions.Logging
 open Domain.OracleInstance
+open Domain.Orchestrator
 open Application
 open Application.OrchestratorActor
 open Serilog
@@ -141,15 +142,15 @@ let main args =
     let rootFolder = config.GetValue("root", System.Environment.CurrentDirectory)
     let orchestratorName = "orchestrator"
     let orchestratorPath = sprintf "%s\%s" rootFolder orchestratorName
-    let orchestratorRepo = OrchestratorRepository.OrchestratorRepository orchestratorPath :> IOrchestratorRepository
-    let oracleInstanceRepo = OracleInstanceRepository.OracleInstanceRepository orchestratorPath
-    let getMasterPDBRepo (instance:OracleInstance) = 
-        MasterPDBRepository.loadMasterPDBRepository (OracleInstanceRepository.instanceFolder orchestratorPath instance.Name) instance.MasterPDBs
+    let orchestratorRepo = OrchestratorRepository.OrchestratorRepository(orchestratorPath, orchestratorName) :> IOrchestratorRepository
+    let getOracleInstanceRepo name = OracleInstanceRepository.OracleInstanceRepository(orchestratorPath, name) :> IOracleInstanceRepository
+    let getInstanceFolder = OracleInstanceRepository.instanceFolder orchestratorPath
+    let getMasterPDBRepo (instance:OracleInstance) name = MasterPDBRepository.MasterPDBRepository(getInstanceFolder instance.Name, name) :> IMasterPDBRepository
+    let newMasterPDBRepo (instance:OracleInstance) pdb = MasterPDBRepository.NewMasterPDBRepository(getInstanceFolder instance.Name, pdb) :> IMasterPDBRepository
     let getOracleAPI (instance:OracleInstance) = Oracle.OracleAPI(loggerFactory, Oracle.connAsDBAFromInstance instance, Oracle.connAsDBAInFromInstance instance)
-    let orchestrator = orchestratorRepo.Get orchestratorName
 
     use system = Akkling.System.create "sys" akkaConfig
-    let orchestratorActor = system |> OrchestratorActor.spawn validParameters getOracleAPI oracleInstanceRepo getMasterPDBRepo orchestrator
+    let orchestratorActor = system |> OrchestratorActor.spawn validParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let port = if config.["port"] = null then 59275 else (Int32.Parse(config.["port"]))
     let apiContext = API.consAPIContext system orchestratorActor loggerFactory (Rest.buildEndpoint config.["dnsname"] port)
 

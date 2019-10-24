@@ -8,6 +8,7 @@ open Application.Oracle
 open Akka.Actor
 open Domain.MasterPDBVersion
 open Application.GlobalParameters
+open Application.Common
 
 type Command =
 | GetState // responds with StateResult
@@ -56,9 +57,11 @@ let private getOrSpawnVersionActor parameters (oracleAPI:IOracleAPI) (masterPDBN
 
 type private State = {
     MasterPDB: MasterPDB
+    PreviousMasterPDB: MasterPDB option
     Requests: RequestMap<Command>
     Collaborators: Collaborators
     EditionOperationInProgress: bool
+    Repository: IMasterPDBRepository
 }
 
 let private masterPDBActorBody 
@@ -67,7 +70,9 @@ let private masterPDBActorBody
     (instance:OracleInstance) 
     oracleLongTaskExecutor 
     oracleDiskIntensiveTaskExecutor 
-    (initialMasterPDB : Domain.MasterPDB.MasterPDB) 
+    (initialRepository:IMasterPDBRepository) 
+    (initialMasterPDB:MasterPDB)
+    (previousMasterPDB:MasterPDB option)
     (ctx : Actor<_>) =
 
     let editionPDBName = initialMasterPDB.Name
@@ -78,6 +83,11 @@ let private masterPDBActorBody
         let requests = state.Requests
         let collaborators = state.Collaborators
         let manifestPath = Domain.MasterPDB.manifestPath instance.MasterPDBManifestsPath masterPDB.Name
+
+        if (state.PreviousMasterPDB.IsNone || state.PreviousMasterPDB.Value <> masterPDB) then
+            ctx.Log.Value.Debug("Persisted modified master PDB {pdb}", masterPDB.Name)
+            return! loop { state with Repository = state.Repository.Put masterPDB; PreviousMasterPDB = Some masterPDB }
+        else
 
         ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
         let! (msg:obj) = ctx.Receive()
@@ -91,7 +101,8 @@ let private masterPDBActorBody
                 match editionPDBExists, masterPDB.LockState.IsSome with
                 | Ok true, false ->
                     ctx.Log.Value.Warning("Master PDB is not locked whereas its edition PDB exists on server => deleting the PDB...")
-                    let! _ = oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, editionPDBName)
+                    let result = oracleAPI.DeletePDB editionPDBName |> Async.RunSynchronously
+                    result |> Result.mapError (fun error -> ctx.Log.Value.Error("Could not delete edition PDB {pdb} : {1}", editionPDBName, (error.ToString()))) |> ignore
                     return! loop state
                 | Ok false, true ->
                     ctx.Log.Value.Warning("Master PDB is declared as locked whereas its edition PDB does not exist on server => unlocked it")
@@ -308,12 +319,57 @@ let private masterPDBActorBody
         OracleDiskIntensiveTaskExecutor = oracleDiskIntensiveTaskExecutor 
     }
 
-    loop { MasterPDB = initialMasterPDB; Requests = Map.empty; Collaborators = collaborators; EditionOperationInProgress = false }
+    loop { 
+        MasterPDB = initialMasterPDB
+        PreviousMasterPDB = previousMasterPDB
+        Requests = Map.empty
+        Collaborators = collaborators
+        EditionOperationInProgress = false 
+        Repository = initialRepository
+    }
 
 let private masterPDBActorName (masterPDB:string) = Common.ActorName (sprintf "MasterPDB='%s'" (masterPDB.ToUpper() |> System.Uri.EscapeDataString))
 
-let spawn parameters oracleAPI (instance:OracleInstance) (longTaskExecutor:IActorRef<Application.OracleLongTaskExecutor.Command>) (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>) (masterPDB : Domain.MasterPDB.MasterPDB) (actorFactory:IActorRefFactory) =
+let spawn 
+        parameters 
+        oracleAPI 
+        (instance:OracleInstance) 
+        (longTaskExecutor:IActorRef<Application.OracleLongTaskExecutor.Command>) 
+        (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>) 
+        (getRepository:OracleInstance -> string -> IMasterPDBRepository)
+        name
+        (actorFactory:IActorRefFactory) =
     
+    let initialRepository = getRepository instance name
+    let initialMasterPDB = initialRepository.Get()
+
+    let (Common.ActorName actorName) = masterPDBActorName name
+    
+    Akkling.Spawn.spawn actorFactory actorName 
+        <| props (
+            masterPDBActorBody 
+                parameters
+                oracleAPI
+                instance 
+                longTaskExecutor 
+                oracleDiskIntensiveTaskExecutor 
+                initialRepository
+                initialMasterPDB
+                (Some initialMasterPDB)
+        )
+
+let spawnNew
+        parameters 
+        oracleAPI 
+        (instance:OracleInstance) 
+        (longTaskExecutor:IActorRef<Application.OracleLongTaskExecutor.Command>) 
+        (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>) 
+        (newRepository:OracleInstance -> MasterPDB -> IMasterPDBRepository)
+        (masterPDB:MasterPDB)
+        (actorFactory:IActorRefFactory) =
+    
+    let initialRepository = newRepository instance masterPDB
+
     let (Common.ActorName actorName) = masterPDBActorName masterPDB.Name
     
     Akkling.Spawn.spawn actorFactory actorName 
@@ -324,6 +380,8 @@ let spawn parameters oracleAPI (instance:OracleInstance) (longTaskExecutor:IActo
                 instance 
                 longTaskExecutor 
                 oracleDiskIntensiveTaskExecutor 
+                initialRepository
                 masterPDB
+                None
         )
 

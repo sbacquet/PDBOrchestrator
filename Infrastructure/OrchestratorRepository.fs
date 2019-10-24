@@ -23,7 +23,9 @@ let saveOrchestrator folder name orchestrator =
     stream.Write json
     stream.Flush()
 
-type OrchestratorRepository(folder) = 
+type OrchestratorRepository(folder, name) = 
     interface IOrchestratorRepository with
-        member this.Get name = loadOrchestrator folder name
-        member this.Put name orchestrator = saveOrchestrator folder name orchestrator; upcast this
+        member __.Get () = loadOrchestrator folder name
+        member __.Put orchestrator = 
+            saveOrchestrator folder name orchestrator
+            upcast __
