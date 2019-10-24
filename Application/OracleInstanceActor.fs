@@ -10,7 +10,7 @@ open Domain.Common.Validation
 open Domain.Common
 open System
 open Application.Common
-open Application.GlobalParameters
+open Application.Parameters
 open Domain.MasterPDB
 
 type CreateMasterPDBParams = {
@@ -229,7 +229,7 @@ type private State = {
     Repository: IOracleInstanceRepository
 }
 
-let private oracleInstanceActorBody (parameters:GlobalParameters) (oracleAPI:IOracleAPI) (getMasterPDBRepo:OracleInstance -> string -> IMasterPDBRepository) (newMasterPDBRepo:OracleInstance -> MasterPDB -> IMasterPDBRepository) initialRepo initialInstance (ctx : Actor<obj>) =
+let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAPI) (getMasterPDBRepo:OracleInstance -> string -> IMasterPDBRepository) (newMasterPDBRepo:OracleInstance -> MasterPDB -> IMasterPDBRepository) initialRepo initialInstance (ctx : Actor<obj>) =
 
     let rec loop state = actor {
 

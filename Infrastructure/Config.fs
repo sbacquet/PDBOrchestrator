@@ -4,14 +4,14 @@ open Microsoft.Extensions.Configuration
 open Domain.Common.Validation
 
 let validateServerInstanceName (config:IConfigurationRoot) =
-    let configEntry = "serverInstanceName"
+    let configEntry = "ServerInstanceName"
     let name = config.GetValue(configEntry, "A")
     if (System.String.IsNullOrWhiteSpace(name))
     then Invalid [ sprintf "config entry %s must not be empty" configEntry ]
     else Valid name
 
 let validateShortTimeout (config:IConfigurationRoot) =
-    let configEntry = "shortTimeoutInSeconds"
+    let configEntry = "ShortTimeoutInSeconds"
     try
         let timeout = config.GetValue(configEntry, 5)
         if (timeout > 0)
@@ -25,7 +25,7 @@ let validateShortTimeout (config:IConfigurationRoot) =
     with _ -> Invalid [ sprintf "config entry %s is not a valid integer" configEntry ] 
 
 let validateLongTimeout (config:IConfigurationRoot) =
-    let configEntry = "longTimeoutInMinutes"
+    let configEntry = "LongTimeoutInMinutes"
     try
         let timeout = config.GetValue(configEntry, 2)
         if (timeout > 0)
@@ -39,7 +39,7 @@ let validateLongTimeout (config:IConfigurationRoot) =
     with _ -> Invalid [ sprintf "config entry %s is not a valid integer" configEntry ] 
 
 let validateVeryLongTimeout (config:IConfigurationRoot) =
-    let configEntry = "veryLongTimeoutInMinutes"
+    let configEntry = "VeryLongTimeoutInMinutes"
     try
         let timeout = config.GetValue(configEntry, 20)
         if (timeout > 0)
@@ -53,7 +53,7 @@ let validateVeryLongTimeout (config:IConfigurationRoot) =
     with _ -> Invalid [ sprintf "config entry %s is not a valid integer" configEntry ] 
 
 let validateNumberOfOracleLongTaskExecutors (config:IConfigurationRoot) =
-    let configEntry = "numberOfOracleLongTaskExecutors"
+    let configEntry = "NumberOfOracleLongTaskExecutors"
     try
         let number = config.GetValue(configEntry, 3)
         if (number > 0)
@@ -62,7 +62,7 @@ let validateNumberOfOracleLongTaskExecutors (config:IConfigurationRoot) =
     with _ -> Invalid [ sprintf "config entry %s is not a valid integer" configEntry ] 
 
 let validateNumberOfOracleDiskIntensiveTaskExecutors (config:IConfigurationRoot) =
-    let configEntry = "numberOfOracleDiskIntensiveTaskExecutors"
+    let configEntry = "NumberOfOracleDiskIntensiveTaskExecutors"
     try
         let number = config.GetValue(configEntry, 1)
         if (number > 0)
@@ -71,7 +71,7 @@ let validateNumberOfOracleDiskIntensiveTaskExecutors (config:IConfigurationRoot)
     with _ -> Invalid [ sprintf "config entry %s is not a valid integer" configEntry ] 
 
 let validateGarbageCollectionDelay (config:IConfigurationRoot) =
-    let configEntry = "garbageCollectionDelayInHours"
+    let configEntry = "GarbageCollectionDelayInHours"
     try
         let delayInHours = config.GetValue(configEntry, 12.)
         if (delayInHours >= 0.)
@@ -79,7 +79,7 @@ let validateGarbageCollectionDelay (config:IConfigurationRoot) =
         else Invalid [ sprintf "config entry %s must be >= 0" configEntry ]
     with _ -> Invalid [ sprintf "config entry %s is not a valid floating point number" configEntry ] 
 
-let configToGlobalParameters (config:IConfigurationRoot) = 
+let configToApplicationParameters (config:IConfigurationRoot) = 
     let serverInstanceName = validateServerInstanceName config
     let shortTimeout = validateShortTimeout config
     let longTimeout = validateLongTimeout config
@@ -87,7 +87,7 @@ let configToGlobalParameters (config:IConfigurationRoot) =
     let numberOfOracleLongTaskExecutors = validateNumberOfOracleLongTaskExecutors config
     let numberOfOracleDiskIntensiveTaskExecutors = validateNumberOfOracleDiskIntensiveTaskExecutors config
     let garbageCollectionDelay = validateGarbageCollectionDelay config
-    retn Application.GlobalParameters.consGlobalParameters 
+    retn Application.Parameters.consParameters 
         <*> serverInstanceName
         <*> shortTimeout
         <*> longTimeout
@@ -95,3 +95,53 @@ let configToGlobalParameters (config:IConfigurationRoot) =
         <*> numberOfOracleLongTaskExecutors
         <*> numberOfOracleDiskIntensiveTaskExecutors
         <*> garbageCollectionDelay
+
+let validateRoot (config:IConfigurationRoot) = 
+    let configEntry = "Root"
+    try
+        let root = config.GetValue configEntry
+        if (System.String.IsNullOrEmpty(root))
+        then Invalid [ sprintf "config entry %s must be a non empty string" configEntry ]
+        elif (not (System.IO.Directory.Exists(root)))
+        then Invalid [ sprintf "config entry %s must be a valid path" configEntry ]
+        else Valid root
+    with _ -> Invalid [ sprintf "config entry %s is not a valid string" configEntry ] 
+
+let validatePort (config:IConfigurationRoot) = 
+    let configEntry = "Port"
+    try
+        let port = config.GetValue(configEntry, 59275)
+        if (port > 0 && port <= 65535)
+        then Valid port
+        else Invalid [ sprintf "config entry %s must be > 0 and <= 65535" configEntry ]
+    with _ -> Invalid [ sprintf "config entry %s is not a valid integer" configEntry ] 
+
+let validateDNSName (config:IConfigurationRoot) = 
+    let configEntry = "DNSName"
+    try
+        let dnsName = config.GetValue configEntry
+        let dnsName, builtFromEnv =
+            if (System.String.IsNullOrEmpty(dnsName)) then
+                sprintf "%s.%s" (System.Environment.GetEnvironmentVariable("COMPUTERNAME")) (System.Environment.GetEnvironmentVariable("USERDNSDOMAIN")),
+                true
+            else
+                dnsName, false
+        if (System.Uri.CheckHostName(dnsName)) = System.UriHostNameType.Unknown
+        then
+            if builtFromEnv then
+                Invalid [ sprintf "DNS name = \"%s\" built from environment is not a valid host name, please specify a valid DNS name in config (%s entry)" dnsName configEntry ]
+            else 
+                Invalid [ sprintf "config entry %s must be a valid DNS name" configEntry ]
+        else 
+            Valid dnsName
+    with _ -> 
+        Invalid [ sprintf "config entry %s is not a valid string" configEntry ] 
+
+let configToInfrastuctureParameters (config:IConfigurationRoot) = 
+    let root = validateRoot config
+    let port = validatePort config
+    let dnsName = validateDNSName config
+    retn Infrastructure.Parameters.consParameters 
+        <*> root
+        <*> port
+        <*> dnsName

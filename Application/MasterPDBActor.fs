@@ -7,7 +7,7 @@ open Application.PendingRequest
 open Application.Oracle
 open Akka.Actor
 open Domain.MasterPDBVersion
-open Application.GlobalParameters
+open Application.Parameters
 open Application.Common
 
 type Command =
@@ -65,7 +65,7 @@ type private State = {
 }
 
 let private masterPDBActorBody 
-    (parameters:GlobalParameters) 
+    (parameters:Parameters) 
     (oracleAPI:IOracleAPI)
     (instance:OracleInstance) 
     oracleLongTaskExecutor 

@@ -26,13 +26,8 @@ let loggerFactory = new SerilogLoggerFactory(dispose=true) :> ILoggerFactory
 
 [<RequireQualifiedAccess>]
 module Rest =
-    let buildEndpoint dnsname port =
-        let dnsName = 
-            if (dnsname = null) then 
-                (sprintf "%s.%s" (System.Environment.GetEnvironmentVariable("COMPUTERNAME")) (System.Environment.GetEnvironmentVariable("USERDNSDOMAIN")))
-            else
-                dnsname
-        sprintf "http://%s:%d" dnsName port
+
+    let buildEndpoint dnsName port = sprintf "http://%s:%d" dnsName port
 
     let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc = 
         choose [
@@ -99,25 +94,51 @@ module Rest =
             AddCommandLine(args).
             Build()
 
+[<RequireQualifiedAccess>]
+module Config =
+    let invalidConfig (errors:string list) =
+        Serilog.Log.Logger.Error("The configuration is invalid : {0}", String.Join("; ", errors))
+    #if DEBUG
+        Console.WriteLine("Press a key to exit...")
+        Console.ReadKey() |> ignore
+    #endif
+        exit 1
+
+    let validateConfig config =
+        let infrastuctureParameters = config |> Configuration.configToInfrastuctureParameters
+        let validInfrastuctureParameters = 
+            match infrastuctureParameters with
+            | Invalid errors -> invalidConfig errors
+            | Valid parameters -> parameters
+        let applicationParameters = config |> Configuration.configToApplicationParameters
+        let validApplicationParameters = 
+            match applicationParameters with
+            | Invalid errors -> invalidConfig errors
+            | Valid parameters -> parameters
+        validInfrastuctureParameters, validApplicationParameters
+
+    let akkaConfig =
+        let config =
+    #if DEBUG
+            Akkling.Configuration.parse @"
+            akka { 
+                loglevel=DEBUG
+                loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] 
+                actor {
+                    debug {
+                        receive = off
+                        unhandled = on
+                        lifecycle = off
+                    }
+                }
+            }"
+    #else
+        Akkling.Configuration.parse @"akka { loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] }"
+    #endif
+        config
+
 [<EntryPoint>]
 let main args =
-#if DEBUG
-    let akkaConfig = Akkling.Configuration.parse @"
-    akka { 
-        loglevel=DEBUG
-        loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] 
-        actor {
-            debug {
-                receive = off
-                unhandled = on
-                lifecycle = off
-            }
-        }
-    }"
-#else
-    let akkaConfig = 
-        Akkling.Configuration.parse @"akka { loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] }"
-#endif
     let config = Rest.buildConfiguration args
     Serilog.Log.Logger <- 
         LoggerConfiguration().
@@ -127,19 +148,10 @@ let main args =
 #endif
             CreateLogger()
 
-    let parameters = config |> Configuration.configToGlobalParameters
-    let validParameters = 
-        match parameters with
-        | Invalid errors -> 
-            Serilog.Log.Logger.Error("The configuration is invalid : {0}", String.Join("; ", errors))
-#if DEBUG
-            Console.WriteLine("Press a key to exit...")
-            Console.ReadKey() |> ignore
-#endif
-            exit 1
-        | Valid parameters -> parameters
+    let infrastuctureParameters, validApplicationParameters = 
+        Config.validateConfig config
 
-    let rootFolder = config.GetValue("root", System.Environment.CurrentDirectory)
+    let rootFolder = infrastuctureParameters.Root
     let orchestratorName = "orchestrator"
     let orchestratorPath = sprintf "%s\%s" rootFolder orchestratorName
     let orchestratorRepo = OrchestratorRepository.OrchestratorRepository(orchestratorPath, orchestratorName) :> IOrchestratorRepository
@@ -149,10 +161,15 @@ let main args =
     let newMasterPDBRepo (instance:OracleInstance) pdb = MasterPDBRepository.NewMasterPDBRepository(getInstanceFolder instance.Name, pdb) :> IMasterPDBRepository
     let getOracleAPI (instance:OracleInstance) = Oracle.OracleAPI(loggerFactory, Oracle.connAsDBAFromInstance instance, Oracle.connAsDBAInFromInstance instance)
 
-    use system = Akkling.System.create "sys" akkaConfig
-    let orchestratorActor = system |> OrchestratorActor.spawn validParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let port = if config.["port"] = null then 59275 else (Int32.Parse(config.["port"]))
-    let apiContext = API.consAPIContext system orchestratorActor loggerFactory (Rest.buildEndpoint config.["dnsname"] port)
+    use system = Akkling.System.create "sys" Config.akkaConfig
+    let orchestratorActor = system |> OrchestratorActor.spawn validApplicationParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let port = infrastuctureParameters.Port
+    let apiContext = 
+        API.consAPIContext 
+            system 
+            orchestratorActor 
+            loggerFactory 
+            (Rest.buildEndpoint infrastuctureParameters.DNSName port)
 
     WebHostBuilder()
         .UseConfiguration(config)

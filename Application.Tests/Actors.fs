@@ -19,9 +19,8 @@ open Application.MasterPDBActor
 open Application.OrchestratorActor
 open Domain.Common.Validation
 open Application.Common
-open Application.GlobalParameters
 
-let parameters : GlobalParameters = {
+let parameters : Application.Parameters.Parameters = {
     ServerInstanceName = "A"
 #if DEBUG
     ShortTimeout = None

@@ -4,7 +4,7 @@ open Akkling
 open Application.PendingRequest
 open Application.Oracle
 open Akka.Routing
-open Application.GlobalParameters
+open Application.Parameters
 
 type Command =
 | ImportPDB of WithOptionalRequestId<string, string, string>
@@ -32,7 +32,7 @@ let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : 
 
 let [<Literal>]cOracleLongTaskExecutorName = "OracleDiskIntensiveTaskExecutor"
 
-let spawn (parameters:GlobalParameters) oracleAPI actorFactory =
+let spawn (parameters:Parameters) oracleAPI actorFactory =
     Akkling.Spawn.spawn actorFactory cOracleLongTaskExecutorName 
     <| { props (oracleDiskIntensiveTaskExecutorBody oracleAPI) 
             with Router = Some (upcast SmallestMailboxPool(parameters.NumberOfOracleDiskIntensiveTaskExecutors)) }

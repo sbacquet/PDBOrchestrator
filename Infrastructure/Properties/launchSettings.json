@@ -17,7 +17,7 @@
     },
     "Infrastructure": {
       "commandName": "Project",
-      "commandLineArgs": "root=d:\\Documents\\git_repos\\PDBOrchestrator\\Infrastructure.Tests\\integration garbageCollectionDelayInHours=0.017",
+      "commandLineArgs": "Root=d:\\Documents\\git_repos\\PDBOrchestrator\\Infrastructure.Tests\\integration",
       "workingDirectory": "d:\\Documents\\git_repos\\PDBOrchestrator\\Infrastructure\\bin\\Debug\\netcoreapp2.2\\",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"

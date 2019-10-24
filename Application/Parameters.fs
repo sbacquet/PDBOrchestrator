@@ -1,6 +1,6 @@
-﻿module Application.GlobalParameters
+﻿module Application.Parameters
 
-type GlobalParameters = {
+type Parameters = {
     ServerInstanceName : string
     ShortTimeout : System.TimeSpan option
     LongTimeout : System.TimeSpan option
@@ -10,7 +10,7 @@ type GlobalParameters = {
     GarbageCollectionDelay : System.TimeSpan
 }
 
-let consGlobalParameters 
+let consParameters 
     serverInstanceName 
     shortTimeout 
     longTimeout 

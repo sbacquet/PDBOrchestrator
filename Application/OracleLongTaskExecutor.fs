@@ -4,7 +4,7 @@ open Akkling
 open Application.PendingRequest
 open Application.Oracle
 open Akka.Routing
-open Application.GlobalParameters
+open Application.Parameters
 
 type CreatePDBFromDumpParams = {
     Name: string
@@ -79,7 +79,7 @@ let private oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Com
 
 let [<Literal>]cOracleLongTaskExecutorName = "OracleLongTaskExecutor"
 
-let spawn (parameters:GlobalParameters) oracleAPI actorFactory =
+let spawn (parameters:Parameters) oracleAPI actorFactory =
     Akkling.Spawn.spawn actorFactory cOracleLongTaskExecutorName 
     <| { props (oracleLongTaskExecutorBody oracleAPI) 
             with Router = Some (upcast SmallestMailboxPool(parameters.NumberOfOracleLongTaskExecutors)) }

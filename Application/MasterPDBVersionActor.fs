@@ -10,7 +10,7 @@ open Application.OracleDiskIntensiveActor
 open Application.Oracle
 open Application.Common
 open System
-open Application.GlobalParameters
+open Application.Parameters
 open Domain.Common
 
 type Command =
@@ -24,7 +24,7 @@ type CommandToParent =
 let getSnapshotSourceName (pdb:string) (masterPDBVersion:MasterPDBVersion) (suffix:string) = sprintf "%s_V%03d_%s" (pdb.ToUpper()) masterPDBVersion.Number (suffix.ToUpper())
 
 let private masterPDBVersionActorBody 
-    (parameters:GlobalParameters)
+    (parameters:Parameters)
     (oracleAPI:#Application.Oracle.IOracleAPI) 
     (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 
     (oracleDiskIntensiveTaskExecutor:IActorRef<OracleDiskIntensiveActor.Command>) 

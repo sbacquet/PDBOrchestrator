@@ -8,7 +8,7 @@
     <Compile Include="UserRights.fs" />
     <Compile Include="PendingRequest.fs" />
     <Compile Include="UserPendingRequest.fs" />
-    <Compile Include="GlobalParameters.fs" />
+    <Compile Include="Parameters.fs" />
     <Compile Include="OracleAPI.fs" />
     <Compile Include="OracleLongTaskExecutor.fs" />
     <Compile Include="OracleDiskIntensiveActor.fs" />

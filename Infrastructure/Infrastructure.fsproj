@@ -12,6 +12,7 @@
     <Content Remove="web.config" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Parameters.fs" />
     <Compile Include="Encryption.fs" />
     <Compile Include="MasterPDBJson.fs" />
     <Compile Include="MasterPDBDTOJson.fs" />
