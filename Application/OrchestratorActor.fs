@@ -348,7 +348,7 @@ let private orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo 
 
 let [<Literal>]cOrchestratorActorName = "Orchestrator"
 
-let spawn parameters getOracleAPI (getOracleInstanceRepo:string->IOracleInstanceRepository) getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) actorFactory =
+let spawn parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) actorFactory =
     let initialState = repository.Get()
     let actor = 
         Akkling.Spawn.spawn actorFactory cOrchestratorActorName 

@@ -442,9 +442,16 @@ let private oracleInstanceActorBody (parameters:GlobalParameters) (oracleAPI:IOr
     }
 
 
-let spawn parameters getOracleAPI (getRepository:string->IOracleInstanceRepository) getMasterPDBRepo newMasterPDBRepo actorFactory instanceName =
+let spawn 
+        parameters 
+        getOracleAPI 
+        getRepository
+        getMasterPDBRepo 
+        newMasterPDBRepo 
+        actorFactory 
+        instanceName =
 
-    let initialRepo = getRepository instanceName
+    let initialRepo:IOracleInstanceRepository = getRepository instanceName
     let initialInstance = initialRepo.Get()
 
     let (Common.ActorName actorName) = oracleInstanceActorName initialInstance
@@ -453,4 +460,22 @@ let spawn parameters getOracleAPI (getRepository:string->IOracleInstanceReposito
 
     Akkling.Spawn.spawn actorFactory actorName 
     <| props (oracleInstanceActorBody parameters oracleAPI getMasterPDBRepo newMasterPDBRepo initialRepo initialInstance)
+
+let spawnNew 
+        parameters 
+        getOracleAPI 
+        newRepository
+        getMasterPDBRepo 
+        newMasterPDBRepo 
+        actorFactory 
+        instance =
+
+    let initialRepo:IOracleInstanceRepository = newRepository instance
+
+    let (Common.ActorName actorName) = oracleInstanceActorName instance
+
+    let oracleAPI = getOracleAPI instance
+
+    Akkling.Spawn.spawn actorFactory actorName 
+    <| props (oracleInstanceActorBody parameters oracleAPI getMasterPDBRepo newMasterPDBRepo initialRepo instance)
 

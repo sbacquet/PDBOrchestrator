@@ -30,3 +30,10 @@ type OracleInstanceRepository(folder, name) =
         member __.Put pdb = 
             pdb |> saveOracleInstance folder name
             upcast __
+
+type NewOracleInstanceRepository(folder, instance) = 
+    interface IOracleInstanceRepository with
+        member __.Get () = instance
+        member __.Put pdb = 
+            let newRepo = OracleInstanceRepository(folder, instance.Name) :> IOracleInstanceRepository
+            newRepo.Put pdb
