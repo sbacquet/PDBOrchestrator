@@ -1,0 +1,19 @@
+{
+  "name": "NORTHVIEW",
+  "schemas": [
+    {
+      "user": "NVW_72X_REF",
+      "password": "pass",
+      "type": "unknown"
+    }
+  ],
+  "versions": [
+    {
+      "number": 13,
+      "createdby": "me",
+      "creationdate": "2019-10-03T16:29:38.9145909Z",
+      "comment": "comment1",
+      "deleted": false
+    }
+  ]
+}

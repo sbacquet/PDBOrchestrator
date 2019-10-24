@@ -11,6 +11,8 @@ open Chiron.Formatting
 open Microsoft.Net.Http.Headers
 open Infrastructure.DTOJSON
 
+let json str : HttpHandler = text str >=> setHttpHeader "Content-Type" "application/json"
+
 let withUser f : HttpHandler =
     fun next (ctx:HttpContext) -> task {
         let user = 
@@ -36,7 +38,7 @@ let getInstance (apiCtx:API.APIContext) (name:string) next (ctx:HttpContext) = t
 let getMasterPDB (apiCtx:API.APIContext) (instance:string, pdb:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getMasterPDBState apiCtx instance pdb
     match stateMaybe with
-    | Ok state -> return! json state next ctx
+    | Ok state -> return! json (MasterPDB.masterPDBStatetoJson state) next ctx
     | Error error -> return! RequestErrors.notFound (text error) next ctx
 }
 
@@ -62,8 +64,7 @@ let getRequestStatus (apiCtx:API.APIContext) (requestId:PendingRequest.RequestId
                 |> Encode.required Encode.string "error" error
             | _ -> jObj // cannot happen
         )
-
-        return! text (requestStatus |> serializeWith encodeRequestStatus JsonFormattingOptions.Pretty) next ctx
+        return! json (requestStatus |> serializeWith encodeRequestStatus JsonFormattingOptions.Pretty) next ctx
 }
 
 open Domain.Common.Validation
@@ -127,12 +128,12 @@ let getPendingChanges (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
                 |> Encode.optional (Encode.listWith encodeOrchestratorCommand) "pendingChangeCommands" (if (x.Commands.IsEmpty) then None else Some x.Commands)
                 |> Encode.optional (Encode.listWith encodeOpenMasterPDB) "lockedPDBs" (if (x.OpenMasterPDBs.IsEmpty) then None else Some x.OpenMasterPDBs)
             )
-            return! text (pendingChanges |> serializeWith encodePendingChanges JsonFormattingOptions.Pretty) next ctx
+            return! json (pendingChanges |> serializeWith encodePendingChanges JsonFormattingOptions.Pretty) next ctx
 }
 
 let enterReadOnlyMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
     let! switched = API.enterReadOnlyMode apiCtx
-    if (switched) then
+    if switched then
         return! text "The system is now in maintenance mode." next ctx
     else
         return! RequestErrors.notAcceptable (text "The system was already in maintenance mode.") next ctx
@@ -140,7 +141,7 @@ let enterReadOnlyMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
 
 let enterNormalMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
     let! switched = API.enterNormalMode apiCtx
-    if (switched) then
+    if switched then
         return! text "The system is now in normal mode." next ctx
     else
         return! RequestErrors.notAcceptable (text "The system was already in normal mode.") next ctx
@@ -183,3 +184,10 @@ let collectGarbage (apiCtx:API.APIContext) = withUser (fun user next ctx -> task
     API.collectGarbage apiCtx
     return! text "Garbage collecting initiated." next ctx
 })
+
+let synchronizePrimaryInstanceWith (apiCtx:API.APIContext) instance next ctx = task {
+    let! stateMaybe = API.synchronizePrimaryInstanceWith apiCtx instance
+    match stateMaybe with
+    | Ok state -> return! (json (OracleInstance.oracleInstanceToJson state)) next ctx
+    | Error error -> return! RequestErrors.notFound (text error) next ctx
+}

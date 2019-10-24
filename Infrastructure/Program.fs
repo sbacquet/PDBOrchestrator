@@ -54,6 +54,10 @@ module Rest =
                 // Rollback edition
                 routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
             ]
+            PATCH >=> choose [
+                // Declare the given instance synchronized with primary
+                routef "/instance/%s" (HttpHandlers.synchronizePrimaryInstanceWith apiCtx)
+            ]
             RequestErrors.BAD_REQUEST "Unknown HTTP request"
         ]
 
