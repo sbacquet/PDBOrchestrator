@@ -26,7 +26,7 @@ let getMasterPDBState (ctx:APIContext) instance pdb : Async<Application.MasterPD
     ctx.Orchestrator <? GetMasterPDBState (instance, pdb)
 
 let synchronizePrimaryInstanceWith (ctx:APIContext) instance : Async<Application.OracleInstanceActor.StateResult> =
-    ctx.Orchestrator <? Synchronize instance
+    retype ctx.Orchestrator <? Synchronize instance
 
 let getRequestStatus (ctx:APIContext) requestId : Async<WithRequestId<RequestStatus>> =
     ctx.Orchestrator <? GetRequest requestId

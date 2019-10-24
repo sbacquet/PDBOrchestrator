@@ -11,7 +11,12 @@ open Chiron.Formatting
 open Microsoft.Net.Http.Headers
 open Infrastructure.DTOJSON
 
-let json str : HttpHandler = text str >=> setHttpHeader "Content-Type" "application/json"
+let json (jsonStr : string) : HttpHandler =
+    fun (next : HttpFunc) (ctx : HttpContext) ->
+        task {
+            ctx.SetHttpHeader "Content-Type" "application/json"
+            return! ctx.WriteStringAsync jsonStr
+        }
 
 let withUser f : HttpHandler =
     fun next (ctx:HttpContext) -> task {
@@ -25,7 +30,7 @@ let withUser f : HttpHandler =
 
 let getAllInstances (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx
-    return! text (Orchestrator.orchestratorToJson state) next ctx
+    return! json (Orchestrator.orchestratorToJson state) next ctx
 }
 
 let getInstance (apiCtx:API.APIContext) (name:string) next (ctx:HttpContext) = task {
@@ -100,8 +105,6 @@ let getPendingChanges (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
                         sprintf "Get state of instance %s" instance
                     | OrchestratorActor.GetMasterPDBState (instance, pdb) ->
                         sprintf "Get state of master PDB %s on instance %s" pdb instance
-                    | OrchestratorActor.Synchronize instance ->
-                        sprintf "Synchronize state of primary instance with %s" instance
                     | OrchestratorActor.CreateMasterPDB (user, parameters) ->
                         sprintf "Create master PDB %s from dump %s" parameters.Name parameters.Dump
                     | OrchestratorActor.PrepareMasterPDBForModification (user, pdb, version) ->
@@ -149,7 +152,7 @@ let enterNormalMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
 
 let getMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
     let! readOnly = API.isReadOnlyMode apiCtx
-    return! text (if readOnly then @"""maintenance""" else @"""normal""") next ctx
+    return! json (if readOnly then @"""maintenance""" else @"""normal""") next ctx
 }
 
 let prepareMasterPDBForModification (apiCtx:API.APIContext) pdb = withUser (fun user next ctx -> task {
@@ -188,6 +191,6 @@ let collectGarbage (apiCtx:API.APIContext) = withUser (fun user next ctx -> task
 let synchronizePrimaryInstanceWith (apiCtx:API.APIContext) instance next ctx = task {
     let! stateMaybe = API.synchronizePrimaryInstanceWith apiCtx instance
     match stateMaybe with
-    | Ok state -> return! (json (OracleInstance.oracleInstanceToJson state)) next ctx
-    | Error error -> return! RequestErrors.notFound (text error) next ctx
+    | Ok state -> return! (json <| OracleInstance.oracleInstanceToJson state) next ctx
+    | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot synchronize %s with primary instance : %s." instance error) next ctx
 }

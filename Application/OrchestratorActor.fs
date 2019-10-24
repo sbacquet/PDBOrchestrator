@@ -19,7 +19,6 @@ type Command =
 | GetState // responds with Application.DTO.Orchestrator
 | GetInstanceState of string // responds with Application.OracleInstanceActor.StateResult
 | GetMasterPDBState of string * string // responds with Application.MasterPDBActor.StateResult
-| Synchronize of string // responds with OracleInstanceActor.StateSet
 | CreateMasterPDB of WithUser<CreateMasterPDBParams> // responds with RequestValidation
 | PrepareMasterPDBForModification of WithUser<string, int> // responds with RequestValidation
 | CommitMasterPDB of WithUser<string, string> // responds with RequestValidation
@@ -28,24 +27,25 @@ type Command =
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
 
 type AdminCommand =
-| GetPendingChanges // responds with Result<Option<PendingChanges>,string>
+| GetPendingChanges // responds with Result<PendingChanges option,string>
 | EnterReadOnlyMode // responds with bool
 | EnterNormalMode // responds with bool
 | IsReadOnlyMode // responds with bool
 | CollectGarbage // no response
+| Synchronize of string // responds with OracleInstanceActor.StateSet
+| SetPrimaryOracleInstance of string
 
 let private pendingChangeCommandFilter mapper = function
 | GetState
 | GetInstanceState _
 | GetMasterPDBState _
 | SnapshotMasterPDBVersion _
-| GetRequest _
-| Synchronize _ -> 
+| GetRequest _ ->
     false
 | CreateMasterPDB (user, _)
 | PrepareMasterPDBForModification (user, _, _)
 | CommitMasterPDB (user, _, _)
-| RollbackMasterPDB (user, _) -> 
+| RollbackMasterPDB (user, _) ->
     mapper user
 
 type PendingChanges = {
@@ -78,13 +78,15 @@ let private spawnCollaborators parameters getOracleAPI getOracleInstanceRepo get
 
 type private State = {
     Orchestrator : Orchestrator
+    PreviousOrchestrator : Orchestrator
     Collaborators : Collaborators
     PendingRequests :PendingUserRequestMap<Command>
     CompletedRequests : CompletedUserRequestMap<RequestStatus>
     ReadOnly : bool
+    Repository : IOrchestratorRepository
 }
 
-let private orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo initialState (ctx : Actor<_>) =
+let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo repository initialState (ctx : Actor<_>) =
 
     let rec loop state = actor {
         
@@ -93,6 +95,11 @@ let private orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo 
         let pendingRequests = state.PendingRequests
         let completedRequests = state.CompletedRequests
         let readOnly = state.ReadOnly
+
+        if (state.PreviousOrchestrator <> orchestrator) then
+            ctx.Log.Value.Debug("Persisted modified orchestrator")
+            return! loop { state with Repository = state.Repository.Put orchestrator; PreviousOrchestrator = orchestrator }
+        else
 
         ctx.Log.Value.Debug("Number of pending requests : {0}", pendingRequests.Count)
         ctx.Log.Value.Debug("Number of completed requests : {0}", completedRequests.Count)
@@ -137,15 +144,6 @@ let private orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo 
                     instance <<! OracleInstanceActor.GetMasterPDBState pdb
                 else
                     sender <! MasterPDBActor.stateError (sprintf "cannot find Oracle instance %s" instanceName)
-                return! loop state
-
-            | Synchronize targetInstance ->
-                if (orchestrator.OracleInstanceNames |> List.contains targetInstance) then
-                    let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
-                    let target = collaborators.OracleInstanceActors.[targetInstance]
-                    retype primaryInstance <<! TransferInternalState target
-                else
-                    ctx.Sender() <! stateError (sprintf "cannot find Oracle instance %s" targetInstance)
                 return! loop state
 
             | CreateMasterPDB (user, parameters) ->
@@ -212,8 +210,7 @@ let private orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo 
                         return! loop { state with CompletedRequests = completedRequests |> Map.remove requestId }
 
         | :? AdminCommand as command ->
-            match command with
-            | GetPendingChanges ->
+            let getPendingChanges () = async {
                 let pendingChangeCommands = 
                     pendingRequests 
                     |> Map.toSeq
@@ -222,19 +219,23 @@ let private orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo 
                 
                 let primaryInstance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                 let! (primaryInstanceState:OracleInstanceActor.StateResult) = primaryInstance <? OracleInstanceActor.GetState
-                let result = 
+                return
                     primaryInstanceState 
                     |> Result.map (fun state -> 
                         state.MasterPDBs 
                         |> List.filter (fun pdb -> pdb.LockState |> Option.isSome)
                         |> List.map (fun pdb -> pdb.Name, pdb.LockState.Value)
-                       )
+                        )
                     |> Result.map (fun openMasterPDBs ->
                         if (openMasterPDBs.IsEmpty && Seq.isEmpty pendingChangeCommands) then    
                             None
                         else
                             Some <| consPendingChanges pendingChangeCommands openMasterPDBs
-                       )
+                        )
+            }
+            match command with
+            | GetPendingChanges ->
+                let! result = getPendingChanges()
                 ctx.Sender() <! result
                 return! loop state
 
@@ -267,6 +268,49 @@ let private orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo 
                     ctx.Log.Value.Info("The server is already in normal mode.")
                     ctx.Sender() <! false
                     return! loop state
+
+            | Synchronize targetInstance ->
+                if not state.ReadOnly then
+                    ctx.Sender() <! stateError "the server must be in maintenance mode"
+                elif not (orchestrator.OracleInstanceNames |> List.contains targetInstance) then
+                    ctx.Sender() <! stateError (sprintf "cannot find Oracle instance %s" targetInstance)
+                else
+                    let pendingChangesMaybe = getPendingChanges() |> runWithinElseDefaultError parameters.ShortTimeout
+                    match pendingChangesMaybe with
+                    | Ok (Ok None) ->
+                        let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
+                        let target = collaborators.OracleInstanceActors.[targetInstance]
+                        retype primaryInstance <<! TransferInternalState target
+                    | Ok (Ok (Some _)) ->
+                        ctx.Sender() <! stateError "primary instance has pending changes"
+                    | Ok (Error error)
+                    | Error error ->
+                        ctx.Sender() <! stateError (sprintf "cannot get pending changes : %s" error)
+                return! loop state
+
+            | SetPrimaryOracleInstance newPrimary ->
+                let sender = ctx.Sender().Retype<Result<string,string>>()
+                if not state.ReadOnly then
+                    sender <! Error "the server must be in maintenance mode"
+                    return! loop state
+                elif (orchestrator.PrimaryInstance = newPrimary) then
+                    sender <! Error (sprintf "%s is already the primary Oracle instance" newPrimary)
+                    return! loop state
+                elif not (orchestrator.OracleInstanceNames |> List.contains newPrimary) then
+                    sender <! Error (sprintf "cannot find Oracle instance %s" newPrimary)
+                    return! loop state
+                else
+                    let! pendingChangesMaybe = getPendingChanges()
+                    match pendingChangesMaybe with
+                    | Ok None ->
+                        sender <! Ok newPrimary
+                        return! loop { state with Orchestrator = { orchestrator with PrimaryInstance = newPrimary } }
+                    | Ok (Some _) ->
+                        sender <! Error "primary instance has pending changes"
+                        return! loop state
+                    | Error error ->
+                        sender <! Error (sprintf "cannot get pending changes : %s" error)
+                        return! loop state
 
         | :? WithRequestId<MasterPDBCreationResult> as responseToCreateMasterPDB ->
             let (requestId, result) = responseToCreateMasterPDB
@@ -339,10 +383,12 @@ let private orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo 
 
     loop { 
         Orchestrator = initialState
+        PreviousOrchestrator = initialState
         Collaborators = collaborators
         PendingRequests = Map.empty
         CompletedRequests = Map.empty
         ReadOnly = false 
+        Repository = repository
     }
 
 
@@ -352,5 +398,5 @@ let spawn parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMast
     let initialState = repository.Get()
     let actor = 
         Akkling.Spawn.spawn actorFactory cOrchestratorActorName 
-        <| props (orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo initialState)
+        <| props (orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo repository initialState)
     actor.Retype<Command>()
