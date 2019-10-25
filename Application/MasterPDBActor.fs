@@ -24,7 +24,7 @@ type PrepareForModificationResult =
 | Prepared of MasterPDB
 | PreparationFailure of string * string
 
-type StateResult = Result<Application.DTO.MasterPDB.MasterPDBState, string>
+type StateResult = Result<Application.DTO.MasterPDB.MasterPDBDTO, string>
 let stateOk state : StateResult = Ok state
 let stateError error : StateResult = Error error
 

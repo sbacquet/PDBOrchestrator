@@ -111,7 +111,7 @@ let instance2 : OracleInstance = {
     MasterPDBs = [ "test2" ]
 }
 
-type FakeOracleAPI() = 
+type FakeOracleAPI(existingPDBs : Set<string>) = 
     member this.Logger = loggerFactory.CreateLogger("Fake Oracle API")
     interface IOracleAPI with
         member this.NewPDBFromDump _ _ _ _ _ _ _ _ name = async {
@@ -146,8 +146,8 @@ type FakeOracleAPI() =
         member this.PDBHasSnapshots _ = async { 
             return Ok false
         }
-        member this.PDBExists _ = async { 
-            return Ok true
+        member this.PDBExists name = async { 
+            return Ok (existingPDBs |> Set.contains name)
         }
         member this.DeletePDBWithSnapshots _ name = async { 
             return Valid false
@@ -158,7 +158,7 @@ type FakeOracleAPI() =
         member this.GetPDBNamesLike (like:string) = 
             raise (System.NotImplementedException())
 
-let fakeOracleAPI = FakeOracleAPI()
+let fakeOracleAPI = FakeOracleAPI(Set.empty)
 
 type FakeOracleInstanceRepo(instance) =
     interface IOracleInstanceRepository with
@@ -418,7 +418,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
         | name -> failwithf "Oracle instance %s does not exist" name
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with MasterPDBs = "locked" :: instance1.MasterPDBs }) :> IOracleInstanceRepository
     let orchestratorRepo = FakeOrchestratorRepo { OracleInstanceNames = [ "server1" ]; PrimaryInstance = "server1" }
-    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> fakeOracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "locked" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
     // Enqueue a read-only request
     API.snapshotMasterPDBVersion ctx "me" "server1" "test1" 1 "snap1" |> runQuick |> ignore

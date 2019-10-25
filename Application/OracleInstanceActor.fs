@@ -12,6 +12,7 @@ open System
 open Application.Common
 open Application.Parameters
 open Domain.MasterPDB
+open Application.DTO
 
 type CreateMasterPDBParams = {
     Name: string
@@ -87,24 +88,10 @@ module private Validation =
         let comment = validateComment parameters.Comment
         retn consCreateMasterPDBParams <*> pdb <*> dump <*> schemas <*> targetSchemas <*> user <*> date <*> comment
 
-type OracleInstanceExpanded = {
-    Name: string
-    Server: string
-    Port: int option
-    DBAUser: string
-    DBAPassword: string
-    MasterPDBManifestsPath: string
-    MasterPDBDestPath: string
-    SnapshotSourcePDBDestPath: string
-    SnapshotPDBDestPath: string
-    OracleDirectoryForDumps: string
-    MasterPDBs: Domain.MasterPDB.MasterPDB list
-}
-
 type Command =
 | GetState // responds with StateResult
 | GetMasterPDBState of string // responds with Application.MasterPDBActor.StateResult
-| SetInternalState of OracleInstanceExpanded // responds with StateResult
+| SetInternalState of OracleInstance.OracleInstanceFullDTO // responds with StateResult
 | TransferInternalState of IActorRef<obj> // responds with StateResult
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
@@ -113,7 +100,7 @@ type Command =
 | SnapshotMasterPDBVersion of WithRequestId<string, int, string> // responds with WithRequest<MasterPDBActor.SnapshotResult>
 | CollectGarbage // no response
 
-type StateResult = Result<Application.DTO.OracleInstance.OracleInstanceState, string>
+type StateResult = Result<OracleInstance.OracleInstanceDTO, string>
 let stateOk state : StateResult = Ok state
 let stateError error : StateResult = Error error
 
@@ -148,49 +135,25 @@ let private addNewMasterPDB parameters (oracleAPI:IOracleAPI) (ctx : Actor<obj>)
     return newState, newCollaborators
 }
 
-let private expand timeout (masterPDBActors: Map<string, IActorRef<obj>>) (instance:OracleInstance) = 
-    let masterPDBsMaybe = 
+let private expand timeout (masterPDBActors: Map<string, IActorRef<obj>>) (instance:OracleInstance) : Result<OracleInstance.OracleInstanceFullDTO, string> = 
+    let masterPDBsMaybe : Result<MasterPDB[],string> = 
         instance.MasterPDBs 
         |> List.map (fun pdb -> retype masterPDBActors.[pdb] <? MasterPDBActor.GetInternalState)
         |> Async.Parallel |> runWithinElseDefaultError timeout
-    masterPDBsMaybe |> Result.map (fun masterPDBs ->
-    {
-        Name = instance.Name
-        Server = instance.Server
-        Port = instance.Port
-        DBAUser = instance.DBAUser
-        DBAPassword = instance.DBAPassword
-        MasterPDBManifestsPath = instance.MasterPDBManifestsPath
-        MasterPDBDestPath = instance.MasterPDBDestPath
-        SnapshotPDBDestPath = instance.SnapshotPDBDestPath
-        SnapshotSourcePDBDestPath = instance.SnapshotSourcePDBDestPath
-        OracleDirectoryForDumps = instance.OracleDirectoryForDumps
-        MasterPDBs = masterPDBs |> List.ofArray
-    })
+    masterPDBsMaybe 
+    |> Result.map (fun masterPDBs -> 
+        instance 
+        |> Application.DTO.OracleInstance.toFullDTO 
+            (masterPDBs |> Array.map Application.DTO.MasterPDB.toDTO |> List.ofArray)
+       )
 
-    
-let private collapse (expandedInstance:OracleInstanceExpanded) : OracleInstance = {
-    Name = expandedInstance.Name
-    Server = expandedInstance.Server
-    Port = expandedInstance.Port
-    DBAUser = expandedInstance.DBAUser
-    DBAPassword = expandedInstance.DBAPassword
-    MasterPDBManifestsPath = expandedInstance.MasterPDBManifestsPath
-    MasterPDBDestPath = expandedInstance.MasterPDBDestPath
-    SnapshotPDBDestPath = expandedInstance.SnapshotPDBDestPath
-    SnapshotSourcePDBDestPath = expandedInstance.SnapshotSourcePDBDestPath
-    OracleDirectoryForDumps = expandedInstance.OracleDirectoryForDumps
-    MasterPDBs = expandedInstance.MasterPDBs |> List.map (fun pdb -> pdb.Name)
-}
-
-
-let private updateMasterPDBs parameters (oracleAPI:IOracleAPI) (ctx : Actor<obj>) (instanceToImport : OracleInstanceExpanded) (collaborators:Collaborators) (newMasterPDBRepo:OracleInstance->MasterPDB->IMasterPDBRepository) (instance : OracleInstance) = result {
+let private updateMasterPDBs parameters (oracleAPI:IOracleAPI) (ctx : Actor<obj>) (instanceToImport : OracleInstance.OracleInstanceFullDTO) (collaborators:Collaborators) (newMasterPDBRepo:OracleInstance->MasterPDB->IMasterPDBRepository) (instance : OracleInstance) = result {
     let masterPDBs = instanceToImport.MasterPDBs
     let existingMasterPDBs = collaborators.MasterPDBActors |> Map.toSeq |> Seq.map (fun (name, _) -> name) |> Set.ofSeq
     let newMasterPDBs = masterPDBs |> List.map (fun pdb -> pdb.Name) |> Set.ofList
     let masterPDBsToAdd = Set.difference newMasterPDBs existingMasterPDBs
 
-    let masterPDBMap = masterPDBs |> List.map (fun pdb -> (pdb.Name, pdb)) |> Map.ofList
+    let masterPDBMap = masterPDBs |> List.map (fun pdb -> (pdb.Name, pdb |> MasterPDB.fromDTO)) |> Map.ofList
 
     let folder result pdb = 
         result |> Result.bind (fun (inst, collabs) -> addNewMasterPDB parameters oracleAPI ctx inst collabs masterPDBMap.[pdb] newMasterPDBRepo)
@@ -250,7 +213,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
             match command with
             | GetState ->
                 let sender = ctx.Sender().Retype<StateResult>()
-                let! instanceDTO = instance |> Application.DTO.OracleInstance.toDTO collaborators.MasterPDBActors
+                let! instanceDTO = instance |> OracleInstance.toDTO collaborators.MasterPDBActors
                 sender <! stateOk instanceDTO
                 return! loop state
 
@@ -268,7 +231,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                 let updateResult = updateMasterPDBs parameters oracleAPI ctx newInstance collaborators newMasterPDBRepo instance
                 match updateResult with
                 | Ok (inst, collabs) ->
-                    let! instanceDTO = inst |> Application.DTO.OracleInstance.toDTO collabs.MasterPDBActors
+                    let! instanceDTO = inst |> OracleInstance.toDTO collabs.MasterPDBActors
                     ctx.Sender() <! stateOk instanceDTO
                     return! loop { state with Instance = inst; Collaborators = collabs }
                 | Error error ->

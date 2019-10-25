@@ -2,14 +2,14 @@
 
 open System
 
-type Schema = {
+type SchemaDTO = {
     User: string
     Password: string
     Type: string
 }
 
-type MasterPDBVersion = {
-    Number: Domain.MasterPDBVersion.VersionNumber
+type MasterPDBVersionDTO = {
+    Number: int
     CreatedBy: string
     CreationDate: DateTime
     Comment: string
@@ -17,23 +17,36 @@ type MasterPDBVersion = {
     Manifest : string
 }
 
-let consMasterPDBVersion pdb version createdBy creationDate comment deleted = {
+let consMasterPDBVersionDTO version createdBy creationDate comment deleted manifest = {
     Number = version
     CreatedBy = createdBy
     CreationDate = creationDate
     Comment = comment
     Deleted = deleted
-    Manifest = Domain.MasterPDB.manifestFile pdb version
+    Manifest = manifest
 }
 
-type MasterPDBState = {
+let toMasterPDBVersionDTO manifest (version:Domain.MasterPDBVersion.MasterPDBVersion) =
+    consMasterPDBVersionDTO version.Number version.CreatedBy version.CreationDate version.Comment version.Deleted manifest
+
+type LockInfoDTO = {
+    Locker: string
+    Date: System.DateTime
+}
+
+let consLockInfoDTO locker date = { Locker = locker; Date = date }
+
+let toLockInfoDTO (lockInfo:Domain.MasterPDB.LockInfo option) =
+    lockInfo |> Option.map (fun lock -> consLockInfoDTO lock.Locker lock.Date)
+
+type MasterPDBDTO = {
     Name: string
-    Schemas: Schema list
-    Versions: MasterPDBVersion list
-    LockState : Domain.MasterPDB.LockInfo option
+    Schemas: SchemaDTO list
+    Versions: MasterPDBVersionDTO list
+    LockState : LockInfoDTO option
 }
 
-let consMasterPDBState name schemas versions lockState = {
+let consMasterPDBDTO name schemas versions lockState = {
     Name = name
     Schemas = schemas
     Versions = versions
@@ -44,13 +57,12 @@ let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) = {
     Name = masterPDB.Name
     Schemas = masterPDB.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type })
     Versions = masterPDB.Versions 
-        |> Map.map (fun _ version -> 
-            consMasterPDBVersion masterPDB.Name version.Number version.CreatedBy version.CreationDate version.Comment version.Deleted)
+        |> Map.map (fun _ version -> version |> toMasterPDBVersionDTO (Domain.MasterPDB.manifestFile masterPDB.Name version.Number))
         |> Map.toList |> List.map snd
-    LockState = masterPDB.LockState
+    LockState = masterPDB.LockState |> toLockInfoDTO
 }
 
-let fromDTO (dto:MasterPDBState) : Domain.MasterPDB.MasterPDB = { 
+let fromDTO (dto:MasterPDBDTO) : Domain.MasterPDB.MasterPDB = { 
     Name = dto.Name
     Schemas = dto.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type })
     Versions = dto.Versions 

@@ -8,6 +8,7 @@ open Chiron.Serialization.Json
 open Chiron.Formatting
 open Microsoft.Net.Http.Headers
 open Infrastructure.DTOJSON
+open Application.DTO
 
 let json jsonStr : HttpHandler =
     fun _ (ctx : HttpContext) ->
@@ -118,11 +119,11 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
                 jObj 
                 |> Encode.required Encode.string "description" description
             )
-            let encodeOpenMasterPDB = Encode.buildWith (fun (x:string * Domain.MasterPDB.LockInfo) jObj ->
+            let encodeOpenMasterPDB = Encode.buildWith (fun (x:string * MasterPDB.LockInfoDTO) jObj ->
                 let name, lockInfo = x
                 jObj 
                 |> Encode.required Encode.string "name" name
-                |> Encode.required MasterPDBJson.encodeLockInfo "lock" lockInfo
+                |> Encode.required MasterPDB.encodeLockInfo "lock" lockInfo
             )
             let encodePendingChanges = Encode.buildWith (fun (x:OrchestratorActor.PendingChanges) jObj ->
                 jObj 

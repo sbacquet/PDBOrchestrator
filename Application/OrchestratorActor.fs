@@ -7,6 +7,7 @@ open Application.PendingRequest
 open Application.UserPendingRequest
 open Domain.Common.Validation
 open Application.Common
+open Application.DTO.MasterPDB
 
 type OnInstance<'T> = WithUser<string, 'T>
 type OnInstance<'T1, 'T2> = WithUser<string, 'T1, 'T2>
@@ -49,7 +50,7 @@ let private pendingChangeCommandFilter mapper = function
 
 type PendingChanges = {
     Commands : Command list
-    OpenMasterPDBs : (string * Domain.MasterPDB.LockInfo) list
+    OpenMasterPDBs : (string * LockInfoDTO) list
 }
 
 let consPendingChanges commands openMasterPDBs = { Commands = commands |> Seq.toList; OpenMasterPDBs = openMasterPDBs }

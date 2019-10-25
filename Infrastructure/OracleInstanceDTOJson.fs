@@ -5,7 +5,7 @@ open Chiron.Serialization.Json
 open Chiron.JsonTransformer
 open Application.DTO.OracleInstance
 
-let encodeOracleInstance = Encode.buildWith (fun (x:OracleInstanceState) jObj ->
+let encodeOracleInstance = Encode.buildWith (fun (x:OracleInstanceDTO) jObj ->
     jObj
     |> Encode.required Encode.string "name" x.Name
     |> Encode.required Encode.string "server" x.Server

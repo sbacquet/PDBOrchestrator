@@ -4,11 +4,11 @@ open Akkling
 open Application
 
 type OrchestratorState = {
-    OracleInstances : OracleInstance.OracleInstanceState list
+    OracleInstances : OracleInstance.OracleInstanceDTO list
     PrimaryInstance : string
 }
 
-let getResult (state:OracleInstanceActor.StateResult) : OracleInstance.OracleInstanceState =
+let getResult (state:OracleInstanceActor.StateResult) : OracleInstance.OracleInstanceDTO =
     match state with
     | Ok result -> result
     | Error _ -> failwith "should never happen" // TODO
