@@ -97,17 +97,18 @@ let closePDB (logger:ILogger) connAsDBA (name:string) = async {
     let! result = 
         sprintf @"ALTER PLUGGABLE DATABASE %s CLOSE IMMEDIATE" name
         |> execAsync name connAsDBA
-    logger.LogDebug("Closed PDB {PDB}", name)
     return
         match result with
-        | Ok result -> 
-            Ok result
+        | Ok _ -> 
+            logger.LogDebug("Closed PDB {PDB}", name)
+            result
         | Error ex -> 
             match ex.Number with
-            | 65020 -> 
-                Ok name // already closed -> ignore it
+            | 65020 -> // already closed -> ignore it
+                logger.LogDebug("Closed PDB {PDB}", name)
+                Ok name
             | _ -> 
-                Error ex
+                result
 }
 
 // Warning! Does not check existence of snapshots
