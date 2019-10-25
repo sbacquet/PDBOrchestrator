@@ -69,3 +69,6 @@ let isReadOnlyMode (ctx:APIContext) : Async<bool> =
 
 let collectGarbage (ctx:APIContext) =
     retype ctx.Orchestrator <! OrchestratorActor.CollectGarbage
+
+let switchPrimaryOracleInstanceWith (ctx:APIContext) instance : Async<Result<string,string*string>> =
+    retype ctx.Orchestrator <? SetPrimaryOracleInstance instance

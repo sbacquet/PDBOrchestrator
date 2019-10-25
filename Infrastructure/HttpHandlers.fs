@@ -26,26 +26,26 @@ let withUser f : HttpHandler =
         | None -> return! RequestErrors.badRequest (text "User cannot be determined.") next ctx
     }
 
-let getAllInstances (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
+let getAllInstances apiCtx next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx
     return! json (Orchestrator.orchestratorToJson state) next ctx
 }
 
-let getInstance (apiCtx:API.APIContext) (name:string) next (ctx:HttpContext) = task {
+let getInstance apiCtx (name:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx name
     match stateMaybe with
     | Ok state -> return! (text (OracleInstance.oracleInstanceToJson state)) next ctx
     | Error error -> return! RequestErrors.notFound (text error) next ctx
 }
 
-let getMasterPDB (apiCtx:API.APIContext) (instance:string, pdb:string) next (ctx:HttpContext) = task {
+let getMasterPDB apiCtx (instance:string, pdb:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getMasterPDBState apiCtx instance pdb
     match stateMaybe with
     | Ok state -> return! json (MasterPDB.masterPDBStatetoJson state) next ctx
     | Error error -> return! RequestErrors.notFound (text error) next ctx
 }
 
-let getRequestStatus (apiCtx:API.APIContext) (requestId:PendingRequest.RequestId) next (ctx:HttpContext) = task {
+let getRequestStatus apiCtx (requestId:PendingRequest.RequestId) next (ctx:HttpContext) = task {
     let! (_, requestStatus) = API.getRequestStatus apiCtx requestId
     match requestStatus with
     | OrchestratorActor.NotFound -> 
@@ -80,13 +80,13 @@ let returnRequest endpoint requestValidation : HttpHandler =
     | Invalid errors -> 
         RequestErrors.notAcceptable (text <| sprintf "Your request cannot be accepted : %s." (System.String.Join("; ", errors)))
 
-let snapshot (apiCtx:API.APIContext) (instance:string, masterPDB:string, version:int, name:string) =
+let snapshot apiCtx (instance:string, masterPDB:string, version:int, name:string) =
     withUser (fun user next ctx -> task {
         let! requestValidation = API.snapshotMasterPDBVersion apiCtx user instance masterPDB version name
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
-let getPendingChanges (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
+let getPendingChanges apiCtx next (ctx:HttpContext) = task {
     let! pendingChangesMaybe = API.getPendingChanges apiCtx
     match pendingChangesMaybe with
     | Error error -> return! ServerErrors.internalError (text error) next ctx
@@ -132,7 +132,7 @@ let getPendingChanges (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
             return! json (pendingChanges |> serializeWith encodePendingChanges JsonFormattingOptions.Pretty) next ctx
 }
 
-let enterReadOnlyMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
+let enterReadOnlyMode apiCtx next (ctx:HttpContext) = task {
     let! switched = API.enterReadOnlyMode apiCtx
     if switched then
         return! text "The system is now in maintenance mode." next ctx
@@ -140,7 +140,7 @@ let enterReadOnlyMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
         return! RequestErrors.notAcceptable (text "The system was already in maintenance mode.") next ctx
 }
 
-let enterNormalMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
+let enterNormalMode apiCtx next (ctx:HttpContext) = task {
     let! switched = API.enterNormalMode apiCtx
     if switched then
         return! text "The system is now in normal mode." next ctx
@@ -148,12 +148,12 @@ let enterNormalMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
         return! RequestErrors.notAcceptable (text "The system was already in normal mode.") next ctx
 }
 
-let getMode (apiCtx:API.APIContext) next (ctx:HttpContext) = task {
+let getMode apiCtx next (ctx:HttpContext) = task {
     let! readOnly = API.isReadOnlyMode apiCtx
     return! json (if readOnly then @"""maintenance""" else @"""normal""") next ctx
 }
 
-let prepareMasterPDBForModification (apiCtx:API.APIContext) pdb = withUser (fun user next ctx -> task {
+let prepareMasterPDBForModification apiCtx pdb = withUser (fun user next ctx -> task {
     let version = ctx.TryGetQueryStringValue "version"
     match version with
     | Some version -> 
@@ -167,7 +167,7 @@ let prepareMasterPDBForModification (apiCtx:API.APIContext) pdb = withUser (fun 
         return! RequestErrors.badRequest (text "The current version must be provided.") next ctx
 })
 
-let commitMasterPDB (apiCtx:API.APIContext) pdb = withUser (fun user next ctx -> task {
+let commitMasterPDB apiCtx pdb = withUser (fun user next ctx -> task {
     let! comment = ctx.ReadBodyFromRequestAsync()
     if (comment <> "") then
         let! requestValidation = API.commitMasterPDB apiCtx user pdb comment
@@ -176,19 +176,30 @@ let commitMasterPDB (apiCtx:API.APIContext) pdb = withUser (fun user next ctx ->
         return! RequestErrors.badRequest (text "A comment must be provided.") next ctx
 })
 
-let rollbackMasterPDB (apiCtx:API.APIContext) pdb = withUser (fun user next ctx -> task {
+let rollbackMasterPDB apiCtx pdb = withUser (fun user next ctx -> task {
     let! requestValidation = API.rollbackMasterPDB apiCtx user pdb
     return! returnRequest apiCtx.Endpoint requestValidation next ctx
 })
 
-let collectGarbage (apiCtx:API.APIContext) = withUser (fun user next ctx -> task {
+let collectGarbage apiCtx = withUser (fun user next ctx -> task {
     API.collectGarbage apiCtx
     return! text "Garbage collecting initiated." next ctx
 })
 
-let synchronizePrimaryInstanceWith (apiCtx:API.APIContext) instance next ctx = task {
+let synchronizePrimaryInstanceWith apiCtx instance next ctx = task {
     let! stateMaybe = API.synchronizePrimaryInstanceWith apiCtx instance
     match stateMaybe with
     | Ok state -> return! (json <| OracleInstance.oracleInstanceToJson state) next ctx
     | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot synchronize %s with primary instance : %s." instance error) next ctx
+}
+
+let switchPrimaryOracleInstanceWith apiCtx next (ctx:HttpContext) = task {
+    let! instance = ctx.BindJsonAsync<string>()
+    if System.String.IsNullOrEmpty(instance) then
+        return! RequestErrors.notAcceptable (text <| "The new primary Oracle instance name must be provided in the body as a JSON string.") next ctx
+    else
+        let! result = API.switchPrimaryOracleInstanceWith apiCtx instance
+        match result with
+        | Ok newInstance -> return! (text <| sprintf "New primary Oracle instance is now %s" newInstance) next ctx
+        | Error (error, currentInstance) -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot switch primary Oracle instance to %s : %s. The primary instance is unchanged (%s)." instance error currentInstance) next ctx
 }

@@ -27,7 +27,7 @@ module Rest =
             GET >=> choose [
                 routef "/request/%O" (HttpHandlers.getRequestStatus apiCtx)
                 routef "/instance/%s/masterpdb/%s" (HttpHandlers.getMasterPDB apiCtx)
-                routef "/instance/%s" (HttpHandlers.getInstance apiCtx)
+                routef "/instance/%s" (HttpHandlers.getInstance apiCtx) // works with /instance/primary as well
                 route "/instance" >=> HttpHandlers.getAllInstances apiCtx
 
                 // Routes for admins
@@ -49,6 +49,7 @@ module Rest =
                 // Routes for admins
                 route "/mode/maintenance" >=> HttpHandlers.enterReadOnlyMode apiCtx
                 route "/mode/normal" >=> HttpHandlers.enterNormalMode apiCtx
+                route "/instance/primary" >=> HttpHandlers.switchPrimaryOracleInstanceWith apiCtx
             ]
             DELETE >=> choose [
                 // Rollback edition

@@ -26,13 +26,13 @@ type Command =
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
 
 type AdminCommand =
-| GetPendingChanges // responds with Result<PendingChanges option,string>
-| EnterReadOnlyMode // responds with bool
-| EnterNormalMode // responds with bool
-| IsReadOnlyMode // responds with bool
+| GetPendingChanges // responds with Result<PendingChanges option,string> = Result<pending changes if any, error>
+| EnterReadOnlyMode // responds with bool = mode changes
+| EnterNormalMode // responds with bool = mode changed
+| IsReadOnlyMode // responds with bool = is mode read-only
 | CollectGarbage // no response
 | Synchronize of string // responds with OracleInstanceActor.StateSet
-| SetPrimaryOracleInstance of string
+| SetPrimaryOracleInstance of string // responds with Result<string, string*string> = Result<new instance, (error, current instance)>
 
 let private pendingChangeCommandFilter mapper = function
 | GetState
@@ -287,15 +287,15 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 return! loop state
 
             | SetPrimaryOracleInstance newPrimary ->
-                let sender = ctx.Sender().Retype<Result<string,string>>()
+                let sender = ctx.Sender().Retype<Result<string,string*string>>()
                 if not state.ReadOnly then
-                    sender <! Error "the server must be in maintenance mode"
+                    sender <! Error ("the server must be in maintenance mode", orchestrator.PrimaryInstance)
                     return! loop state
                 elif (orchestrator.PrimaryInstance = newPrimary) then
-                    sender <! Error (sprintf "%s is already the primary Oracle instance" newPrimary)
+                    sender <! Error (sprintf "%s is already the primary Oracle instance" newPrimary, orchestrator.PrimaryInstance)
                     return! loop state
                 elif not (orchestrator.OracleInstanceNames |> List.contains newPrimary) then
-                    sender <! Error (sprintf "cannot find Oracle instance %s" newPrimary)
+                    sender <! Error (sprintf "cannot find Oracle instance %s" newPrimary, orchestrator.PrimaryInstance)
                     return! loop state
                 else
                     let! pendingChangesMaybe = getPendingChanges()
@@ -304,10 +304,10 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         sender <! Ok newPrimary
                         return! loop { state with Orchestrator = { orchestrator with PrimaryInstance = newPrimary } }
                     | Ok (Some _) ->
-                        sender <! Error "primary instance has pending changes"
+                        sender <! Error ("primary instance has pending changes", orchestrator.PrimaryInstance)
                         return! loop state
                     | Error error ->
-                        sender <! Error (sprintf "cannot get pending changes : %s" error)
+                        sender <! Error (sprintf "cannot get pending changes : %s" error, orchestrator.PrimaryInstance)
                         return! loop state
 
         | :? WithRequestId<MasterPDBCreationResult> as responseToCreateMasterPDB ->
