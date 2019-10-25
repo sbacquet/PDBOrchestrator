@@ -227,6 +227,8 @@ let ``Test state transfer`` () = test <| fun tck ->
 let ``API synchronizes state`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ok = API.enterReadOnlyMode ctx |> runQuick
+    Assert.True(ok)
     let state = API.synchronizePrimaryInstanceWith ctx "server2" |> run
     state |> Result.mapError (fun error -> failwith error) |> ignore
     ()
