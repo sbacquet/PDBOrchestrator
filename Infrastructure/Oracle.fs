@@ -51,7 +51,7 @@ let P = Sql.Parameter.make
 let (=>) a b = Sql.Parameter.make(a, b)
 
 let createPDB (logger:ILogger) connAsDBA adminUserName adminUserPassword dest keepOpen (name:string) = asyncResult {
-    logger.LogDebug("Creating PDB {PDB}", name)
+    logger.LogDebug("Creating PDB {pdb}", name)
     let closeSql = if (keepOpen) then "" else sprintf @"execute immediate 'alter pluggable database %s close immediate';" name
     let! result = 
         sprintf 
@@ -75,12 +75,12 @@ let createPDB (logger:ILogger) connAsDBA adminUserName adminUserPassword dest ke
     "
             name adminUserName adminUserPassword dest name closeSql name
         |> execAsync name connAsDBA
-    logger.LogDebug("Created PDB {PDB}", name)
+    logger.LogDebug("Created PDB {pdb}", name)
     return result
 }
 
 let grantPDB (logger:ILogger) connAsDBAIn (name:string) =
-    logger.LogDebug("Granting PDB {PDB}", name)
+    logger.LogDebug("Granting PDB {pdb}", name)
     @"
 BEGIN
     execute immediate 'GRANT execute ON sys.dbms_lock TO public';
@@ -93,19 +93,19 @@ END;
 
 
 let closePDB (logger:ILogger) connAsDBA (name:string) = async {
-    logger.LogDebug("Closing PDB {PDB}", name)
+    logger.LogDebug("Closing PDB {pdb}", name)
     let! result = 
         sprintf @"ALTER PLUGGABLE DATABASE %s CLOSE IMMEDIATE" name
         |> execAsync name connAsDBA
     return
         match result with
         | Ok _ -> 
-            logger.LogDebug("Closed PDB {PDB}", name)
+            logger.LogDebug("Closed PDB {pdb}", name)
             result
         | Error ex -> 
             match ex.Number with
             | 65020 -> // already closed -> ignore it
-                logger.LogDebug("Closed PDB {PDB}", name)
+                logger.LogDebug("Closed PDB {pdb}", name)
                 Ok name
             | _ -> 
                 result
@@ -113,10 +113,10 @@ let closePDB (logger:ILogger) connAsDBA (name:string) = async {
 
 // Warning! Does not check existence of snapshots
 let deletePDB (logger:ILogger) connAsDBA closeIfOpen (name:string) = asyncResult {
-    logger.LogDebug("Deleting PDB {PDB}", name)
+    logger.LogDebug("Deleting PDB {pdb}", name)
     let! _ = if (closeIfOpen) then closePDB logger connAsDBA name else AsyncResult.retn name
     let! result = sprintf @"DROP PLUGGABLE DATABASE %s INCLUDING DATAFILES" name |> execAsync name connAsDBA
-    logger.LogDebug("Deleted PDB {PDB}", name)
+    logger.LogDebug("Deleted PDB {pdb}", name)
     return result
 }
 
@@ -126,12 +126,12 @@ let createPDBCompensable (logger:ILogger) connAsDBA adminUserName adminUserPassw
         (deletePDB logger connAsDBA true)
 
 let openPDB (logger:ILogger) connAsDBA readWrite (name:string) = asyncResult {
-    logger.LogDebug("Opening PDB {PDB}", name)
+    logger.LogDebug("Opening PDB {pdb}", name)
     let readMode = if readWrite then "READ WRITE" else "READ ONLY"
     let! result = 
         sprintf @"ALTER PLUGGABLE DATABASE %s OPEN %s FORCE" name readMode
         |> execAsync name connAsDBA
-    logger.LogDebug("Opened PDB {PDB}", name)
+    logger.LogDebug("Opened PDB {pdb}", name)
     return result
 }
 
@@ -157,7 +157,7 @@ let createAndGrantPDB (logger:ILogger) connAsDBA connAsDBAIn keepOpen adminUserN
     ] |> composeAsync logger
 
 let exportPDB (logger:ILogger) connAsDBA manifest (name:string) = 
-    logger.LogDebug("Exporting PDB {PDB}", name)
+    logger.LogDebug("Exporting PDB {pdb}", name)
     sprintf 
         @"
 BEGIN
@@ -185,7 +185,7 @@ let createManifestFromDump (logger:ILogger) connAsDBA connAsDBAIn adminUserName 
     ] |> composeAsync logger
 
 let importPDB (logger:ILogger) connAsDBA manifest dest (name:string) =
-    logger.LogDebug("Importing PDB {PDB}", name)
+    logger.LogDebug("Importing PDB {pdb}", name)
     sprintf 
         @"
 BEGIN
@@ -218,7 +218,7 @@ let importAndOpen (logger:ILogger) connAsDBA manifest dest =
     ] |> composeAsync logger
 
 let snapshotPDB (logger:ILogger) connAsDBA from dest name =
-    logger.LogDebug("Snapshoting PDB {PDB} to {snapshot}", from, name)
+    logger.LogDebug("Snapshoting PDB {pdb} to {snapshot}", from, name)
     sprintf 
         @"
 BEGIN
@@ -370,33 +370,33 @@ let deleteSourcePDB (logger:ILogger) connAsDBA (name:string) = async {
     | Ok hasSnapshots ->
         match hasSnapshots with
         | false -> return! deletePDB logger connAsDBA true name |> toOraclePDBResultAsync
-        | true -> return Error (exn "PDB cannot be deleted because open snapshots have been created from it")
+        | true -> return Error (sprintf "PDB %s cannot be deleted because open snapshots have been created from it" name |> exn)
     | Error error -> return Error (upcast error)
 }
 
 let deletePDBWithSnapshots (logger:ILogger) connAsDBA (olderThan:System.TimeSpan) (name:string) = asyncValidation {
-    logger.LogDebug("Deleting PDB {0} and dependant snapshots", name)
+    logger.LogDebug("Deleting PDB {pdb} and dependant snapshots", name)
     let mapError (x:Async<Result<'a,OracleException>>) : Async<Result<'a,exn>> = AsyncResult.mapError (fun ex -> ex :> exn) x
     let! snapshots = pdbSnapshotsOlderThan connAsDBA olderThan name |> mapError
     let deleteSnapshot (snapshot:string) = asyncValidation {
         do! () // mandatory for the next line (log) to be in the same async block
-        logger.LogDebug("Deleting PDB snapshot {0}", snapshot)
+        logger.LogDebug("Deleting PDB snapshot {pdb}", snapshot)
         let! result = 
             snapshot
             |> deletePDB logger connAsDBA true
-            |> AsyncResult.mapError (fun oracleExn -> exn (sprintf "cannot delete snapshot PDB %s : %s" snapshot (oracleExn.ToString())))
+            |> AsyncResult.mapError (fun oracleExn -> exn (sprintf "cannot delete snapshot PDB %s : %s" snapshot oracleExn.Message))
             |> AsyncValidation.ofAsyncResult
-        logger.LogDebug("Deleted PDB snapshot {0}", snapshot)
+        logger.LogDebug("Deleted PDB snapshot {pdb}", snapshot)
         return result
     }
     let! _ = snapshots |> AsyncValidation.traverseS deleteSnapshot
     let! hasSnapshots = pdbHasSnapshots connAsDBA name |> mapError
     if not hasSnapshots then
         let! _ = deletePDB logger connAsDBA true name |> mapError
-        logger.LogDebug("Deleted PDB {0} and all dependant snapshots", name)
+        logger.LogDebug("Deleted PDB {pdb} and all dependant snapshots", name)
         return true
     else
-        logger.LogDebug("Deleted some snapshots dependant of {0}", name)
+        logger.LogDebug("Deleted some snapshots dependant of {pdb}", name)
         return false
 }
 

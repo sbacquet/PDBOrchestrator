@@ -1,18 +1,16 @@
 ﻿module Infrastructure.HttpHandlers
 
 open Microsoft.AspNetCore.Http
-open Microsoft.Extensions.Logging
 open FSharp.Control.Tasks.V2.ContextInsensitive
 open Giraffe
-open Application
 open Application
 open Chiron.Serialization.Json
 open Chiron.Formatting
 open Microsoft.Net.Http.Headers
 open Infrastructure.DTOJSON
 
-let json (jsonStr : string) : HttpHandler =
-    fun (next : HttpFunc) (ctx : HttpContext) ->
+let json jsonStr : HttpHandler =
+    fun _ (ctx : HttpContext) ->
         task {
             ctx.SetHttpHeader "Content-Type" "application/json"
             return! ctx.WriteStringAsync jsonStr

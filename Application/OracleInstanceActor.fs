@@ -362,7 +362,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
             match requestMaybe with
             | None -> 
-                ctx.Log.Value.Error("internal error : request {0} not found", requestId.ToString())
+                ctx.Log.Value.Error("internal error : request {0} not found", requestId)
                 return! loop { state with Requests = newRequests }
 
             | Some request ->
@@ -371,7 +371,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                     let requester = request.Requester.Retype<WithRequestId<MasterPDBCreationResult>>()
                     match result with
                     | Ok _ -> 
-                        logDebugf ctx "PDB %s created successfully" commandParameters.Name
+                        ctx.Log.Value.Debug("PDB {pdb} created successfully", commandParameters.Name)
                         let newMasterPDB = 
                             Domain.MasterPDB.newMasterPDB 
                                 commandParameters.Name 
@@ -391,12 +391,12 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                             match newStateResult with
                             | Ok s -> s
                             | Error error -> 
-                                logErrorf ctx "error when registering new master PDB %s : %s" commandParameters.Name error
+                                ctx.Log.Value.Error("error when registering new master PDB {pdb} : {error}", commandParameters.Name, error)
                                 instance, collaborators
                         return! loop { state with Instance = newInstance; Collaborators = newCollabs; Requests = newRequests }
                     | Error error -> 
-                        logErrorf ctx "PDB %s failed to create with error %A" commandParameters.Name error
-                        requester <! (requestId, MasterPDBCreationFailure (commandParameters.Name, error.ToString()))
+                        ctx.Log.Value.Error("PDB {pdb} failed to create with error : {error}", commandParameters.Name, error.Message)
+                        requester <! (requestId, MasterPDBCreationFailure (commandParameters.Name, error.Message))
                         return! loop { state with Requests = newRequests }
                 | _ -> 
                     ctx.Log.Value.Error "critical error"
@@ -412,7 +412,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                 retype request.Requester <! preparationResult
                 return! loop { state with Requests = newRequests }
             | None -> 
-                ctx.Log.Value.Error("internal error : request {0} not found", requestId.ToString())
+                ctx.Log.Value.Error("internal error : request {0} not found", requestId)
                 return! loop { state with Requests = newRequests }
 
         // Callback from Master PDB actor in response to Commit or Rollback
@@ -425,7 +425,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                 retype request.Requester <! editionResult
                 return! loop { state with Requests = newRequests }
             | None -> 
-                ctx.Log.Value.Error("internal error : request {0} not found", requestId.ToString())
+                ctx.Log.Value.Error("internal error : request {0} not found", requestId)
                 return! loop state
 
         | _ -> return! loop state

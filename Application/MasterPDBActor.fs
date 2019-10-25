@@ -102,7 +102,7 @@ let private masterPDBActorBody
                 | Ok true, false ->
                     ctx.Log.Value.Warning("Master PDB is not locked whereas its edition PDB exists on server => deleting the PDB...")
                     let result = oracleAPI.DeletePDB editionPDBName |> Async.RunSynchronously
-                    result |> Result.mapError (fun error -> ctx.Log.Value.Error("Could not delete edition PDB {pdb} : {1}", editionPDBName, (error.ToString()))) |> ignore
+                    result |> Result.mapError (fun error -> ctx.Log.Value.Error("Could not delete edition PDB {pdb} : {1}", editionPDBName, error.Message)) |> ignore
                     return! loop state
                 | Ok false, true ->
                     ctx.Log.Value.Warning("Master PDB is declared as locked whereas its edition PDB does not exist on server => unlocked it")
@@ -251,7 +251,7 @@ let private masterPDBActorBody
 
             match requestMaybe with
             | None -> 
-                logWarningf ctx "internal error : request %s not found" <| requestId.ToString()
+                ctx.Log.Value.Error("internal error : request {requestId} not found", requestId)
                 return! loop state
 
             | Some request -> 
@@ -264,7 +264,7 @@ let private masterPDBActorBody
                         sender <! (requestId, Prepared newMasterPDB)
                         return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                     | Error error ->
-                        sender <! (requestId, PreparationFailure (masterPDB.Name, error.ToString()))
+                        sender <! (requestId, PreparationFailure (masterPDB.Name, error.Message))
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
 
                 | Commit (_, unlocker, comment) ->
@@ -277,10 +277,10 @@ let private masterPDBActorBody
                             sender <! (requestId, Ok newMasterPDB)
                             return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                         | Error error -> 
-                            sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name (error.ToString())))
+                            sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name error))
                             return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
                     | Error error ->
-                        sender <! (requestId, Error (sprintf "cannot commit %s : %s" masterPDB.Name (error.ToString())))
+                        sender <! (requestId, Error (sprintf "cannot commit %s : %s" masterPDB.Name error.Message))
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
 
                 | Rollback _ ->
@@ -293,10 +293,10 @@ let private masterPDBActorBody
                             sender <! (requestId, Ok newMasterPDB)
                             return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                         | Error error -> 
-                            sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name (error.ToString())))
+                            sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name error))
                             return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
                     | Error error ->
-                        sender <! (requestId, Error (sprintf "cannot rollback %s : %s" masterPDB.Name (error.ToString())))
+                        sender <! (requestId, Error (sprintf "cannot rollback %s : %s" masterPDB.Name error.Message))
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
 
                 | SnapshotVersion (_, versionNumber, snapshotName) ->
@@ -305,7 +305,7 @@ let private masterPDBActorBody
                     | Ok _ ->
                         sender <! (requestId, Ok (masterPDB.Name, versionNumber, snapshotName))
                     | Error error ->
-                        sender <! (requestId, Error (error.ToString()))
+                        sender <! (requestId, Error error.Message)
                     return! loop { state with Requests = newRequests }
 
                 | _ -> failwithf "Fatal error"

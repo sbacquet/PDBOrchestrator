@@ -7,7 +7,6 @@ open Application.PendingRequest
 open Application.UserPendingRequest
 open Domain.Common.Validation
 open Application.Common
-open Domain.OracleInstance
 
 type OnInstance<'T> = WithUser<string, 'T>
 type OnInstance<'T1, 'T2> = WithUser<string, 'T1, 'T2>
@@ -115,8 +114,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             if (readOnly && pendingChangeCommandFilter (not << pendingChangeCommandAcceptable) command) then
                 sender <! RequestValidation.Invalid [ "the command cannot be run in maintenance mode" ]
                 return! loop state
-            
-            else // Do not remove this line !!
+            else
 
             let getInstanceName instanceName = if instanceName = "primary" then orchestrator.PrimaryInstance else instanceName
             
@@ -206,7 +204,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         return! loop state
                     | Some request ->
                         sender <! (requestId, request.Status)
-                        logDebugf ctx "Request %s completed => removed from the list" (requestId.ToString())
+                        ctx.Log.Value.Debug("Request {requestId} completed => removed from the list", requestId)
                         return! loop { state with CompletedRequests = completedRequests |> Map.remove requestId }
 
         | :? AdminCommand as command ->
@@ -317,17 +315,17 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             let requestMaybe = pendingRequests |> Map.tryFind requestId
             match requestMaybe with
             | None -> 
-                logErrorf ctx "internal error : request %s not found" (requestId.ToString())
+                ctx.Log.Value.Error("internal error : request {requestId} not found", requestId)
                 return! loop state
             | Some request ->
                 let status = 
                     match result with
                     | InvalidRequest errors -> 
-                        CompletedWithError (sprintf "invalid request : %s" (System.String.Join("; ", errors |> List.toArray)))
+                        CompletedWithError (sprintf "Invalid request : %s." (System.String.Join("; ", errors |> List.toArray)))
                     | MasterPDBCreationFailure (pdb, error) -> 
-                        CompletedWithError (sprintf "error while creating master PDB %s : %s" pdb error)
+                        CompletedWithError (sprintf "Error while creating master PDB %s : %s." pdb error)
                     | MasterPDBCreated pdb ->
-                        CompletedOk (sprintf "master PDB %s created successfully" pdb.Name)
+                        CompletedOk (sprintf "Master PDB %s created successfully." pdb.Name)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
@@ -336,13 +334,13 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             let requestMaybe = pendingRequests |> Map.tryFind requestId
             match requestMaybe with
             | None -> 
-                logErrorf ctx "internal error : request %s not found" (requestId.ToString())
+                ctx.Log.Value.Error("internal error : request {requestId} not found", requestId)
                 return! loop state
             | Some request ->
                 let status = 
                     match result with
-                    | MasterPDBActor.Prepared pdb -> CompletedOk (sprintf "master PDB %s prepared successfully for edition" pdb.Name)
-                    | MasterPDBActor.PreparationFailure (pdb, error) -> CompletedWithError (sprintf "error while preparing master PDB %s for edition : %s" pdb error)
+                    | MasterPDBActor.Prepared pdb -> CompletedOk (sprintf "Master PDB %s prepared successfully for edition." pdb.Name)
+                    | MasterPDBActor.PreparationFailure (pdb, error) -> CompletedWithError (sprintf "Error while preparing master PDB %s for edition : %s." pdb error)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
@@ -351,13 +349,13 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             let requestMaybe = pendingRequests |> Map.tryFind requestId
             match requestMaybe with
             | None -> 
-                logErrorf ctx "internal error : request %s not found" (requestId.ToString())
+                ctx.Log.Value.Error("internal error : request {requestId} not found", requestId)
                 return! loop state
             | Some request ->
                 let status = 
                     match result with
-                    | Ok pdb -> CompletedOk (sprintf "master PDB %s unlocked successfully" pdb.Name)
-                    | Error error -> CompletedWithError (sprintf "error while unlocking master PDB : %s" error)
+                    | Ok pdb -> CompletedOk (sprintf "Master PDB %s unlocked successfully." pdb.Name)
+                    | Error error -> CompletedWithError (sprintf "Error while unlocking master PDB : %s." error)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
@@ -366,13 +364,13 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             let requestMaybe = pendingRequests |> Map.tryFind requestId
             match requestMaybe with
             | None -> 
-                logErrorf ctx "internal error : request %s not found" (requestId.ToString())
+                ctx.Log.Value.Error("internal error : request {requestId} not found", requestId)
                 return! loop state
             | Some request ->
                 let status = 
                     match result with
-                    | Ok (pdb, versionNumber, snapshotName) -> CompletedOk (sprintf "version %d of master PDB %s snapshoted successfully with name %s" versionNumber pdb snapshotName)
-                    | Error error -> CompletedWithError (sprintf "error while snapshoting master PDB version : %s" error)
+                    | Ok (pdb, versionNumber, snapshotName) -> CompletedOk (sprintf "Version %d of master PDB %s snapshoted successfully with name %s." versionNumber pdb snapshotName)
+                    | Error error -> CompletedWithError (sprintf "Error while snapshoting master PDB version : %s." error)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 

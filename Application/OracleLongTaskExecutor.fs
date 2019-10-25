@@ -55,7 +55,6 @@ let private oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Com
             let! result = oracleAPI.SnapshotPDB from dest name
             stopWatch.Stop()
             result |> Result.map (fun snap -> ctx.Log.Value.Info("Snapshot {snapshot} created in {0} s", snap, stopWatch.Elapsed.TotalSeconds)) |> ignore
-            let elapsed = stopWatch.Elapsed
             match requestId with
             | Some reqId -> ctx.Sender() <! (reqId, result)
             | None -> ctx.Sender() <! result
