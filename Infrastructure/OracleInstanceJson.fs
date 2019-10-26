@@ -55,20 +55,19 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
             oracleDirectoryForDumps
 }
 
-let encodeOracleInstance (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:OracleInstance) jObj ->
-    jObj
-    |> Encode.required Encode.bytes "_iv" algo.IV
-    |> Encode.required Encode.string "name" x.Name
-    |> Encode.required Encode.string "server" x.Server
-    |> Encode.optional Encode.int "port" x.Port
-    |> Encode.required Encode.string "dbaUser" x.DBAUser
-    |> Encode.required (encryptPassword algo) "dbaPassword" x.DBAPassword
-    |> Encode.required Encode.string "masterPDBManifestsPath" x.MasterPDBManifestsPath
-    |> Encode.required Encode.string "masterPDBDestPath" x.MasterPDBDestPath
-    |> Encode.required Encode.string "snapshotSourcePDBDestPath" x.SnapshotSourcePDBDestPath
-    |> Encode.required Encode.string "snapshotPDBDestPath" x.SnapshotPDBDestPath
-    |> Encode.required Encode.string "oracleDirectoryForDumps" x.OracleDirectoryForDumps
-    |> Encode.required Encode.stringList "masterPDBs" x.MasterPDBs
+let encodeOracleInstance (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:OracleInstance) ->
+    Encode.required Encode.bytes "_iv" algo.IV >>
+    Encode.required Encode.string "name" x.Name >>
+    Encode.required Encode.string "server" x.Server >>
+    Encode.optional Encode.int "port" x.Port >>
+    Encode.required Encode.string "dbaUser" x.DBAUser >>
+    Encode.required (encryptPassword algo) "dbaPassword" x.DBAPassword >>
+    Encode.required Encode.string "masterPDBManifestsPath" x.MasterPDBManifestsPath >>
+    Encode.required Encode.string "masterPDBDestPath" x.MasterPDBDestPath >>
+    Encode.required Encode.string "snapshotSourcePDBDestPath" x.SnapshotSourcePDBDestPath >>
+    Encode.required Encode.string "snapshotPDBDestPath" x.SnapshotPDBDestPath >>
+    Encode.required Encode.string "oracleDirectoryForDumps" x.OracleDirectoryForDumps >>
+    Encode.required Encode.stringList "masterPDBs" x.MasterPDBs
 )
 
 let jsonToOracleInstance json = 

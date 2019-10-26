@@ -22,11 +22,10 @@ let decryptPassword (algo:SymmetricAlgorithm) (encryptedPasswordJson:Json) =
         |> JsonFailure.SingleFailure 
         |> JFail
 
-let encodeSchema algo = Encode.buildWith (fun (x:Schema) jObj ->
-    jObj 
-    |> Encode.required Encode.string "user" x.User
-    |> Encode.required (encryptPassword algo) "password" x.Password
-    |> Encode.required Encode.string "type" x.Type
+let encodeSchema algo = Encode.buildWith (fun (x:Schema) ->
+    Encode.required Encode.string "user" x.User >>
+    Encode.required (encryptPassword algo) "password" x.Password >>
+    Encode.required Encode.string "type" x.Type
 )
 
 let decodeSchema decoder = jsonDecoder {
@@ -36,10 +35,9 @@ let decodeSchema decoder = jsonDecoder {
     return { User = user; Password = password; Type = t }
 }
 
-let encodeLockInfo = Encode.buildWith (fun (x:LockInfo) jobj ->
-    jobj
-    |> Encode.required Encode.string "locker" x.Locker
-    |> Encode.required Encode.dateTime "date" x.Date
+let encodeLockInfo = Encode.buildWith (fun (x:LockInfo) ->
+    Encode.required Encode.string "locker" x.Locker >>
+    Encode.required Encode.dateTime "date" x.Date
 )
 
 let decodeLockInfo = jsonDecoder {
@@ -57,13 +55,12 @@ let decodeMasterPDBVersion = jsonDecoder {
     return { Number = number; CreatedBy = createdBy; CreationDate = creationDate.ToLocalTime(); Comment = comment; Deleted = deleted}
 }
 
-let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersion) jObj ->
-    jObj
-    |> Encode.required Encode.int "number" x.Number
-    |> Encode.required Encode.string "createdby" x.CreatedBy
-    |> Encode.required Encode.dateTime "creationdate" x.CreationDate
-    |> Encode.required Encode.string "comment" x.Comment
-    |> Encode.required Encode.bool "deleted" x.Deleted
+let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersion) ->
+    Encode.required Encode.int "number" x.Number >>
+    Encode.required Encode.string "createdby" x.CreatedBy >>
+    Encode.required Encode.dateTime "creationdate" x.CreationDate >>
+    Encode.required Encode.string "comment" x.Comment >>
+    Encode.required Encode.bool "deleted" x.Deleted
 )
 
 let decodeMasterPDB (algo:SymmetricAlgorithm) = jsonDecoder {
@@ -76,13 +73,12 @@ let decodeMasterPDB (algo:SymmetricAlgorithm) = jsonDecoder {
     return consMasterPDB name schemas versions lockState
 }
 
-let encodeMasterPDB (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:MasterPDB) jObj ->
-    jObj
-    |> Encode.required Encode.string "name" x.Name
-    |> Encode.required Encode.bytes "_iv" algo.IV
-    |> Encode.required (Encode.listWith (encodeSchema algo)) "schemas" x.Schemas
-    |> Encode.required (Encode.listWith encodeMasterPDBVersion) "versions" (x.Versions |> Map.toList |> List.map snd)
-    |> Encode.optional encodeLockInfo "lockstate" x.LockState
+let encodeMasterPDB (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:MasterPDB) ->
+    Encode.required Encode.string "name" x.Name >>
+    Encode.required Encode.bytes "_iv" algo.IV >>
+    Encode.required (Encode.listWith (encodeSchema algo)) "schemas" x.Schemas >>
+    Encode.required (Encode.listWith encodeMasterPDBVersion) "versions" (x.Versions |> Map.toList |> List.map snd) >>
+    Encode.optional encodeLockInfo "lockstate" x.LockState
 )
 
 let jsonToMasterPDB json = 

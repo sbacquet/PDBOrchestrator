@@ -11,10 +11,9 @@ let decodeOrchestrator = jsonDecoder {
     return consOrchestrator instances primaryInstance
 }
 
-let encodeOrchestrator = Encode.buildWith (fun (x:Orchestrator) jObj ->
-    jObj
-    |> Encode.required Encode.stringList "oracleInstanceNames" x.OracleInstanceNames
-    |> Encode.required Encode.string "primaryInstance" x.PrimaryInstance
+let encodeOrchestrator = Encode.buildWith (fun (x:Orchestrator) ->
+    Encode.required Encode.stringList "oracleInstanceNames" x.OracleInstanceNames >>
+    Encode.required Encode.string "primaryInstance" x.PrimaryInstance
 )
 
 let jsonToOrchestrator json = 
