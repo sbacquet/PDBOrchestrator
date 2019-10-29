@@ -5,7 +5,6 @@ open Domain.Common
 open Domain.Validation.MasterPDB
 open Domain.Validation.MasterPDBVersion
 open Domain
-open Domain
 
 type MasterPDBRow = {
     Name: string
