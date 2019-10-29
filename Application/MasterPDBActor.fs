@@ -98,7 +98,7 @@ let private masterPDBActorBody
             | LifecycleEvent.PreStart ->
                 ctx.Log.Value.Debug("Checking integrity...")
                 let! editionPDBExists = oracleAPI.PDBExists editionPDBName
-                match editionPDBExists, masterPDB.LockState.IsSome with
+                match editionPDBExists, masterPDB.EditionState.IsSome with
                 | Ok true, false ->
                     ctx.Log.Value.Warning("Master PDB is not locked whereas its edition PDB exists on server => deleting the PDB...")
                     let result = oracleAPI.DeletePDB editionPDBName |> Async.RunSynchronously
@@ -106,7 +106,7 @@ let private masterPDBActorBody
                     return! loop state
                 | Ok false, true ->
                     ctx.Log.Value.Warning("Master PDB is declared as locked whereas its edition PDB does not exist on server => unlocked it")
-                    return! loop { state with MasterPDB = { masterPDB with LockState = None } }
+                    return! loop { state with MasterPDB = { masterPDB with EditionState = None } }
                 | Ok _, _->
                     ctx.Log.Value.Debug("Integrity OK.")
                     return! loop state
@@ -133,8 +133,11 @@ let private masterPDBActorBody
             | PrepareForModification (requestId, version, user) as command ->
                 let sender = ctx.Sender().Retype<WithRequestId<PrepareForModificationResult>>()
 
-                if masterPDB |> isLocked then
+                if masterPDB |> isLockedForEdition then
                     sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "PDB %s is already locked" masterPDB.Name))
+                    return! loop state
+                elif masterPDB.EditionDisabled then
+                    sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "editing PDB %s is disabled" masterPDB.Name))
                     return! loop state
                 elif not <| UserRights.canLockPDB masterPDB (UserRights.normalUser user) then
                     sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "user %s is not authorized to lock PDB %s" user masterPDB.Name))
@@ -154,7 +157,7 @@ let private masterPDBActorBody
 
             | Commit (requestId, unlocker, _) ->
                 let sender = ctx.Sender().Retype<WithRequestId<EditionDone>>()
-                let lockInfoMaybe = masterPDB.LockState
+                let lockInfoMaybe = masterPDB.EditionState
                 match lockInfoMaybe with
                 | None -> 
                     sender <! (requestId, Error (sprintf "the master PDB %s is not being edited" masterPDB.Name))
@@ -174,7 +177,7 @@ let private masterPDBActorBody
 
             | Rollback (requestId, unlocker) ->
                 let sender = ctx.Sender().Retype<WithRequestId<EditionDone>>()
-                let lockInfoMaybe = masterPDB.LockState
+                let lockInfoMaybe = masterPDB.EditionState
                 match lockInfoMaybe with
                 | None -> 
                     sender <! (requestId, Error (sprintf "the master PDB %s is not being edited" masterPDB.Name))
@@ -260,7 +263,7 @@ let private masterPDBActorBody
                     let sender = request.Requester.Retype<WithRequestId<PrepareForModificationResult>>()
                     match result with
                     | Ok _ ->
-                        let newMasterPDB = masterPDB |> lock locker
+                        let newMasterPDB = masterPDB |> lockForEdition locker
                         sender <! (requestId, Prepared newMasterPDB)
                         return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                     | Error error ->

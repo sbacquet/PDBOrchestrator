@@ -35,21 +35,21 @@ let decodeSchema decoder = jsonDecoder {
     return { User = user; Password = password; Type = t }
 }
 
-let encodeLockInfo = Encode.buildWith (fun (x:LockInfo) ->
-    Encode.required Encode.string "locker" x.Locker >>
+let encodeLockInfo = Encode.buildWith (fun (x:EditionInfo) ->
+    Encode.required Encode.string "editor" x.Editor >>
     Encode.required Encode.dateTime "date" x.Date
 )
 
 let decodeLockInfo = jsonDecoder {
-    let! locker = Decode.required Decode.string "locker"
+    let! locker = Decode.required Decode.string "editor"
     let! date = Decode.required Decode.dateTime "date"
-    return consLockInfo locker date
+    return consEditionInfo locker date
 }
 
 let decodeMasterPDBVersion = jsonDecoder {
     let! number = Decode.required Decode.int "number"
-    let! createdBy = Decode.required Decode.string "createdby"
-    let! creationDate = Decode.required Decode.dateTime "creationdate"
+    let! createdBy = Decode.required Decode.string "createdBy"
+    let! creationDate = Decode.required Decode.dateTime "creationDate"
     let! comment = Decode.required Decode.string "comment"
     let! deleted = Decode.required Decode.bool "deleted"
     return { Number = number; CreatedBy = createdBy; CreationDate = creationDate.ToLocalTime(); Comment = comment; Deleted = deleted}
@@ -57,8 +57,8 @@ let decodeMasterPDBVersion = jsonDecoder {
 
 let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersion) ->
     Encode.required Encode.int "number" x.Number >>
-    Encode.required Encode.string "createdby" x.CreatedBy >>
-    Encode.required Encode.dateTime "creationdate" x.CreationDate >>
+    Encode.required Encode.string "createdBy" x.CreatedBy >>
+    Encode.required Encode.dateTime "creationDate" x.CreationDate >>
     Encode.required Encode.string "comment" x.Comment >>
     Encode.required Encode.bool "deleted" x.Deleted
 )
@@ -69,8 +69,9 @@ let decodeMasterPDB (algo:SymmetricAlgorithm) = jsonDecoder {
     let decoder = ivMaybe |> Option.map (fun iv -> algo.IV <- iv; algo)
     let! schemas = Decode.required (Decode.listWith (decodeSchema decoder)) "schemas"
     let! versions = Decode.required (Decode.listWith decodeMasterPDBVersion) "versions"
-    let! lockState = Decode.optional decodeLockInfo "lockstate"
-    return consMasterPDB name schemas versions lockState
+    let! lockState = Decode.optional decodeLockInfo "edition"
+    let! editionDisabled = Decode.optional Decode.bool "editionDisabled"
+    return consMasterPDB name schemas versions lockState (editionDisabled |> Option.defaultValue false)
 }
 
 let encodeMasterPDB (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:MasterPDB) ->
@@ -78,7 +79,8 @@ let encodeMasterPDB (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:MasterP
     Encode.required Encode.bytes "_iv" algo.IV >>
     Encode.required (Encode.listWith (encodeSchema algo)) "schemas" x.Schemas >>
     Encode.required (Encode.listWith encodeMasterPDBVersion) "versions" (x.Versions |> Map.toList |> List.map snd) >>
-    Encode.optional encodeLockInfo "lockstate" x.LockState
+    Encode.optional encodeLockInfo "edition" x.EditionState >>
+    Encode.ifNotEqual false Encode.bool "editionDisabled" x.EditionDisabled
 )
 
 let jsonToMasterPDB json = 

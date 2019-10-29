@@ -119,7 +119,7 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
                 jObj 
                 |> Encode.required Encode.string "description" description
             )
-            let encodeOpenMasterPDB = Encode.buildWith (fun (x:string * MasterPDB.LockInfoDTO) jObj ->
+            let encodeOpenMasterPDB = Encode.buildWith (fun (x:string * MasterPDB.EditionInfoDTO) jObj ->
                 let name, lockInfo = x
                 jObj 
                 |> Encode.required Encode.string "name" name

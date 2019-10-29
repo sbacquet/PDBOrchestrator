@@ -35,10 +35,10 @@ let validateSchema pdb (schema:Schema) =
 let validateSchemas pdb (schemas:Schema list) =
     schemas |> traverse (validateSchema pdb)
 
-let validateLock pdb (lockinfo:LockInfo option) =
+let validateLock pdb (lockinfo:EditionInfo option) =
     match lockinfo with
     | Some lock ->
-        if System.String.IsNullOrEmpty(lock.Locker) then
+        if System.String.IsNullOrEmpty(lock.Editor) then
             Invalid [ sprintf "PDB %s has an empty locker" pdb ]
         else
             Valid lockinfo
@@ -47,10 +47,11 @@ let validateLock pdb (lockinfo:LockInfo option) =
 let validateVersions pdb versions =
     versions |> traverse (validateVersion pdb)
 
-let consValidMasterPDB name schemas versions lockState =
+let consValidMasterPDB name schemas versions lockState editionDisabled =
     retn
         consMasterPDB <*> 
         validateName name <*> 
         validateSchemas name schemas <*>
         validateVersions name versions <*>
-        validateLock name lockState
+        validateLock name lockState <*>
+        Valid editionDisabled

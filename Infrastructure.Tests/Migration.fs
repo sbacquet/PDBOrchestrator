@@ -6,8 +6,8 @@ open Domain.Common.Validation
 
 [<Fact>]
 let ``Migration`` () =
-    let x = migrate "fr1psl013820.misys.global.ad" "intcdb3"
+    let x = "intcdb3" |> migrate "fr1psl013820.misys.global.ad" "sys" "syspwd8"
     match x with
-    | Valid rows -> Assert.True(rows.Length > 0)
+    | Valid _ -> ()
     | Invalid e -> failwith (sprintf "Errors of migration : %s" (System.String.Join("; ", e)))
 

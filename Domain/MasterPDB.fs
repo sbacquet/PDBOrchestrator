@@ -12,32 +12,34 @@ type Schema = {
 let consSchema user password t = { User = user; Password = password; Type = t }
 let consSchemaFromTuple (user, password, t) = consSchema user password t
 
-type LockInfo = {
-    Locker: string
+type EditionInfo = {
+    Editor: string
     Date: System.DateTime
 }
 
-let consLockInfo locker date = 
+let consEditionInfo editor date = 
     { 
-        Locker = locker
+        Editor = editor
         Date = date
     }
 
-let newLockInfo locker = consLockInfo locker System.DateTime.Now
+let newEditionInfo locker = consEditionInfo locker System.DateTime.Now
 
 type MasterPDB = {
     Name: string
     Schemas: Schema list
     Versions: Map<MasterPDBVersion.VersionNumber, MasterPDBVersion.MasterPDBVersion>
-    LockState : LockInfo option
+    EditionState : EditionInfo option
+    EditionDisabled: bool
 }
 
-let consMasterPDB name schemas versions lockState = 
+let consMasterPDB name schemas versions lockState editionDisabled = 
     { 
         Name = name
         Schemas = schemas 
         Versions = versions |> List.map (fun version -> version.Number, version) |> Map.ofList
-        LockState = lockState
+        EditionState = lockState
+        EditionDisabled = editionDisabled
     }
 
 let newMasterPDB name schemas createdBy comment =
@@ -45,7 +47,8 @@ let newMasterPDB name schemas createdBy comment =
         Name = name
         Schemas = schemas
         Versions = [ 1, newPDBVersion createdBy comment ] |> Map.ofList
-        LockState = None 
+        EditionState = None 
+        EditionDisabled = false
     }
 
 let isVersionDeleted version masterPDB =
@@ -85,16 +88,17 @@ let deleteVersion versionNumber masterPDB =
         | None -> 
             Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name)
 
-let lock user masterPDB =
-    if masterPDB.LockState.IsSome then failwith (sprintf "master PDB %s should not be locked !" masterPDB.Name)
-    { masterPDB with LockState = Some (consLockInfo user System.DateTime.Now) }
+let lockForEdition user masterPDB =
+    if masterPDB.EditionDisabled then failwith (sprintf "master PDB %s cannot be edited !" masterPDB.Name)
+    if masterPDB.EditionState.IsSome then failwith (sprintf "master PDB %s should not already be edited !" masterPDB.Name)
+    { masterPDB with EditionState = Some (consEditionInfo user System.DateTime.Now) }
 
 let unlock masterPDB =
-    match masterPDB.LockState with
+    match masterPDB.EditionState with
     | None -> Error (sprintf "%s is not locked" masterPDB.Name)
-    | Some _ -> Ok { masterPDB with LockState = None }
+    | Some _ -> Ok { masterPDB with EditionState = None }
 
-let isLocked masterPDB = masterPDB.LockState.IsSome
+let isLockedForEdition masterPDB = masterPDB.EditionState.IsSome
 
 let manifestFile = sprintf "%s_V%03d.XML"
 let manifestPath baseFolder name version = sprintf "%s/%s" baseFolder <| manifestFile name version

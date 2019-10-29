@@ -50,7 +50,7 @@ let private pendingChangeCommandFilter mapper = function
 
 type PendingChanges = {
     Commands : Command list
-    OpenMasterPDBs : (string * LockInfoDTO) list
+    OpenMasterPDBs : (string * EditionInfoDTO) list
 }
 
 let consPendingChanges commands openMasterPDBs = { Commands = commands |> Seq.toList; OpenMasterPDBs = openMasterPDBs }
@@ -222,8 +222,8 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     primaryInstanceState 
                     |> Result.map (fun state -> 
                         state.MasterPDBs 
-                        |> List.filter (fun pdb -> pdb.LockState |> Option.isSome)
-                        |> List.map (fun pdb -> pdb.Name, pdb.LockState.Value)
+                        |> List.filter (fun pdb -> pdb.EditionState |> Option.isSome)
+                        |> List.map (fun pdb -> pdb.Name, pdb.EditionState.Value)
                         )
                     |> Result.map (fun openMasterPDBs ->
                         if (openMasterPDBs.IsEmpty && Seq.isEmpty pendingChangeCommands) then    

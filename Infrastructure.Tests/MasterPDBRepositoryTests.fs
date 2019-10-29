@@ -32,6 +32,6 @@ let ``Update master PDB`` () =
     let repo = MasterPDBRepository(testFolder, pdbName) :> IMasterPDBRepository
     let pdb = newMasterPDB pdbName [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
     let repo' = repo.Put pdb
-    let repo'' = repo'.Put { pdb with LockState = Some (newLockInfo "me") }
+    let repo'' = repo'.Put { pdb with EditionState = Some (newEditionInfo "me") }
     let pdb' = repo''.Get()
-    Assert.Equal("me", pdb'.LockState.Value.Locker)
+    Assert.Equal("me", pdb'.EditionState.Value.Editor)

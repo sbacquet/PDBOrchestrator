@@ -29,28 +29,30 @@ let consMasterPDBVersionDTO version createdBy creationDate comment deleted manif
 let toMasterPDBVersionDTO manifest (version:Domain.MasterPDBVersion.MasterPDBVersion) =
     consMasterPDBVersionDTO version.Number version.CreatedBy version.CreationDate version.Comment version.Deleted manifest
 
-type LockInfoDTO = {
-    Locker: string
+type EditionInfoDTO = {
+    Editor: string
     Date: System.DateTime
 }
 
-let consLockInfoDTO locker date = { Locker = locker; Date = date }
+let consEditionInfoDTO editor date = { Editor = editor; Date = date }
 
-let toLockInfoDTO (lockInfo:Domain.MasterPDB.LockInfo option) =
-    lockInfo |> Option.map (fun lock -> consLockInfoDTO lock.Locker lock.Date)
+let toEditionInfoDTO (lockInfo:Domain.MasterPDB.EditionInfo option) =
+    lockInfo |> Option.map (fun lock -> consEditionInfoDTO lock.Editor lock.Date)
 
 type MasterPDBDTO = {
     Name: string
     Schemas: SchemaDTO list
     Versions: MasterPDBVersionDTO list
-    LockState : LockInfoDTO option
+    EditionState: EditionInfoDTO option
+    EditionDisabled: bool
 }
 
-let consMasterPDBDTO name schemas versions lockState = {
+let consMasterPDBDTO name schemas versions editionState editionDisabled = {
     Name = name
     Schemas = schemas
     Versions = versions
-    LockState = lockState
+    EditionState = editionState
+    EditionDisabled = editionDisabled
 }
 
 let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) = { 
@@ -59,7 +61,8 @@ let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) = {
     Versions = masterPDB.Versions 
         |> Map.map (fun _ version -> version |> toMasterPDBVersionDTO (Domain.MasterPDB.manifestFile masterPDB.Name version.Number))
         |> Map.toList |> List.map snd
-    LockState = masterPDB.LockState |> toLockInfoDTO
+    EditionState = masterPDB.EditionState |> toEditionInfoDTO
+    EditionDisabled = masterPDB.EditionDisabled
 }
 
 let fromDTO (dto:MasterPDBDTO) : Domain.MasterPDB.MasterPDB = { 
@@ -76,6 +79,7 @@ let fromDTO (dto:MasterPDBDTO) : Domain.MasterPDB.MasterPDB = {
             }
             version.Number, v)
         |> Map.ofList
-    LockState = dto.LockState |> Option.map (fun lock -> { Locker = lock.Locker; Date = lock.Date })
+    EditionState = dto.EditionState |> Option.map (fun lock -> { Editor = lock.Editor; Date = lock.Date })
+    EditionDisabled = dto.EditionDisabled
 }
 

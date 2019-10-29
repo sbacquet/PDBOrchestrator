@@ -13,15 +13,15 @@ let encodeSchema = Encode.buildWith (fun (x:SchemaDTO) ->
 
 let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersionDTO) ->
     Encode.required Encode.int "number" x.Number >>
-    Encode.required Encode.string "createdby" x.CreatedBy >>
-    Encode.required Encode.dateTime "creationdate" x.CreationDate >>
+    Encode.required Encode.string "createdBy" x.CreatedBy >>
+    Encode.required Encode.dateTime "creationDate" x.CreationDate >>
     Encode.required Encode.string "comment" x.Comment >>
     Encode.required Encode.bool "deleted" x.Deleted >>
     Encode.required Encode.string "manifest" x.Manifest
 )
 
-let encodeLockInfo = Encode.buildWith (fun (x:LockInfoDTO) ->
-    Encode.required Encode.string "locker" x.Locker >>
+let encodeLockInfo = Encode.buildWith (fun (x:EditionInfoDTO) ->
+    Encode.required Encode.string "editor" x.Editor >>
     Encode.required Encode.dateTime "date" x.Date
 )
 
@@ -29,7 +29,8 @@ let encodeMasterPDB = Encode.buildWith (fun (x:MasterPDBDTO) ->
     Encode.required Encode.string "name" x.Name >>
     Encode.required (Encode.listWith encodeSchema) "schemas" x.Schemas >>
     Encode.required (Encode.listWith encodeMasterPDBVersion) "versions" x.Versions >>
-    Encode.optional encodeLockInfo "lockstate" x.LockState
+    Encode.optional encodeLockInfo "edition" x.EditionState >>
+    Encode.ifNotEqual false Encode.bool "editionDisabled" x.EditionDisabled
 )
 
 let masterPDBStatetoJson pdb =
