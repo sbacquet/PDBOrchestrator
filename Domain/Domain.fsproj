@@ -6,7 +6,9 @@
   <ItemGroup>
     <Compile Include="Common.fs" />
     <Compile Include="MasterPDBVersion.fs" />
+    <Compile Include="MasterPDBVersionValidation.fs" />
     <Compile Include="MasterPDB.fs" />
+    <Compile Include="MasterPDBValidation.fs" />
     <Compile Include="OracleInstance.fs" />
     <Compile Include="Orchestrator.fs" />
   </ItemGroup>

@@ -27,6 +27,7 @@
     <Compile Include="Oracle.fs" />
     <Compile Include="HttpHandlers.fs" />
     <Compile Include="Config.fs" />
+    <Compile Include="Migration.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

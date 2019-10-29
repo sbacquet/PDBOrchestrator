@@ -17,10 +17,10 @@ let loadOracleInstance folder name : OracleInstance =
     | JPass instance -> instance
     | JFail error -> failwith (error.ToString())
 
-let saveOracleInstance folder name pdb = 
+let saveOracleInstance folder name instance = 
     Directory.CreateDirectory (instanceFolder folder name) |> ignore
     use stream = File.CreateText (instancePath folder name)
-    let json = pdb |> OracleInstanceJson.oracleInstanceToJson
+    let json = instance |> OracleInstanceJson.oracleInstanceToJson
     stream.Write json
     stream.Flush()
 
@@ -34,6 +34,6 @@ type OracleInstanceRepository(folder, name) =
 type NewOracleInstanceRepository(folder, instance) = 
     interface IOracleInstanceRepository with
         member __.Get () = instance
-        member __.Put pdb = 
+        member __.Put inst = 
             let newRepo = OracleInstanceRepository(folder, instance.Name) :> IOracleInstanceRepository
-            newRepo.Put pdb
+            newRepo.Put inst

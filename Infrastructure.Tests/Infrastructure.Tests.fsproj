@@ -12,6 +12,7 @@
     <Compile Include="OracleInstanceRepositoryTests.fs" />
     <Compile Include="OrchestratorRepositoryTests.fs" />
     <Compile Include="Oracle.fs" />
+    <Compile Include="Migration.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
