@@ -74,6 +74,7 @@ module Rest =
             //.UseHttpsRedirection()
             //.UseCors(configureCors)
             //.UseAuthentication()
+            .UseStaticFiles()
             .UseGiraffe(webApp apiCtx) |> ignore
 
     let configureServices (services : IServiceCollection) =
@@ -170,6 +171,7 @@ let main args =
             (Rest.buildEndpoint infrastuctureParameters.DNSName port)
 
     WebHostBuilder()
+        .UseWebRoot("wwwroot")
         .UseConfiguration(config)
         .UseKestrel(fun options -> options.Listen(System.Net.IPAddress.IPv6Any, port))
         .UseIISIntegration()
