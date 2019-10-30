@@ -9,16 +9,19 @@ type MasterPDBVersion = {
     CreatedBy: string
     CreationDate: DateTime
     Comment: string
-    Deleted : bool
+    Deleted: bool
+    Properties: Map<string, string>
 }
 
-let consPDBVersion version deleted createdBy creationDate comment =
+let consPDBVersion version deleted createdBy (creationDate:DateTime) comment properties =
     { 
         Number = version
         CreatedBy = createdBy
-        CreationDate = creationDate
+        CreationDate = creationDate.ToUniversalTime()
         Comment = comment 
         Deleted = deleted
+        Properties = properties
     }
 
-let newPDBVersion createdBy comment = consPDBVersion 1 false createdBy System.DateTime.Now comment
+let newPDBVersion createdBy comment = 
+    consPDBVersion 1 false createdBy System.DateTime.Now comment Map.empty

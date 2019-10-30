@@ -17,10 +17,10 @@ type EditionInfo = {
     Date: System.DateTime
 }
 
-let consEditionInfo editor date = 
+let consEditionInfo editor (date:System.DateTime) = 
     { 
         Editor = editor
-        Date = date
+        Date = date.ToUniversalTime()
     }
 
 let newEditionInfo locker = consEditionInfo locker System.DateTime.Now
@@ -31,15 +31,17 @@ type MasterPDB = {
     Versions: Map<MasterPDBVersion.VersionNumber, MasterPDBVersion.MasterPDBVersion>
     EditionState : EditionInfo option
     EditionDisabled: bool
+    Properties: Map<string, string>
 }
 
-let consMasterPDB name schemas versions lockState editionDisabled = 
+let consMasterPDB name schemas versions (editionState:EditionInfo option) editionDisabled properties = 
     { 
         Name = name
         Schemas = schemas 
         Versions = versions |> List.map (fun version -> version.Number, version) |> Map.ofList
-        EditionState = lockState
+        EditionState = editionState |> Option.map (fun editionState -> { editionState with Date = editionState.Date.ToUniversalTime() })
         EditionDisabled = editionDisabled
+        Properties = properties
     }
 
 let newMasterPDB name schemas createdBy comment =
@@ -49,6 +51,7 @@ let newMasterPDB name schemas createdBy comment =
         Versions = [ 1, newPDBVersion createdBy comment ] |> Map.ofList
         EditionState = None 
         EditionDisabled = false
+        Properties = Map.empty
     }
 
 let isVersionDeleted version masterPDB =
@@ -66,8 +69,8 @@ let getNextAvailableVersion masterPDB =
 
 let addVersionToMasterPDB createdBy comment masterPDB =
     let newVersionNumber = getNextAvailableVersion masterPDB
-    let version:MasterPDBVersion.MasterPDBVersion = consPDBVersion newVersionNumber false createdBy System.DateTime.Now comment
-    { masterPDB with Versions = masterPDB.Versions.Add(newVersionNumber, version) }
+    let version = consPDBVersion newVersionNumber false createdBy System.DateTime.Now comment Map.empty
+    { masterPDB with Versions = masterPDB.Versions |> Map.add newVersionNumber version }
 
 let deleteVersion versionNumber masterPDB =
     if (versionNumber = 1) 

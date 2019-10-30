@@ -10,5 +10,6 @@
   "oracleDirectoryForDumps": "DP_DIR",
   "masterPDBs": [
     "NORTHVIEW"
-  ]
+  ],
+  "_version": 1
 }

@@ -6,6 +6,8 @@ open Chiron.JsonTransformer
 open Domain.OracleInstance
 open System.Security.Cryptography
 
+let [<Literal>] private cCurrentJsonVersion = 1
+
 let encryptPassword (algo:SymmetricAlgorithm) (clearPassword:string) =
     clearPassword |> Encryption.encryptString algo |> Json.String
 
@@ -22,41 +24,45 @@ let decryptPassword (algo:SymmetricAlgorithm) (encryptedPasswordJson:Json) =
         |> JFail
 
 let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
-    let! ivMaybe = Decode.optional Decode.bytes "_iv"
-    let decoder = 
-        match ivMaybe with
-        | Some iv -> 
-            algo.IV <- iv
-            decryptPassword algo
-        | None -> Decode.string
-    let! name = Decode.required Decode.string "name" 
-    let! server = Decode.required Decode.string "server" 
-    let! port = Decode.optional Decode.int "port"
-    let! dbaUser = Decode.required Decode.string "dbaUser" 
-    let! dbaPassword = Decode.required decoder "dbaPassword"
-    let! masterPDBManifestsPath = Decode.required Decode.string "masterPDBManifestsPath" 
-    let! masterPDBDestPath = Decode.required Decode.string "masterPDBDestPath" 
-    let! snapshotSourcePDBDestPath = Decode.required Decode.string "snapshotSourcePDBDestPath" 
-    let! snapshotPDBDestPath = Decode.required Decode.string "snapshotPDBDestPath" 
-    let! oracleDirectoryForDumps = Decode.required Decode.string "oracleDirectoryForDumps" 
-    let! masterPDBs = Decode.required Decode.stringList "masterPDBs" 
-    return 
-        consOracleInstance 
-            masterPDBs 
-            name 
-            server 
-            port 
-            dbaUser 
-            dbaPassword 
-            masterPDBManifestsPath 
-            masterPDBDestPath 
-            snapshotPDBDestPath 
-            snapshotSourcePDBDestPath 
-            oracleDirectoryForDumps
+    let! version = Decode.required Decode.int "_version"
+    match version with
+    | 1 ->
+        let! ivMaybe = Decode.optional Decode.bytes "_iv"
+        let decoder = 
+            match ivMaybe with
+            | Some iv -> 
+                algo.IV <- iv
+                decryptPassword algo
+            | None -> Decode.string
+        let! name = Decode.required Decode.string "name" 
+        let! server = Decode.required Decode.string "server" 
+        let! port = Decode.optional Decode.int "port"
+        let! dbaUser = Decode.required Decode.string "dbaUser" 
+        let! dbaPassword = Decode.required decoder "dbaPassword"
+        let! masterPDBManifestsPath = Decode.required Decode.string "masterPDBManifestsPath" 
+        let! masterPDBDestPath = Decode.required Decode.string "masterPDBDestPath" 
+        let! snapshotSourcePDBDestPath = Decode.required Decode.string "snapshotSourcePDBDestPath" 
+        let! snapshotPDBDestPath = Decode.required Decode.string "snapshotPDBDestPath" 
+        let! oracleDirectoryForDumps = Decode.required Decode.string "oracleDirectoryForDumps" 
+        let! masterPDBs = Decode.required Decode.stringList "masterPDBs" 
+        return 
+            consOracleInstance 
+                masterPDBs 
+                name 
+                server 
+                port 
+                dbaUser 
+                dbaPassword 
+                masterPDBManifestsPath 
+                masterPDBDestPath 
+                snapshotPDBDestPath 
+                snapshotSourcePDBDestPath 
+                oracleDirectoryForDumps
+    | _ -> 
+        return! Decoder.alwaysFail (JsonFailure.SingleFailure (JsonFailureReason.InvalidJson (sprintf "unknown Oracle instance JSON version %d" version)))
 }
 
 let encodeOracleInstance (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:OracleInstance) ->
-    Encode.required Encode.bytes "_iv" algo.IV >>
     Encode.required Encode.string "name" x.Name >>
     Encode.required Encode.string "server" x.Server >>
     Encode.optional Encode.int "port" x.Port >>
@@ -67,7 +73,9 @@ let encodeOracleInstance (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:Or
     Encode.required Encode.string "snapshotSourcePDBDestPath" x.SnapshotSourcePDBDestPath >>
     Encode.required Encode.string "snapshotPDBDestPath" x.SnapshotPDBDestPath >>
     Encode.required Encode.string "oracleDirectoryForDumps" x.OracleDirectoryForDumps >>
-    Encode.required Encode.stringList "masterPDBs" x.MasterPDBs
+    Encode.required Encode.stringList "masterPDBs" x.MasterPDBs >>
+    Encode.required Encode.int "_version" cCurrentJsonVersion >>
+    Encode.required Encode.bytes "_iv" algo.IV
 )
 
 let jsonToOracleInstance json = 

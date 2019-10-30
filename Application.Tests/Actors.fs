@@ -410,7 +410,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
     let getMasterPDBRepo (instance:OracleInstance) name = 
         match instance.Name with
         | "server1" -> 
-            let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newEditionInfo "lockman" |> Some) false
+            let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newEditionInfo "lockman" |> Some) false Map.empty
             match name with
             | "test1" | "test2" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
             | "locked" -> FakeMasterPDBRepo lockedMasterPDB :> IMasterPDBRepository

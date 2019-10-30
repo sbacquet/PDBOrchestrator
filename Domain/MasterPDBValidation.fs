@@ -47,11 +47,18 @@ let validateLock pdb (lockinfo:EditionInfo option) =
 let validateVersions pdb versions =
     versions |> traverse (validateVersion pdb)
 
-let consValidMasterPDB name schemas versions lockState editionDisabled =
+let validateProperties pdb properties =
+    if properties |> Map.forall (fun key _ -> not (System.String.IsNullOrEmpty(key))) then
+        Valid properties
+    else
+        Invalid [ sprintf "PDB %s has an empty property key" pdb ]
+
+let consValidMasterPDB name schemas versions lockState editionDisabled properties =
     retn
         consMasterPDB <*> 
         validateName name <*> 
         validateSchemas name schemas <*>
         validateVersions name versions <*>
         validateLock name lockState <*>
-        Valid editionDisabled
+        Valid editionDisabled <*>
+        validateProperties name properties

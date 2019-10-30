@@ -1,6 +1,5 @@
 {
   "name": "NORTHVIEW",
-  "_iv": "oBYNue/DRUspGZJQojShTw==",
   "schemas": [
     {
       "user": "NVW_72X_REF",
@@ -13,8 +12,9 @@
       "number": 13,
       "createdBy": "me",
       "creationDate": "2019-10-03T16:29:38.9145909Z",
-      "comment": "comment1",
-      "deleted": false
+      "comment": "comment1"
     }
-  ]
+  ],
+  "_version": 1,
+  "_iv": "oBYNue/DRUspGZJQojShTw=="
 }

@@ -24,14 +24,21 @@ let validateComment pdb version comment =
     else
         Valid comment
 
-let consValidPDBVersion pdb version deleted createdBy creationDate comment =
+let validateProperties pdb version properties =
+    if properties |> Map.forall (fun key _ -> not (System.String.IsNullOrEmpty(key))) then
+        Valid properties
+    else
+        Invalid [ sprintf "PDB %s version %d has an empty property key" pdb version ]
+
+let consValidPDBVersion pdb version deleted createdBy creationDate comment properties =
     retn 
         consPDBVersion <*>
             validateNumber pdb version <*>
             Valid deleted <*>
             validateCreator pdb version createdBy <*>
             validateCreationDate pdb version creationDate <*>
-            validateComment pdb version comment
+            validateComment pdb version comment <*>
+            validateProperties pdb version properties
 
 let validateVersion pdb (version:MasterPDBVersion) =
-    consValidPDBVersion pdb version.Number version.Deleted version.CreatedBy version.CreationDate version.Comment
+    consValidPDBVersion pdb version.Number version.Deleted version.CreatedBy version.CreationDate version.Comment version.Properties

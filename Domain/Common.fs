@@ -59,6 +59,8 @@ module Validation =
 
     let (<*>) = apply
 
+    let (>>=) x f = bind f x
+
     let rec traverse f list =
         let cons head tail = head :: tail
         let folder head tail = retn cons <*> (f head) <*> tail
