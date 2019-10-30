@@ -79,13 +79,16 @@ let rowToValidMasterPDBVersion (row:MasterPDBVersionRow) =
     |> Validation.map (fun version -> row.Name, version)
 
 let migrate fromServer dbaUser dbaPassword instanceName = 
+
     let conn = Sql.withNewConnection (openConn fromServer 1521 "orclpdb" "c##pdba" "pass" false)
+
     let validMasterPDBVersions =
         getMasterPDBVersionRows conn
         |> Async.RunSynchronously
         |> Result.mapError (fun ex -> ex.Message)
         |> Validation.ofResult 
         >>= Validation.traverse rowToValidMasterPDBVersion
+
     let getValidMasterPDBs pdbVersions =
         let versionsPerName = 
             pdbVersions 
@@ -97,6 +100,7 @@ let migrate fromServer dbaUser dbaPassword instanceName =
         |> Result.mapError (fun ex -> ex.Message)
         |> Validation.ofResult
         >>= (Validation.traverse (rowToValidMasterPDB (fun pdb -> versionsPerName |> Map.tryFind pdb)))
+
     let putMasterPDBs pdbs =
         pdbs |> List.iter (fun pdb ->
             let repo = Infrastructure.MasterPDBRepository.NewMasterPDBRepository(instanceName, pdb) :> Application.Common.IMasterPDBRepository
@@ -110,6 +114,7 @@ let migrate fromServer dbaUser dbaPassword instanceName =
                 None
                 dbaUser dbaPassword 
                 "" "" "" "" "" // paths to edit manually in the instance JSON file
+                false // not snapshot capable by default
         let repo = Infrastructure.OracleInstanceRepository.NewOracleInstanceRepository(".", instance) :> Application.Common.IOracleInstanceRepository
         repo.Put instance |> ignore
         sprintf "%s imported properly from %s" instanceName fromServer |> Validation.Valid

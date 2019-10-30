@@ -53,7 +53,7 @@ let ``Import and delete PDB`` () =
     |> Array.iter (Result.mapError raise >> ignore)
 
 [<Fact>]
-let ``Snapshot PDB`` () =
+let ``Create a real working copy`` () =
     let commands1 = asyncResult {
         let stopWatch = System.Diagnostics.Stopwatch.StartNew()
         let! _ = oracleAPI.ImportPDB "/u01/app/oracle/oradata/SB_PDBs/test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
@@ -85,7 +85,7 @@ let ``Snapshot PDB`` () =
     |> Array.iter (Result.mapError raise >> ignore)
 
 [<Fact>]
-let ``Snapshots older than 15 seconds`` () =
+let ``Get snapshots older than 15 seconds`` () =
     let commands1 = asyncResult {
         let! _ = oracleAPI.ImportPDB "/u01/app/oracle/oradata/SB_PDBs/test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
         let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot"

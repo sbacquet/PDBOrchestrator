@@ -81,9 +81,9 @@ let returnRequest endpoint requestValidation : HttpHandler =
     | Invalid errors -> 
         RequestErrors.notAcceptable (text <| sprintf "Your request cannot be accepted : %s." (System.String.Join("; ", errors)))
 
-let snapshot apiCtx (instance:string, masterPDB:string, version:int, name:string) =
+let createWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, name:string) =
     withUser (fun user next ctx -> task {
-        let! requestValidation = API.snapshotMasterPDBVersion apiCtx user instance masterPDB version name
+        let! requestValidation = API.createWorkingCopy apiCtx user instance masterPDB version name
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
@@ -112,8 +112,8 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
                         sprintf "Commit modifications done in master PDB %s" pdb
                     | OrchestratorActor.RollbackMasterPDB (user, pdb) ->
                         sprintf "Roll back modification done in %s" pdb
-                    | OrchestratorActor.SnapshotMasterPDBVersion (user, instance, pdb, version, name) ->
-                        sprintf "Snapshot version %d of master PDB %s to PDB %s" version pdb name
+                    | OrchestratorActor.CreateWorkingCopy (user, instance, pdb, version, name) ->
+                        sprintf "Create a working copy named %s of master PDB %s version %d" name pdb version
                     | OrchestratorActor.GetRequest requestId ->
                         sprintf "Get request from id %O" requestId
                 jObj 

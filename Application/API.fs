@@ -31,8 +31,8 @@ let synchronizePrimaryInstanceWith (ctx:APIContext) instance : Async<Application
 let getRequestStatus (ctx:APIContext) requestId : Async<WithRequestId<RequestStatus>> =
     ctx.Orchestrator <? GetRequest requestId
 
-let snapshotMasterPDBVersion (ctx:APIContext) user instance masterPDBName versionNumber snapshotName : Async<RequestValidation> =
-    ctx.Orchestrator <? SnapshotMasterPDBVersion (user, instance, masterPDBName, versionNumber, snapshotName)
+let createWorkingCopy (ctx:APIContext) user instance masterPDBName versionNumber snapshotName : Async<RequestValidation> =
+    ctx.Orchestrator <? CreateWorkingCopy (user, instance, masterPDBName, versionNumber, snapshotName)
 
 let createMasterPDB (ctx:APIContext) user name dump schemas targetSchemas comment : Async<RequestValidation> =
     let pars : OracleInstanceActor.CreateMasterPDBParams = {

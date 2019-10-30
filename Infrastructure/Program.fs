@@ -38,7 +38,7 @@ module Rest =
                 // Commit edition
                 routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.commitMasterPDB apiCtx)
                 // Snapshot
-                routef "/instance/%s/masterpdb/%s/%i/snapshot/%s" (HttpHandlers.snapshot apiCtx)
+                routef "/instance/%s/masterpdb/%s/%i/workingcopy/%s" (HttpHandlers.createWorkingCopy apiCtx)
 
                 // Routes for admins
                 route "/garbagecollection" >=> HttpHandlers.collectGarbage apiCtx

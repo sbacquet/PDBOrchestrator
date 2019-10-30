@@ -17,7 +17,7 @@ type Command =
 | PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
 | Commit of WithRequestId<string, string> // responds with WithRequestId<EditionDone>
 | Rollback of WithRequestId<string> // responds with WithRequestId<EditionDone>
-| SnapshotVersion of WithRequestId<int, string> // responds with WithRequest<SnapshotResult>
+| CreateWorkingCopy of WithRequestId<int, string> // responds with WithRequest<CreateWorkingCopyResult>
 | CollectGarbage // no response
 
 type PrepareForModificationResult = 
@@ -30,7 +30,7 @@ let stateError error : StateResult = Error error
 
 type EditionDone = Result<MasterPDB, string>
 
-type SnapshotResult = Result<string * int * string, string>
+type CreateWorkingCopyResult = Result<string * int * string, string>
 
 type private Collaborators = {
     MasterPDBVersionActors: Map<int, IActorRef<MasterPDBVersionActor.Command>>
@@ -194,8 +194,8 @@ let private masterPDBActorBody
                         oracleLongTaskExecutor <! OracleLongTaskExecutor.DeletePDB (Some requestId, editionPDBName)
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
             
-            | SnapshotVersion (requestId, versionNumber, snapshotName) ->
-                let sender = ctx.Sender().Retype<WithRequestId<SnapshotResult>>()
+            | CreateWorkingCopy (requestId, versionNumber, snapshotName) ->
+                let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
                 let versionMaybe = masterPDB.Versions.TryFind(versionNumber)
                 match versionMaybe with
                 | None -> 
@@ -204,7 +204,7 @@ let private masterPDBActorBody
                 | Some version -> 
                     let newCollabs, versionActor = getOrSpawnVersionActor parameters oracleAPI masterPDB.Name version collaborators ctx
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    versionActor <! MasterPDBVersionActor.Snapshot (requestId, (manifestPath versionNumber), instance.SnapshotSourcePDBDestPath, snapshotName, instance.SnapshotPDBDestPath)
+                    versionActor <! MasterPDBVersionActor.Snapshot (requestId, (manifestPath versionNumber), instance.SnapshotSourcePDBDestPath, snapshotName, instance.WorkingCopyDestPath)
                     return! loop { state with Requests = newRequests; Collaborators = newCollabs }
 
             | CollectGarbage ->
@@ -302,8 +302,8 @@ let private masterPDBActorBody
                         sender <! (requestId, Error (sprintf "cannot rollback %s : %s" masterPDB.Name error.Message))
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
 
-                | SnapshotVersion (_, versionNumber, snapshotName) ->
-                    let sender = request.Requester.Retype<WithRequestId<SnapshotResult>>()
+                | CreateWorkingCopy (_, versionNumber, snapshotName) ->
+                    let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
                         sender <! (requestId, Ok (masterPDB.Name, versionNumber, snapshotName))

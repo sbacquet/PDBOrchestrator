@@ -39,10 +39,11 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
         let! port = Decode.optional Decode.int "port"
         let! dbaUser = Decode.required Decode.string "dbaUser" 
         let! dbaPassword = Decode.required decoder "dbaPassword"
+        let! snapshotCapable = Decode.optional Decode.bool "snapshotCapable"
         let! masterPDBManifestsPath = Decode.required Decode.string "masterPDBManifestsPath" 
         let! masterPDBDestPath = Decode.required Decode.string "masterPDBDestPath" 
         let! snapshotSourcePDBDestPath = Decode.required Decode.string "snapshotSourcePDBDestPath" 
-        let! snapshotPDBDestPath = Decode.required Decode.string "snapshotPDBDestPath" 
+        let! workingCopyDestPath = Decode.required Decode.string "workingCopyDestPath" 
         let! oracleDirectoryForDumps = Decode.required Decode.string "oracleDirectoryForDumps" 
         let! masterPDBs = Decode.required Decode.stringList "masterPDBs" 
         return 
@@ -55,9 +56,10 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
                 dbaPassword 
                 masterPDBManifestsPath 
                 masterPDBDestPath 
-                snapshotPDBDestPath 
+                workingCopyDestPath 
                 snapshotSourcePDBDestPath 
                 oracleDirectoryForDumps
+                (snapshotCapable |> Option.defaultValue true)
     | _ -> 
         return! Decoder.alwaysFail (JsonFailure.SingleFailure (JsonFailureReason.InvalidJson (sprintf "unknown Oracle instance JSON version %d" version)))
 }
@@ -68,10 +70,11 @@ let encodeOracleInstance (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:Or
     Encode.optional Encode.int "port" x.Port >>
     Encode.required Encode.string "dbaUser" x.DBAUser >>
     Encode.required (encryptPassword algo) "dbaPassword" x.DBAPassword >>
+    Encode.ifNotEqual true Encode.bool "snapshotCapable" x.SnapshotCapable >>
     Encode.required Encode.string "masterPDBManifestsPath" x.MasterPDBManifestsPath >>
     Encode.required Encode.string "masterPDBDestPath" x.MasterPDBDestPath >>
     Encode.required Encode.string "snapshotSourcePDBDestPath" x.SnapshotSourcePDBDestPath >>
-    Encode.required Encode.string "snapshotPDBDestPath" x.SnapshotPDBDestPath >>
+    Encode.required Encode.string "workingCopyDestPath" x.WorkingCopyDestPath >>
     Encode.required Encode.string "oracleDirectoryForDumps" x.OracleDirectoryForDumps >>
     Encode.required Encode.stringList "masterPDBs" x.MasterPDBs >>
     Encode.required Encode.int "_version" cCurrentJsonVersion >>

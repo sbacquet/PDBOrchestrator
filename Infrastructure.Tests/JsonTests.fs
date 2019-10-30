@@ -21,19 +21,21 @@ let ``Serialize and deserialize master PDB`` () =
 [<Fact>]
 let ``Serialize and deserialize Oracle instance`` () =
     let instance1Name = "test1"
-    let instance1 : OracleInstance = {
-        Name = instance1Name
-        Server = "fr1psl010716.misys.global.ad"
-        Port = None
-        DBAUser = "sys"
-        DBAPassword = "pass"
-        MasterPDBManifestsPath = "x"
-        MasterPDBDestPath = "xx"
-        SnapshotPDBDestPath = "xxx"
-        SnapshotSourcePDBDestPath = "xxxx"
-        OracleDirectoryForDumps = "xxxxx"
-        MasterPDBs = [ "test1"; "test2" ]
-    }
+    let instance1 =
+        consOracleInstance
+            [ "test1"; "test2" ]
+            instance1Name
+            "fr1psl010716.misys.global.ad"
+            None
+            "sys"
+            "pass"
+            "x"
+            "xx"
+            "xxx"
+            "xxxx"
+            "xxxxx"
+            true
+
     let json = instance1 |> OracleInstanceJson.oracleInstanceToJson
     let instance1' = json |> OracleInstanceJson.jsonToOracleInstance
     match instance1' with

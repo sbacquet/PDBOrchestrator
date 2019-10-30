@@ -9,12 +9,13 @@ type OracleInstance = {
     MasterPDBManifestsPath: string
     MasterPDBDestPath: string
     SnapshotSourcePDBDestPath: string
-    SnapshotPDBDestPath: string
+    WorkingCopyDestPath: string
     OracleDirectoryForDumps: string
     MasterPDBs: string list
+    SnapshotCapable: bool
 }
 
-let consOracleInstance masterPDBs name server port dbaUser dbaPassword mPath mdPath tdPath ssdPath directory = 
+let consOracleInstance masterPDBs name server port dbaUser dbaPassword mPath mdPath wcPath ssdPath directory snapshotCapable = 
     { 
         Name = name
         Server = server
@@ -23,10 +24,11 @@ let consOracleInstance masterPDBs name server port dbaUser dbaPassword mPath mdP
         DBAPassword = dbaPassword
         MasterPDBManifestsPath = mPath
         MasterPDBDestPath = mdPath
-        SnapshotPDBDestPath = tdPath
+        WorkingCopyDestPath = wcPath
         SnapshotSourcePDBDestPath = ssdPath
         OracleDirectoryForDumps = directory
         MasterPDBs = masterPDBs 
+        SnapshotCapable = snapshotCapable
     }
 
 let newOracleInstance = consOracleInstance []

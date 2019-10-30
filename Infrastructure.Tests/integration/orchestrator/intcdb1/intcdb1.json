@@ -6,7 +6,7 @@
   "masterPDBManifestsPath": "/u01/app/oracle/oradata/MasterDBs",
   "masterPDBDestPath": "/u01/app/oracle/oradata/MasterDBs",
   "snapshotSourcePDBDestPath": "/u01/app/oracle/oradata/SB_PDBs/snaphot_sources",
-  "snapshotPDBDestPath": "/u01/app/oracle/oradata/SB_PDBs/snapshots",
+  "workingCopyDestPath": "/u01/app/oracle/oradata/SB_PDBs/snapshots",
   "oracleDirectoryForDumps": "DP_DIR",
   "masterPDBs": [
     "NORTHVIEW"

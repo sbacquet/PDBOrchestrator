@@ -23,7 +23,7 @@ type Command =
 | PrepareMasterPDBForModification of WithUser<string, int> // responds with RequestValidation
 | CommitMasterPDB of WithUser<string, string> // responds with RequestValidation
 | RollbackMasterPDB of WithUser<string> // responds with RequestValidation
-| SnapshotMasterPDBVersion of OnInstance<string, int, string> // responds with RequestValidation
+| CreateWorkingCopy of OnInstance<string, int, string> // responds with RequestValidation
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
 
 type AdminCommand =
@@ -39,7 +39,7 @@ let private pendingChangeCommandFilter mapper = function
 | GetState
 | GetInstanceState _
 | GetMasterPDBState _
-| SnapshotMasterPDBVersion _
+| CreateWorkingCopy _
 | GetRequest _ ->
     false
 | CreateMasterPDB (user, _)
@@ -177,13 +177,13 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
 
-            | SnapshotMasterPDBVersion (user, instanceName, masterPDBName, versionNumber, snapshotName) ->
+            | CreateWorkingCopy (user, instanceName, masterPDBName, versionNumber, snapshotName) ->
                 let instanceName = getInstanceName instanceName
                 if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
                     let instance = collaborators.OracleInstanceActors.[instanceName]
                     let requestId = newRequestId()
                     let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
-                    retype instance <! Application.OracleInstanceActor.SnapshotMasterPDBVersion (requestId, masterPDBName, versionNumber, snapshotName)
+                    retype instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
                 else
@@ -360,7 +360,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
-        | :? WithRequestId<MasterPDBActor.SnapshotResult> as responseToSnapshotMasterPDBVersion ->
+        | :? WithRequestId<MasterPDBActor.CreateWorkingCopyResult> as responseToSnapshotMasterPDBVersion ->
             let (requestId, result) = responseToSnapshotMasterPDBVersion
             let requestMaybe = pendingRequests |> Map.tryFind requestId
             match requestMaybe with
@@ -370,8 +370,8 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | Some request ->
                 let status = 
                     match result with
-                    | Ok (pdb, versionNumber, snapshotName) -> CompletedOk (sprintf "Version %d of master PDB %s snapshoted successfully with name %s." versionNumber pdb snapshotName)
-                    | Error error -> CompletedWithError (sprintf "Error while snapshoting master PDB version : %s." error)
+                    | Ok (pdb, versionNumber, snapshotName) -> CompletedOk (sprintf "Working copy of PDB %s version %d created successfully with name %s." pdb versionNumber snapshotName)
+                    | Error error -> CompletedWithError (sprintf "Error while creating working copy : %s." error)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
