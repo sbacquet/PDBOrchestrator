@@ -15,8 +15,8 @@ type Command =
 | GetInternalState // responds with MasterPDB
 | SetInternalState of MasterPDB // no response
 | PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
-| Commit of WithRequestId<string, string> // responds with WithRequestId<EditionDone>
-| Rollback of WithRequestId<string> // responds with WithRequestId<EditionDone>
+| Commit of WithRequestId<string, string> // responds with WithRequestId<EditionCommitted>
+| Rollback of WithRequestId<string> // responds with WithRequestId<EditionRolledBack>
 | CreateWorkingCopy of WithRequestId<int, string, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | CollectGarbage // no response
 
@@ -28,7 +28,8 @@ type StateResult = Result<Application.DTO.MasterPDB.MasterPDBDTO, string>
 let stateOk state : StateResult = Ok state
 let stateError error : StateResult = Error error
 
-type EditionDone = Result<MasterPDB, string>
+type EditionCommitted = Result<MasterPDB * int, string>
+type EditionRolledBack = Result<MasterPDB, string>
 
 type CreateWorkingCopyResult = Result<string * int * string, string>
 
@@ -156,7 +157,7 @@ let private masterPDBActorBody
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
 
             | Commit (requestId, unlocker, _) ->
-                let sender = ctx.Sender().Retype<WithRequestId<EditionDone>>()
+                let sender = ctx.Sender().Retype<WithRequestId<EditionCommitted>>()
                 let lockInfoMaybe = masterPDB.EditionState
                 match lockInfoMaybe with
                 | None -> 
@@ -176,7 +177,7 @@ let private masterPDBActorBody
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
 
             | Rollback (requestId, unlocker) ->
-                let sender = ctx.Sender().Retype<WithRequestId<EditionDone>>()
+                let sender = ctx.Sender().Retype<WithRequestId<EditionRolledBack>>()
                 let lockInfoMaybe = masterPDB.EditionState
                 match lockInfoMaybe with
                 | None -> 
@@ -271,13 +272,13 @@ let private masterPDBActorBody
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
 
                 | Commit (_, unlocker, comment) ->
-                    let sender = request.Requester.Retype<WithRequestId<EditionDone>>()
+                    let sender = request.Requester.Retype<WithRequestId<EditionCommitted>>()
                     match result with
                     | Ok _ ->
-                        let newMasterPDBMaybe = masterPDB |> addVersionToMasterPDB unlocker comment |> unlock
+                        let newMasterPDBMaybe = masterPDB |> unlock |> Result.map (addVersionToMasterPDB unlocker comment)
                         match newMasterPDBMaybe with
-                        | Ok newMasterPDB ->
-                            sender <! (requestId, Ok newMasterPDB)
+                        | Ok (newMasterPDB, newVersion) ->
+                            sender <! (requestId, Ok (newMasterPDB, newVersion))
                             return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                         | Error error -> 
                             sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name error))
@@ -287,7 +288,7 @@ let private masterPDBActorBody
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
 
                 | Rollback _ ->
-                    let sender = request.Requester.Retype<WithRequestId<EditionDone>>()
+                    let sender = request.Requester.Retype<WithRequestId<EditionRolledBack>>()
                     match result with
                     | Ok _ ->
                         let newMasterPDBMaybe = masterPDB |> unlock

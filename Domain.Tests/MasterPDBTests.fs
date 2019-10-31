@@ -92,9 +92,10 @@ let ``Can add and delete a version`` () =
     ]
     let pdb = consMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None false Map.empty
     Assert.Equal(2, (getLatestAvailableVersion pdb).Number)
-    let newPDB = pdb |> addVersionToMasterPDB "me" "version 5"
+    let newPDB, newVersion = pdb |> addVersionToMasterPDB "me" "version 5"
+    Assert.Equal(5, newVersion)
     Assert.Equal("version 5", newPDB.Versions.[5].Comment)
-    Assert.Equal(5, (getLatestAvailableVersion newPDB).Number)
+    Assert.Equal(newVersion, (getLatestAvailableVersion newPDB).Number)
     let result = newPDB |> deleteVersion 5
     match result with
     | Ok pdb -> 

@@ -70,7 +70,7 @@ let getNextAvailableVersion masterPDB =
 let addVersionToMasterPDB createdBy comment masterPDB =
     let newVersionNumber = getNextAvailableVersion masterPDB
     let version = consPDBVersion newVersionNumber false createdBy System.DateTime.Now comment Map.empty
-    { masterPDB with Versions = masterPDB.Versions |> Map.add newVersionNumber version }
+    { masterPDB with Versions = masterPDB.Versions |> Map.add newVersionNumber version }, newVersionNumber
 
 let deleteVersion versionNumber masterPDB =
     if (versionNumber = 1) 

@@ -280,7 +280,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                     return! loop { state with Requests = newRequests }
 
             | CommitMasterPDB (requestId, pdb, locker, comment) ->
-                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionDone>>()
+                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionCommitted>>()
                 let masterPDBOk = instance.MasterPDBs |> List.contains pdb
                 if (not masterPDBOk) then 
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
@@ -292,7 +292,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                     return! loop { state with Requests = newRequests }
 
             | RollbackMasterPDB (requestId, user, pdb) ->
-                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionDone>>()
+                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionRolledBack>>()
                 let masterPDBOk = instance.MasterPDBs |> List.contains pdb
                 if (not masterPDBOk) then 
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
@@ -379,7 +379,20 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                 return! loop { state with Requests = newRequests }
 
         // Callback from Master PDB actor in response to Commit or Rollback
-        | :? WithRequestId<MasterPDBActor.EditionDone> as editionResult ->
+        | :? WithRequestId<MasterPDBActor.EditionCommitted> as editionResult ->
+            let (requestId, _) = editionResult
+            let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
+
+            match requestMaybe with
+            | Some request -> 
+                retype request.Requester <! editionResult
+                return! loop { state with Requests = newRequests }
+            | None -> 
+                ctx.Log.Value.Error("internal error : request {0} not found", requestId)
+                return! loop state
+
+        // Callback from Master PDB actor in response to Commit or Rollback
+        | :? WithRequestId<MasterPDBActor.EditionRolledBack> as editionResult ->
             let (requestId, _) = editionResult
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
 

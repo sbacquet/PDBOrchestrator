@@ -47,7 +47,13 @@ let getMasterPDB apiCtx (instance:string, pdb:string) next (ctx:HttpContext) = t
 }
 
 let getRequestStatus apiCtx (requestId:PendingRequest.RequestId) next (ctx:HttpContext) = task {
+
+    let completedRequestDataKeyValue = function
+    | OrchestratorActor.PDBName name -> "PDB name", name
+    | OrchestratorActor.PDBVersion version -> "PDB version", version.ToString()
+
     let! (_, requestStatus) = API.getRequestStatus apiCtx requestId
+    
     match requestStatus with
     | OrchestratorActor.NotFound -> 
         return! RequestErrors.notFound (text <| sprintf "No request found with id = %O." requestId) next ctx
@@ -58,10 +64,13 @@ let getRequestStatus apiCtx (requestId:PendingRequest.RequestId) next (ctx:HttpC
             | OrchestratorActor.Pending -> 
                 jObj 
                 |> Encode.required Encode.string "status" "Pending"
-            | OrchestratorActor.CompletedOk data -> 
+            | OrchestratorActor.CompletedOk (message, data) -> 
                 jObj 
                 |> Encode.required Encode.string "status" "Completed"
-                |> Encode.required Encode.string "data" data
+                |> Encode.required Encode.string "message" message
+                |> Encode.required (Encode.propertyListWith Encode.string) 
+                    "data" 
+                    (data |> List.map completedRequestDataKeyValue)
             | OrchestratorActor.CompletedWithError error -> 
                 jObj 
                 |> Encode.required Encode.string "status" "Completed with error"

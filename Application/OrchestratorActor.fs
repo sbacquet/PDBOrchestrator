@@ -60,11 +60,17 @@ type private Collaborators = {
     OracleInstanceActors: Map<string, IActorRef<obj>>
 }
 
+type CompletedRequestData =
+| PDBName of string
+| PDBVersion of int
+
 type RequestStatus = 
 | NotFound
 | Pending
-| CompletedOk of string
+| CompletedOk of string * CompletedRequestData list
 | CompletedWithError of string
+
+let completedOk dataList message = CompletedOk (message, dataList)
 
 let private spawnCollaborators parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo state (ctx : Actor<_>) = 
     let spawnInstance = OracleInstanceActor.spawn parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo ctx
@@ -327,7 +333,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     | MasterPDBCreationFailure (pdb, error) -> 
                         CompletedWithError (sprintf "Error while creating master PDB %s : %s." pdb error)
                     | MasterPDBCreated pdb ->
-                        CompletedOk (sprintf "Master PDB %s created successfully." pdb.Name)
+                        sprintf "Master PDB %s created successfully." pdb.Name |> completedOk [ PDBName pdb.Name ]
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
@@ -341,12 +347,14 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | Some request ->
                 let status = 
                     match result with
-                    | MasterPDBActor.Prepared pdb -> CompletedOk (sprintf "Master PDB %s prepared successfully for edition." pdb.Name)
-                    | MasterPDBActor.PreparationFailure (pdb, error) -> CompletedWithError (sprintf "Error while preparing master PDB %s for edition : %s." pdb error)
+                    | MasterPDBActor.Prepared pdb -> 
+                        sprintf "Master PDB %s prepared successfully for edition." pdb.Name |> completedOk [ PDBName pdb.Name ]
+                    | MasterPDBActor.PreparationFailure (pdb, error) -> 
+                        sprintf "Error while preparing master PDB %s for edition : %s." pdb error |> CompletedWithError
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
-        | :? WithRequestId<MasterPDBActor.EditionDone> as responseToMasterPDBEdition ->
+        | :? WithRequestId<MasterPDBActor.EditionCommitted> as responseToMasterPDBEdition ->
             let (requestId, result) = responseToMasterPDBEdition
             let requestMaybe = pendingRequests |> Map.tryFind requestId
             match requestMaybe with
@@ -356,8 +364,27 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | Some request ->
                 let status = 
                     match result with
-                    | Ok pdb -> CompletedOk (sprintf "Master PDB %s unlocked successfully." pdb.Name)
-                    | Error error -> CompletedWithError (sprintf "Error while unlocking master PDB : %s." error)
+                    | Ok (pdb, newVersion) -> 
+                        sprintf "Master PDB %s committed successfully." pdb.Name |> completedOk [ PDBName pdb.Name; PDBVersion newVersion ]
+                    | Error error -> 
+                        sprintf "Error while committing master PDB : %s." error |> CompletedWithError
+                let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
+                return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
+
+        | :? WithRequestId<MasterPDBActor.EditionRolledBack> as responseToMasterPDBEdition ->
+            let (requestId, result) = responseToMasterPDBEdition
+            let requestMaybe = pendingRequests |> Map.tryFind requestId
+            match requestMaybe with
+            | None -> 
+                ctx.Log.Value.Error("internal error : request {requestId} not found", requestId)
+                return! loop state
+            | Some request ->
+                let status = 
+                    match result with
+                    | Ok pdb -> 
+                        sprintf "Master PDB %s rolled back successfully." pdb.Name |> completedOk [ PDBName pdb.Name ]
+                    | Error error -> 
+                        sprintf "Error while rolling back master PDB : %s." error |> CompletedWithError
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
@@ -371,8 +398,11 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | Some request ->
                 let status = 
                     match result with
-                    | Ok (pdb, versionNumber, snapshotName) -> CompletedOk (sprintf "Working copy of PDB %s version %d created successfully with name %s." pdb versionNumber snapshotName)
-                    | Error error -> CompletedWithError (sprintf "Error while creating working copy : %s." error)
+                    | Ok (pdb, versionNumber, snapshotName) -> 
+                        sprintf "Working copy of PDB %s version %d created successfully with name %s." pdb versionNumber snapshotName
+                        |> completedOk [ PDBName snapshotName ]
+                    | Error error -> 
+                        sprintf "Error while creating working copy : %s." error |> CompletedWithError
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 

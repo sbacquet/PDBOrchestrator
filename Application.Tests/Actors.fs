@@ -330,7 +330,7 @@ let ``Lock master PDB`` () = test <| fun tck ->
         | _ -> false
     ) |> ignore
 
-    let (_, result) : WithRequestId<MasterPDBActor.EditionDone> = 
+    let (_, result) : WithRequestId<MasterPDBActor.EditionRolledBack> = 
         retype masterPDBActor <? MasterPDBActor.Rollback (newRequestId(), "me") |> run
 
     result |> Result.mapError (fun error -> failwith error) |> ignore
