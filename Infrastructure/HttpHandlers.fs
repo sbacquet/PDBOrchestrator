@@ -83,8 +83,12 @@ let returnRequest endpoint requestValidation : HttpHandler =
 
 let createWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, name:string) =
     withUser (fun user next ctx -> task {
-        let! requestValidation = API.createWorkingCopy apiCtx user instance masterPDB version name
-        return! returnRequest apiCtx.Endpoint requestValidation next ctx
+        let parsedOk, force = ctx.TryGetQueryStringValue "force" |> Option.defaultValue bool.FalseString |> bool.TryParse
+        if not parsedOk then 
+            return! RequestErrors.badRequest (text "when provided, the \"force\" query parameter must be \"true\" or \"false\"") next ctx
+        else
+            let! requestValidation = API.createWorkingCopy apiCtx user instance masterPDB version name force
+            return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
 let getPendingChanges apiCtx next (ctx:HttpContext) = task {
@@ -112,7 +116,7 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
                         sprintf "Commit modifications done in master PDB %s" pdb
                     | OrchestratorActor.RollbackMasterPDB (user, pdb) ->
                         sprintf "Roll back modification done in %s" pdb
-                    | OrchestratorActor.CreateWorkingCopy (user, instance, pdb, version, name) ->
+                    | OrchestratorActor.CreateWorkingCopy (user, instance, pdb, version, name, force) ->
                         sprintf "Create a working copy named %s of master PDB %s version %d" name pdb version
                     | OrchestratorActor.GetRequest requestId ->
                         sprintf "Get request from id %O" requestId

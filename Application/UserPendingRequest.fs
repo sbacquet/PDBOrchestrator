@@ -12,6 +12,7 @@ type WithUser<'T> = string * 'T
 type WithUser<'T1, 'T2> = string * 'T1 * 'T2
 type WithUser<'T1, 'T2, 'T3> = string * 'T1 * 'T2 * 'T3
 type WithUser<'T1, 'T2, 'T3, 'T4> = string * 'T1 * 'T2 * 'T3 * 'T4
+type WithUser<'T1, 'T2, 'T3, 'T4, 'T5> = string * 'T1 * 'T2 * 'T3 * 'T4 * 'T5
 
 type PendingUserRequestMap<'C> = Map<RequestId, PendingUserRequest<'C>>
 

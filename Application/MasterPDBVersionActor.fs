@@ -11,7 +11,7 @@ open Application.Parameters
 open Domain.Common
 
 type Command =
-| Snapshot of WithRequestId<string, string, string, string> // responds with OraclePDBResultWithReqId
+| Snapshot of WithRequestId<string, string, string, string, bool> // responds with OraclePDBResultWithReqId
 | CollectGarbage // no response
 | HaraKiri // no response
 
@@ -37,20 +37,24 @@ let private masterPDBVersionActorBody
         let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
 
         match command with
-        | Snapshot (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotName, snapshotDest) -> 
+        | Snapshot (requestId, snapshotSourceManifest, snapshotSourceDest, snapshotName, snapshotDest, force) -> 
             let! result = asyncResult {
                 let! snapshotExists = oracleAPI.PDBExists snapshotName
-                if (not snapshotExists) then
-                    let! snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName
-                    let! _ = 
-                        if (not snapshotSourceExists) then
-                            oracleDiskIntensiveTaskExecutor <? ImportPDB (None, snapshotSourceManifest, snapshotSourceDest, snapshotSourceName)
+                let! _ = 
+                    if snapshotExists then
+                        if force then
+                            oracleLongTaskExecutor <? DeletePDB (None, snapshotName)
                         else
-                            ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
-                            AsyncResult.retn snapshotName
-                    return! oracleLongTaskExecutor <? SnapshotPDB (None, snapshotSourceName, snapshotDest, snapshotName)
-                else
-                    return! Error (sprintf "PDB %s already exists" snapshotName |> exn)
+                            async { return Error (sprintf "PDB %s already exists" snapshotName |> exn) }
+                    else AsyncResult.retn ""
+                let! snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName
+                let! _ = 
+                    if (not snapshotSourceExists) then
+                        oracleDiskIntensiveTaskExecutor <? ImportPDB (None, snapshotSourceManifest, snapshotSourceDest, snapshotSourceName)
+                    else
+                        ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
+                        AsyncResult.retn ""
+                return! oracleLongTaskExecutor <? SnapshotPDB (None, snapshotSourceName, snapshotDest, snapshotName)
             }
             sender <! (requestId, result)
             return! loop ()

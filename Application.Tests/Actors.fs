@@ -379,14 +379,14 @@ let ``MasterPDB creates a working copy`` () = test <| fun tck ->
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
     let masterPDBActor = tck |> spawnMasterPDBActor instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
-    let (_, result):WithRequestId<CreateWorkingCopyResult> = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy") |> run
+    let (_, result):WithRequestId<CreateWorkingCopyResult> = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
 
 [<Fact>]
 let ``OracleInstance creates a working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server1"
 
-    let (_, result):WithRequestId<CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test1", 1, "workingcopy") |> run
+    let (_, result):WithRequestId<CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test1", 1, "workingcopy", false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
 
 [<Fact>]
@@ -394,14 +394,14 @@ let ``API creates a working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
-    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" |> runQuick
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" false |> runQuick
     request |> throwIfRequestNotCompletedOk ctx
 
 [<Fact>]
 let ``API gets no pending changes`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
-    API.createWorkingCopy ctx "me" "server1" "test1" 1 "snap1" |> runQuick |> ignore
+    API.createWorkingCopy ctx "me" "server1" "test1" 1 "snap1" false |> runQuick |> ignore
     let pendingChangesMaybe = API.getPendingChanges ctx |> runQuick
     match pendingChangesMaybe with
     | Ok pendingChanges -> Assert.True(pendingChanges.IsNone)
@@ -423,7 +423,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "locked" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
     // Enqueue a read-only request
-    API.createWorkingCopy ctx "me" "server1" "test1" 1 "snap1" |> runQuick |> ignore
+    API.createWorkingCopy ctx "me" "server1" "test1" 1 "snap1" false |> runQuick |> ignore
     // Enqueue a change request
     API.prepareMasterPDBForModification ctx "me" "test2" 1 |> runQuick |> ignore
     // At that point, the requests above should still be pending (100 ms long)

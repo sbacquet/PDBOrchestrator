@@ -97,7 +97,7 @@ type Command =
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
 | CommitMasterPDB of WithRequestId<string, string, string> // responds with WithRequestId<MasterPDBActor.EditionDone>
 | RollbackMasterPDB of WithRequestId<string, string> // responds with WithRequestId<MasterPDBActor.EditionDone>
-| CreateWorkingCopy of WithRequestId<string, int, string> // responds with WithRequest<MasterPDBActor.CreateWorkingCopyResult>
+| CreateWorkingCopy of WithRequestId<string, int, string, bool> // responds with WithRequest<MasterPDBActor.CreateWorkingCopyResult>
 | CollectGarbage // no response
 
 type StateResult = Result<OracleInstance.OracleInstanceDTO, string>
@@ -303,7 +303,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                     retype masterPDBActor <! MasterPDBActor.Rollback (requestId, user)
                     return! loop { state with Requests = newRequests }
 
-            | CreateWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName) ->
+            | CreateWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.CreateWorkingCopyResult>>()
                 let masterPDBOk = instance.MasterPDBs |> List.contains masterPDBName
                 if (not masterPDBOk) then 
@@ -311,7 +311,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                     return! loop state
                 else
                     let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
-                    retype masterPDBActor <<! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, snapshotName)
+                    retype masterPDBActor <<! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, snapshotName, force)
                     return! loop state
 
             | CollectGarbage ->

@@ -12,6 +12,7 @@ open Application.DTO.MasterPDB
 type OnInstance<'T> = WithUser<string, 'T>
 type OnInstance<'T1, 'T2> = WithUser<string, 'T1, 'T2>
 type OnInstance<'T1, 'T2, 'T3> = WithUser<string, 'T1, 'T2, 'T3>
+type OnInstance<'T1, 'T2, 'T3, 'T4> = WithUser<string, 'T1, 'T2, 'T3, 'T4>
 
 type RequestValidation = Validation<RequestId, string>
 
@@ -23,7 +24,7 @@ type Command =
 | PrepareMasterPDBForModification of WithUser<string, int> // responds with RequestValidation
 | CommitMasterPDB of WithUser<string, string> // responds with RequestValidation
 | RollbackMasterPDB of WithUser<string> // responds with RequestValidation
-| CreateWorkingCopy of OnInstance<string, int, string> // responds with RequestValidation
+| CreateWorkingCopy of OnInstance<string, int, string, bool> // responds with RequestValidation
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
 
 type AdminCommand =
@@ -177,13 +178,13 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
 
-            | CreateWorkingCopy (user, instanceName, masterPDBName, versionNumber, snapshotName) ->
+            | CreateWorkingCopy (user, instanceName, masterPDBName, versionNumber, snapshotName, force) ->
                 let instanceName = getInstanceName instanceName
                 if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
                     let instance = collaborators.OracleInstanceActors.[instanceName]
                     let requestId = newRequestId()
                     let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
-                    retype instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName)
+                    retype instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName, force)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
                 else
