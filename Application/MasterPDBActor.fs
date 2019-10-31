@@ -195,18 +195,24 @@ let private masterPDBActorBody
                         oracleLongTaskExecutor <! OracleLongTaskExecutor.DeletePDB (Some requestId, editionPDBName)
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
             
-            | CreateWorkingCopy (requestId, versionNumber, snapshotName, force) ->
+            | CreateWorkingCopy (requestId, versionNumber, name, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
-                let versionMaybe = masterPDB.Versions.TryFind(versionNumber)
-                match versionMaybe with
-                | None -> 
-                    sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name))
-                    return! loop state
-                | Some version -> 
-                    let newCollabs, versionActor = getOrSpawnVersionActor parameters oracleAPI masterPDB.Name version collaborators ctx
+                let manifest = manifestPath versionNumber
+                if (instance.SnapshotCapable) then
+                    let versionMaybe = masterPDB.Versions |> Map.tryFind versionNumber
+                    match versionMaybe with
+                    | None -> 
+                        sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name))
+                        return! loop state
+                    | Some version -> 
+                        let newCollabs, versionActor = getOrSpawnVersionActor parameters oracleAPI masterPDB.Name version collaborators ctx
+                        let newRequests = requests |> registerRequest requestId command (ctx.Sender())
+                        versionActor <! MasterPDBVersionActor.Snapshot (requestId, manifest, instance.SnapshotSourcePDBDestPath, name, instance.WorkingCopyDestPath, force)
+                        return! loop { state with Requests = newRequests; Collaborators = newCollabs }
+                else
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    versionActor <! MasterPDBVersionActor.Snapshot (requestId, (manifestPath versionNumber), instance.SnapshotSourcePDBDestPath, snapshotName, instance.WorkingCopyDestPath, force)
-                    return! loop { state with Requests = newRequests; Collaborators = newCollabs }
+                    state.Collaborators.OracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, manifest, instance.WorkingCopyDestPath, name)
+                    return! loop { state with Requests = newRequests }
 
             | CollectGarbage ->
                 let! sourceVersionPDBsMaybe = oracleAPI.GetPDBNamesLike (sprintf "%s_V%%_%%" masterPDB.Name)
@@ -303,11 +309,11 @@ let private masterPDBActorBody
                         sender <! (requestId, Error (sprintf "cannot rollback %s : %s" masterPDB.Name error.Message))
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
 
-                | CreateWorkingCopy (_, versionNumber, snapshotName, _) ->
+                | CreateWorkingCopy (_, versionNumber, name, _) ->
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
-                        sender <! (requestId, Ok (masterPDB.Name, versionNumber, snapshotName))
+                        sender <! (requestId, Ok (masterPDB.Name, versionNumber, name))
                     | Error error ->
                         sender <! (requestId, Error error.Message)
                     return! loop { state with Requests = newRequests }
