@@ -34,6 +34,9 @@ let getRequestStatus (ctx:APIContext) requestId : Async<WithRequestId<RequestSta
 let createWorkingCopy (ctx:APIContext) user instance masterPDBName versionNumber snapshotName force : Async<RequestValidation> =
     ctx.Orchestrator <? CreateWorkingCopy (user, instance, masterPDBName, versionNumber, snapshotName, force)
 
+let deleteWorkingCopy (ctx:APIContext) user instance masterPDBName versionNumber snapshotName : Async<RequestValidation> =
+    ctx.Orchestrator <? DeleteWorkingCopy (user, instance, masterPDBName, versionNumber, snapshotName)
+
 let createMasterPDB (ctx:APIContext) user name dump schemas targetSchemas comment : Async<RequestValidation> =
     let pars : OracleInstanceActor.CreateMasterPDBParams = {
         Name = name

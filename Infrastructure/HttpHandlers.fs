@@ -94,10 +94,16 @@ let createWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, na
     withUser (fun user next ctx -> task {
         let parsedOk, force = ctx.TryGetQueryStringValue "force" |> Option.defaultValue bool.FalseString |> bool.TryParse
         if not parsedOk then 
-            return! RequestErrors.badRequest (text "when provided, the \"force\" query parameter must be \"true\" or \"false\"") next ctx
+            return! RequestErrors.badRequest (text "When provided, the \"force\" query parameter must be \"true\" or \"false\".") next ctx
         else
             let! requestValidation = API.createWorkingCopy apiCtx user instance masterPDB version name force
             return! returnRequest apiCtx.Endpoint requestValidation next ctx
+    })
+
+let deleteWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, name:string) =
+    withUser (fun user next ctx -> task {
+        let! requestValidation = API.deleteWorkingCopy apiCtx user instance masterPDB version name
+        return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
 let getPendingChanges apiCtx next (ctx:HttpContext) = task {
@@ -126,7 +132,9 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
                     | OrchestratorActor.RollbackMasterPDB (user, pdb) ->
                         sprintf "Roll back modification done in %s" pdb
                     | OrchestratorActor.CreateWorkingCopy (user, instance, pdb, version, name, force) ->
-                        sprintf "Create a working copy named %s of master PDB %s version %d" name pdb version
+                        sprintf "Create a working copy named %s of master PDB %s version %d on instance %s" name pdb version instance
+                    | OrchestratorActor.DeleteWorkingCopy (user, instance, pdb, version, name) ->
+                        sprintf "Delete a working copy named %s of master PDB %s version %d on instance %s" name pdb version instance
                     | OrchestratorActor.GetRequest requestId ->
                         sprintf "Get request from id %O" requestId
                 jObj 

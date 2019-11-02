@@ -37,7 +37,7 @@ module Rest =
             POST >=> choose [
                 // Commit edition
                 routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.commitMasterPDB apiCtx)
-                // Snapshot
+                // Create working copy
                 routef "/instance/%s/masterpdb/%s/%i/workingcopy/%s" (HttpHandlers.createWorkingCopy apiCtx)
 
                 // Routes for admins
@@ -54,6 +54,8 @@ module Rest =
             DELETE >=> choose [
                 // Rollback edition
                 routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
+                // Delete working copy
+                routef "/instance/%s/masterpdb/%s/%i/workingcopy/%s" (HttpHandlers.deleteWorkingCopy apiCtx)
             ]
             PATCH >=> choose [
                 // Declare the given instance synchronized with primary

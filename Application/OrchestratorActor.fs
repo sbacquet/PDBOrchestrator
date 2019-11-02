@@ -25,6 +25,7 @@ type Command =
 | CommitMasterPDB of WithUser<string, string> // responds with RequestValidation
 | RollbackMasterPDB of WithUser<string> // responds with RequestValidation
 | CreateWorkingCopy of OnInstance<string, int, string, bool> // responds with RequestValidation
+| DeleteWorkingCopy of OnInstance<string, int, string> // responds with RequestValidation
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
 
 type AdminCommand =
@@ -41,6 +42,7 @@ let private pendingChangeCommandFilter mapper = function
 | GetInstanceState _
 | GetMasterPDBState _
 | CreateWorkingCopy _
+| DeleteWorkingCopy _
 | GetRequest _ ->
     false
 | CreateMasterPDB (user, _)
@@ -191,6 +193,19 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     let requestId = newRequestId()
                     let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
                     retype instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName, force)
+                    sender <! Valid requestId
+                    return! loop { state with PendingRequests = newPendingRequests }
+                else
+                    sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
+                    return! loop state
+
+            | DeleteWorkingCopy (user, instanceName, masterPDBName, versionNumber, snapshotName) ->
+                let instanceName = getInstanceName instanceName
+                if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
+                    let instance = collaborators.OracleInstanceActors.[instanceName]
+                    let requestId = newRequestId()
+                    let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
+                    retype instance <! Application.OracleInstanceActor.DeleteWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
                 else
@@ -403,6 +418,24 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         |> completedOk [ PDBName snapshotName ]
                     | Error error -> 
                         sprintf "Error while creating working copy : %s." error |> CompletedWithError
+                let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
+                return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
+
+        | :? Application.Oracle.OraclePDBResultWithReqId as responseToDeleteWorkingCopy ->
+            let (requestId, result) = responseToDeleteWorkingCopy
+            let requestMaybe = pendingRequests |> Map.tryFind requestId
+            match requestMaybe with
+            | None -> 
+                ctx.Log.Value.Error("internal error : request {requestId} not found", requestId)
+                return! loop state
+            | Some request ->
+                let status = 
+                    match result with
+                    | Ok wcName -> 
+                        sprintf "Working copy %s deleted successfully." wcName
+                        |> completedOk [ PDBName wcName ]
+                    | Error error -> 
+                        sprintf "Error while deleting working copy : %s." error.Message |> CompletedWithError
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 

@@ -18,6 +18,7 @@ type Command =
 | Commit of WithRequestId<string, string> // responds with WithRequestId<EditionCommitted>
 | Rollback of WithRequestId<string> // responds with WithRequestId<EditionRolledBack>
 | CreateWorkingCopy of WithRequestId<int, string, bool> // responds with WithRequest<CreateWorkingCopyResult>
+| DeleteWorkingCopy of WithRequestId<string, int> // responds with OraclePDBResultWithReqId
 | CollectGarbage // no response
 
 type PrepareForModificationResult = 
@@ -39,7 +40,7 @@ type private Collaborators = {
     OracleDiskIntensiveTaskExecutor : IActorRef<OracleDiskIntensiveActor.Command>
 }
 
-let private getOrSpawnVersionActor parameters (oracleAPI:IOracleAPI) (masterPDBName:string) (version:MasterPDBVersion) collaborators ctx =
+let private getOrSpawnVersionActor parameters (oracleAPI:IOracleAPI) instance (masterPDBName:string) (version:MasterPDBVersion) collaborators ctx =
     let versionActorMaybe = collaborators.MasterPDBVersionActors |> Map.tryFind version.Number
     match versionActorMaybe with
     | Some versionActor -> collaborators, versionActor
@@ -48,6 +49,7 @@ let private getOrSpawnVersionActor parameters (oracleAPI:IOracleAPI) (masterPDBN
             ctx |> MasterPDBVersionActor.spawn 
                 parameters
                 oracleAPI
+                instance
                 collaborators.OracleLongTaskExecutor
                 collaborators.OracleDiskIntensiveTaskExecutor
                 masterPDBName
@@ -198,21 +200,16 @@ let private masterPDBActorBody
             | CreateWorkingCopy (requestId, versionNumber, name, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
                 let manifest = manifestPath versionNumber
-                if (instance.SnapshotCapable) then
-                    let versionMaybe = masterPDB.Versions |> Map.tryFind versionNumber
-                    match versionMaybe with
-                    | None -> 
-                        sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name))
-                        return! loop state
-                    | Some version -> 
-                        let newCollabs, versionActor = getOrSpawnVersionActor parameters oracleAPI masterPDB.Name version collaborators ctx
-                        let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                        versionActor <! MasterPDBVersionActor.Snapshot (requestId, manifest, instance.SnapshotSourcePDBDestPath, name, instance.WorkingCopyDestPath, force)
-                        return! loop { state with Requests = newRequests; Collaborators = newCollabs }
-                else
+                let versionMaybe = masterPDB.Versions |> Map.tryFind versionNumber
+                match versionMaybe with
+                | None -> 
+                    sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name))
+                    return! loop state
+                | Some version -> 
+                    let newCollabs, versionActor = getOrSpawnVersionActor parameters oracleAPI instance masterPDB.Name version collaborators ctx
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    state.Collaborators.OracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, manifest, instance.WorkingCopyDestPath, name)
-                    return! loop { state with Requests = newRequests }
+                    versionActor <! MasterPDBVersionActor.CreateWorkingCopy (requestId, manifest, instance.SnapshotSourcePDBDestPath, name, instance.WorkingCopyDestPath, force)
+                    return! loop { state with Requests = newRequests; Collaborators = newCollabs }
 
             | CollectGarbage ->
                 let! sourceVersionPDBsMaybe = oracleAPI.GetPDBNamesLike (sprintf "%s_V%%_%%" masterPDB.Name)
@@ -226,7 +223,7 @@ let private masterPDBActorBody
                             let versionPDBMaybe = masterPDB.Versions |> Map.tryFind version
                             match versionPDBMaybe with
                             | Some versionPDB -> 
-                                let newCollabs, versionActor = getOrSpawnVersionActor parameters oracleAPI masterPDB.Name versionPDB collabs ctx
+                                let newCollabs, versionActor = getOrSpawnVersionActor parameters oracleAPI instance masterPDB.Name versionPDB collabs ctx
                                 versionActor <! MasterPDBVersionActor.CollectGarbage
                                 newCollabs
                             | None -> 
@@ -240,6 +237,18 @@ let private masterPDBActorBody
                 | Error error ->
                     ctx.Log.Value.Error("Unexpected error while garbaging {pdb} : {0}", masterPDB.Name, error)
                     return! loop state
+
+            | DeleteWorkingCopy (requestId, pdb, version) ->
+                let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
+                let versionMaybe = masterPDB.Versions |> Map.tryFind version
+                match versionMaybe with
+                | None -> 
+                    sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" version masterPDB.Name |> exn))
+                    return! loop state
+                | Some version -> 
+                    let newCollabs, versionActor = getOrSpawnVersionActor parameters oracleAPI instance masterPDB.Name version collaborators ctx
+                    versionActor <<! MasterPDBVersionActor.DeleteWorkingCopy (requestId, pdb)
+                    return! loop { state with Collaborators = newCollabs }
 
         | :? MasterPDBVersionActor.CommandToParent as commandToParent->
             match commandToParent with
@@ -318,7 +327,7 @@ let private masterPDBActorBody
                         sender <! (requestId, Error error.Message)
                     return! loop { state with Requests = newRequests }
 
-                | _ -> failwithf "Fatal error"
+                | _ -> failwithf "internal error"
 
         | _ -> return! unhandled()
     }

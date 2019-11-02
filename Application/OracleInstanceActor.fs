@@ -98,6 +98,7 @@ type Command =
 | CommitMasterPDB of WithRequestId<string, string, string> // responds with WithRequestId<MasterPDBActor.EditionDone>
 | RollbackMasterPDB of WithRequestId<string, string> // responds with WithRequestId<MasterPDBActor.EditionDone>
 | CreateWorkingCopy of WithRequestId<string, int, string, bool> // responds with WithRequest<MasterPDBActor.CreateWorkingCopyResult>
+| DeleteWorkingCopy of WithRequestId<string, int, string> // responds with OraclePDBResultWithReqId
 | CollectGarbage // no response
 
 type StateResult = Result<OracleInstance.OracleInstanceDTO, string>
@@ -303,7 +304,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                     retype masterPDBActor <! MasterPDBActor.Rollback (requestId, user)
                     return! loop { state with Requests = newRequests }
 
-            | CreateWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName, force) ->
+            | CreateWorkingCopy (requestId, masterPDBName, versionNumber, wcName, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.CreateWorkingCopyResult>>()
                 let masterPDBOk = instance.MasterPDBs |> List.contains masterPDBName
                 if (not masterPDBOk) then 
@@ -311,7 +312,18 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                     return! loop state
                 else
                     let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
-                    retype masterPDBActor <<! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, snapshotName, force)
+                    retype masterPDBActor <<! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, force)
+                    return! loop state
+
+            | DeleteWorkingCopy (requestId, masterPDBName, versionNumber, wcName) ->
+                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.CreateWorkingCopyResult>>()
+                let masterPDBOk = instance.MasterPDBs |> List.contains masterPDBName
+                if (not masterPDBOk) then 
+                    sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
+                    return! loop state
+                else
+                    let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
+                    retype masterPDBActor <<! MasterPDBActor.DeleteWorkingCopy (requestId, wcName, versionNumber)
                     return! loop state
 
             | CollectGarbage ->

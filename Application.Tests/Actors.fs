@@ -111,7 +111,7 @@ let instance2 =
         ""
         ""
         ""
-        true
+        false
 
 type FakeOracleAPI(existingPDBs : Set<string>) = 
     member this.Logger = loggerFactory.CreateLogger("Fake Oracle API")
@@ -217,7 +217,7 @@ let spawnOracleInstanceActor = OracleInstanceActor.spawn parameters (fun _ -> fa
 let spawnMasterPDBActor = MasterPDBActor.spawn parameters fakeOracleAPI
 
 [<Fact>]
-let ``Test state transfer`` () = test <| fun tck ->
+let ``State transfer`` () = test <| fun tck ->
     let aref1 = spawnOracleInstanceActor tck "server1"
     let aref2 = spawnOracleInstanceActor tck "server2"
 
@@ -387,6 +387,13 @@ let ``OracleInstance creates a working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server1"
 
     let (_, result):WithRequestId<CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test1", 1, "workingcopy", false) |> run
+    result |> Result.mapError (fun error -> failwith error) |> ignore
+
+[<Fact>]
+let ``OracleInstance (non snapshot capable) creates a working copy`` () = test <| fun tck ->
+    let oracleActor = spawnOracleInstanceActor tck "server2"
+
+    let (_, result):WithRequestId<CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test2", 1, "workingcopy", false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
 
 [<Fact>]
