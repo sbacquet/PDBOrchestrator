@@ -142,3 +142,10 @@ let ``Delete snapshots older than 15 seconds`` () =
     |> Async.RunSynchronously 
     |> Validation.mapError raise 
     |> ignore
+
+[<Fact>]
+let ``Get PDB files folder`` () =
+    let folderMaybe = Infrastructure.Oracle.getPDBFilesFolder conn "ORCLPDB" |> Async.RunSynchronously 
+    match folderMaybe with
+    | Ok (Some folder) -> Assert.Equal("/u01/app/oracle/oradata/INTCDB2/ORCLPDB", folder)
+    | _ -> failwith "error"

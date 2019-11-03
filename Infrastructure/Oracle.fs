@@ -279,6 +279,19 @@ let getPDBOnServer connAsDBA (name:string) = async {
         return Error ex
 }
 
+let getPDBFilesFolder connAsDBA (name:string) = async {
+    try
+        use! result = 
+            Sql.asyncExecReader 
+                connAsDBA 
+                (sprintf "select regexp_replace(f.file_name, '(^.+)/[A-Za-z0-9_]+\.[A-Za-z0-9_]+$', '\1') from (select con_id, file_name, row_number() over (partition by con_id order by file_name) as rownumber from cdb_data_files) f, v$pdbs p where f.rownumber=1 and p.con_id=f.con_id and p.name='%s'" (name.ToUpper()))
+                [] 
+        return result |> Sql.mapFirst (Sql.asScalar) |> Ok
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return Error ex
+    
+}
+
 let getPDBNamesLike connAsDBA (like:string) = async {
     try
         let! result =
