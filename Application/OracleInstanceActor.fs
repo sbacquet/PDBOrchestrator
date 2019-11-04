@@ -327,10 +327,14 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                     return! loop state
 
             | CollectGarbage ->
-                collaborators.MasterPDBActors |> Map.iter (fun _ pdbActor -> retype pdbActor <! MasterPDBActor.CollectGarbage)
-                ctx.Log.Value.Info("Garbage collection of instance {instance} requested", instance.Name)
-                return! loop state
-
+                if instance.SnapshotCapable then
+                    collaborators.MasterPDBActors |> Map.iter (fun _ pdbActor -> retype pdbActor <! MasterPDBActor.CollectGarbage)
+                    ctx.Log.Value.Info("Garbage collection of instance {instance} requested", instance.Name)
+                    return! loop state
+                else
+                    collaborators.OracleLongTaskExecutor <! GarbageWorkingCopies instance
+                    return! loop state
+                
         // Callback from Oracle executor
         | :? OraclePDBResultWithReqId as requestResponse ->
             let (requestId, result) = requestResponse

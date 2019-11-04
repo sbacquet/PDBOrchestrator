@@ -5,6 +5,8 @@ open Application.PendingRequest
 open Application.Oracle
 open Akka.Routing
 open Application.Parameters
+open Domain.Common
+open Application.Parameters
 
 type CreatePDBFromDumpParams = {
     Name: string
@@ -23,11 +25,12 @@ type Command =
 | SnapshotPDB of WithOptionalRequestId<string, string, string> // responds with OraclePDBResultWithReqId
 | ExportPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
 | DeletePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
+| GarbageWorkingCopies of Domain.OracleInstance.OracleInstance // no response
 
 let private newManifestName (pdb:string) version =
     sprintf "%s_V%03d.XML" (pdb.ToUpper()) version
 
-let private oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
+let private oracleLongTaskExecutorBody parameters (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
     let stopWatch = System.Diagnostics.Stopwatch()
 
@@ -73,6 +76,17 @@ let private oracleLongTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Com
             | Some reqId -> ctx.Sender() <! (reqId, result)
             | None -> ctx.Sender() <! result
             return! loop ()
+
+        | GarbageWorkingCopies instance ->
+            // Warning : here we are deleting working copies that could currently be accessed by version actors
+            let! deleteResult = 
+                oracleAPI.GetOldPDBsFromFolder parameters.GarbageCollectionDelay instance.WorkingCopyDestPath
+                |> AsyncValidation.ofAsyncResult
+                |> AsyncValidation.bind (AsyncValidation.traverseS (oracleAPI.DeletePDB >> AsyncValidation.ofAsyncResult))
+            deleteResult |> Validation.mapErrors (fun errors -> let message = System.String.Join("; ", errors |> List.map (fun ex -> ex.Message)) in ctx.Log.Value.Warning(message); List.empty) |> ignore
+            ctx.Log.Value.Info("Garbage collection of instance {instance} done.", instance.Name)
+            return! loop ()
+
     }
     loop ()
 
@@ -80,5 +94,5 @@ let [<Literal>]cOracleLongTaskExecutorName = "OracleLongTaskExecutor"
 
 let spawn (parameters:Parameters) oracleAPI actorFactory =
     Akkling.Spawn.spawn actorFactory cOracleLongTaskExecutorName 
-    <| { props (oracleLongTaskExecutorBody oracleAPI) 
+    <| { props (oracleLongTaskExecutorBody parameters oracleAPI) 
             with Router = Some (upcast SmallestMailboxPool(parameters.NumberOfOracleLongTaskExecutors)) }

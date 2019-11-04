@@ -48,9 +48,9 @@ let ``Import and delete PDB`` () =
     }
 
     [ commands; oracleAPI.DeletePDB "toto" ] 
-    |> Async.Sequential 
+    |> Async.sequenceS
     |> Async.RunSynchronously 
-    |> Array.iter (Result.mapError raise >> ignore)
+    |> List.iter (Result.mapError raise >> ignore)
 
 [<Fact>]
 let ``Create a real working copy`` () =
@@ -80,9 +80,9 @@ let ``Create a real working copy`` () =
     }
 
     [ commands1; commands2 ] 
-    |> Async.Sequential 
+    |> Async.sequenceS 
     |> Async.RunSynchronously 
-    |> Array.iter (Result.mapError raise >> ignore)
+    |> List.iter (Result.mapError raise >> ignore)
 
 [<Fact>]
 let ``Get snapshots older than 15 seconds`` () =
@@ -114,9 +114,9 @@ let ``Get snapshots older than 15 seconds`` () =
     }
 
     [ commands1; commands2 ] 
-    |> Async.Sequential 
+    |> Async.sequenceS 
     |> Async.RunSynchronously 
-    |> Array.iter (Result.mapError raise >> ignore)
+    |> List.iter (Result.mapError raise >> ignore)
 
 [<Fact>]
 let ``Delete snapshots older than 15 seconds`` () =

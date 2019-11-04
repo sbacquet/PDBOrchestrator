@@ -85,7 +85,7 @@ open Domain.Common.Validation
 let returnRequest endpoint requestValidation : HttpHandler =
     match requestValidation with
     | Valid reqId -> 
-        setHttpHeader HeaderNames.Location (sprintf "%s/request/%O" endpoint reqId) 
+        setHttpHeader HeaderNames.Location (sprintf "%s/requests/%O" endpoint reqId) 
         >=> Successful.accepted (text "Your request is accepted. Please poll the resource in response header's Location.")
     | Invalid errors -> 
         RequestErrors.notAcceptable (text <| sprintf "Your request cannot be accepted : %s." (System.String.Join("; ", errors)))

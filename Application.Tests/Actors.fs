@@ -159,6 +159,7 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
         }
         member this.GetPDBNamesLike (like:string) = raise (System.NotImplementedException())
         member this.GetPDBFilesFolder name = async { return Ok (Some "fake") }
+        member this.GetOldPDBsFromFolder olderThan workingCopyFolder = async { return Ok [] }
  
 let fakeOracleAPI = FakeOracleAPI(Set.empty)
 

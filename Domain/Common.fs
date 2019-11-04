@@ -48,6 +48,11 @@ module Validation =
         | Valid t -> Valid t
         | Invalid errors -> Invalid (errors |> List.map f)
 
+    let mapErrors f vt =
+        match vt with
+        | Valid t -> Valid t
+        | Invalid errors -> Invalid (f errors)
+
     let apply (vf: Validation<'T -> 'U, 'E>) (vt:Validation<'T, 'E>) : Validation<'U, 'E> =
         match vf, vt with
         | Valid f, Valid t -> Valid (f t)
@@ -182,6 +187,8 @@ module AsyncValidation =
     let map f = f |> Validation.map |> Async.map 
 
     let mapError f =  f |> Validation.mapError |> Async.map 
+
+    let mapErrors f =  f |> Validation.mapErrors |> Async.map 
 
     let retn x = async { return Valid x }
 

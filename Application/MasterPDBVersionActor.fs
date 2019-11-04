@@ -44,24 +44,25 @@ let private masterPDBVersionActorBody
         | CreateWorkingCopy (requestId, sourceManifest, sourceDest, workingCopyName, workingCopyDest, force) -> 
             let! result = asyncResult {
                 let! wcExists = oracleAPI.PDBExists workingCopyName
-                let! _ = 
-                    if wcExists then
-                        if force then
-                            oracleLongTaskExecutor <? DeletePDB (None, workingCopyName)
-                        else
-                            async { return Error (sprintf "working copy %s already exists" workingCopyName |> exn) }
-                    else AsyncResult.retn ""
-                if (instance.SnapshotCapable) then
-                    let! snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName
-                    let! _ = 
-                        if (not snapshotSourceExists) then
-                            oracleDiskIntensiveTaskExecutor <? ImportPDB (None, sourceManifest, sourceDest, snapshotSourceName)
-                        else
-                            ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
-                            AsyncResult.retn ""
-                    return! oracleLongTaskExecutor <? SnapshotPDB (None, snapshotSourceName, workingCopyDest, workingCopyName)
+                if wcExists && (not force) then 
+                    ctx.Log.Value.Info("Working copy {pdb} already exists, not enforcing creation.", workingCopyName)
+                    return! AsyncResult.retn workingCopyName
                 else
-                    return! oracleDiskIntensiveTaskExecutor <? ImportPDB (None, sourceManifest, workingCopyDest, workingCopyName)
+                    let! _ = 
+                        if wcExists then // force creation
+                            oracleLongTaskExecutor <? DeletePDB (None, workingCopyName)
+                        else AsyncResult.retn ""
+                    if (instance.SnapshotCapable) then
+                        let! snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName
+                        let! _ = 
+                            if (not snapshotSourceExists) then
+                                oracleDiskIntensiveTaskExecutor <? ImportPDB (None, sourceManifest, sourceDest, snapshotSourceName)
+                            else
+                                ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
+                                AsyncResult.retn ""
+                        return! oracleLongTaskExecutor <? SnapshotPDB (None, snapshotSourceName, workingCopyDest, workingCopyName)
+                    else
+                        return! oracleDiskIntensiveTaskExecutor <? ImportPDB (None, sourceManifest, workingCopyDest, workingCopyName)
             }
             sender <! (requestId, result)
             return! loop ()
@@ -85,16 +86,19 @@ let private masterPDBVersionActorBody
 
         | CollectGarbage ->
             ctx.Log.Value.Info("Collecting garbage of PDB {pdb} version {pdbversion}", masterPDBName, masterPDBVersion.Number)
-            let like = getSnapshotSourceName masterPDBName masterPDBVersion "%"
-            let! _ = asyncValidation {
-                let! thisVersionSourcePDBs = oracleAPI.GetPDBNamesLike like
-                let! isSourceDeletedList = thisVersionSourcePDBs |> AsyncValidation.traverseS (oracleAPI.DeletePDBWithSnapshots parameters.GarbageCollectionDelay)
-                let sourceAndIsDeleted = List.zip thisVersionSourcePDBs isSourceDeletedList
-                let isDeleted = sourceAndIsDeleted |> List.exists (fun (pdb, deleted) -> deleted && pdb.ToUpper() = snapshotSourceName.ToUpper())
-                if isDeleted then retype (ctx.Parent()) <! KillVersion masterPDBVersion.Number
-            }
-            ctx.Log.Value.Info("Collected garbage of PDB {pdb} version {pdbversion}", masterPDBName, masterPDBVersion.Number)
-            return! loop ()
+            if instance.SnapshotCapable then
+                let like = getSnapshotSourceName masterPDBName masterPDBVersion "%"
+                let! _ = asyncValidation {
+                    let! thisVersionSourcePDBs = oracleAPI.GetPDBNamesLike like
+                    let! isSourceDeletedList = thisVersionSourcePDBs |> AsyncValidation.traverseS (oracleAPI.DeletePDBWithSnapshots parameters.GarbageCollectionDelay)
+                    let sourceAndIsDeleted = List.zip thisVersionSourcePDBs isSourceDeletedList
+                    let isDeleted = sourceAndIsDeleted |> List.exists (fun (pdb, deleted) -> deleted && pdb.ToUpper() = snapshotSourceName.ToUpper())
+                    if isDeleted then retype (ctx.Parent()) <! KillVersion masterPDBVersion.Number
+                }
+                ctx.Log.Value.Info("Collected garbage of PDB {pdb} version {pdbversion}", masterPDBName, masterPDBVersion.Number)
+                return! loop ()
+            else
+                return! loop ()
 
         | HaraKiri ->
             ctx.Log.Value.Info("Actor for version {pdbversion} of {pdb} is stopped", masterPDBVersion.Number, masterPDBName)

@@ -25,41 +25,42 @@ module Rest =
     let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc = 
         choose [
             GET >=> choose [
-                routef "/request/%O" (HttpHandlers.getRequestStatus apiCtx)
-                routef "/instance/%s/masterpdb/%s" (HttpHandlers.getMasterPDB apiCtx)
-                routef "/instance/%s" (HttpHandlers.getInstance apiCtx) // works with /instance/primary as well
-                route "/instance" >=> HttpHandlers.getAllInstances apiCtx
+                routef "/requests/%O" (HttpHandlers.getRequestStatus apiCtx)
+                routef "/instances/%s/master-pdbs/%s" (HttpHandlers.getMasterPDB apiCtx)
+                routef "/instances/%s" (HttpHandlers.getInstance apiCtx) // works with /instance/primary as well
+                route "/instances" >=> HttpHandlers.getAllInstances apiCtx
 
                 // Routes for admins
-                route "/pendingchanges" >=> HttpHandlers.getPendingChanges apiCtx
+                route "/pending-changes" >=> HttpHandlers.getPendingChanges apiCtx
                 route "/mode" >=> HttpHandlers.getMode apiCtx
             ]
             POST >=> choose [
                 // Commit edition
-                routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.commitMasterPDB apiCtx)
-                // Create working copy
-                routef "/instance/%s/masterpdb/%s/%i/workingcopy/%s" (HttpHandlers.createWorkingCopy apiCtx)
+                routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.commitMasterPDB apiCtx)
 
                 // Routes for admins
-                route "/garbagecollection" >=> HttpHandlers.collectGarbage apiCtx
+                route "/garbage-collection" >=> HttpHandlers.collectGarbage apiCtx
             ]
             PUT >=> choose [
                 // Prepare for edition
-                routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.prepareMasterPDBForModification apiCtx)
+                routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.prepareMasterPDBForModification apiCtx)
+                // Create working copy
+                routef "/instances/%s/master-pdbs/%s/%i/working-copies/%s" (HttpHandlers.createWorkingCopy apiCtx)
+
                 // Routes for admins
                 route "/mode/maintenance" >=> HttpHandlers.enterReadOnlyMode apiCtx
                 route "/mode/normal" >=> HttpHandlers.enterNormalMode apiCtx
-                route "/instance/primary" >=> HttpHandlers.switchPrimaryOracleInstanceWith apiCtx
+                route "/instances/primary" >=> HttpHandlers.switchPrimaryOracleInstanceWith apiCtx
             ]
             DELETE >=> choose [
                 // Rollback edition
-                routef "/instance/primary/masterpdb/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
+                routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
                 // Delete working copy
-                routef "/instance/%s/masterpdb/%s/%i/workingcopy/%s" (HttpHandlers.deleteWorkingCopy apiCtx)
+                routef "/instances/%s/master-pdbs/%s/%i/working-copies/%s" (HttpHandlers.deleteWorkingCopy apiCtx)
             ]
             PATCH >=> choose [
                 // Declare the given instance synchronized with primary
-                routef "/instance/%s" (HttpHandlers.synchronizePrimaryInstanceWith apiCtx)
+                routef "/instances/%s" (HttpHandlers.synchronizePrimaryInstanceWith apiCtx)
             ]
             RequestErrors.BAD_REQUEST "Unknown HTTP request"
         ]
