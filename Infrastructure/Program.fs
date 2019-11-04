@@ -78,6 +78,7 @@ module Rest =
             //.UseCors(configureCors)
             //.UseAuthentication()
             .UseStaticFiles()
+            .UseSerilogRequestLogging()
             .UseGiraffe(webApp apiCtx) |> ignore
 
     let configureServices (services : IServiceCollection) =
@@ -147,7 +148,10 @@ let main args =
             ReadFrom.Configuration(config).
 #if DEBUG
             MinimumLevel.Is(Events.LogEventLevel.Debug).
+#else
+            MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning).
 #endif
+            Enrich.FromLogContext().
             CreateLogger()
 
     let infrastuctureParameters, validApplicationParameters = 
@@ -180,6 +184,7 @@ let main args =
         .UseIISIntegration()
         .Configure(Action<IApplicationBuilder> (Rest.configureApp apiContext))
         .ConfigureServices(Rest.configureServices)
+        .UseSerilog()
         .Build()
         .Run()
 

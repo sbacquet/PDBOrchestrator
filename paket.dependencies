@@ -18,3 +18,4 @@ nuget Serilog.Sinks.Console
 nuget Giraffe
 nuget Microsoft.AspNetCore.App
 nuget Serilog.Settings.Configuration
+nuget Serilog.AspNetCore
