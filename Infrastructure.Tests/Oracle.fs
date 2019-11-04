@@ -148,4 +148,5 @@ let ``Get PDB files folder`` () =
     let folderMaybe = Infrastructure.Oracle.getPDBFilesFolder conn "ORCLPDB" |> Async.RunSynchronously 
     match folderMaybe with
     | Ok (Some folder) -> Assert.Equal("/u01/app/oracle/oradata/INTCDB2/ORCLPDB", folder)
-    | _ -> failwith "error"
+    | Ok None -> failwith "no PDB file found with name=ORCLPDB"
+    | Error e -> failwithf "Oracle error : %s" e.Message

@@ -76,7 +76,7 @@ let private masterPDBActorBody
     (initialRepository:IMasterPDBRepository) 
     (initialMasterPDB:MasterPDB)
     (previousMasterPDB:MasterPDB option)
-    (ctx : Actor<_>) =
+    (ctx : Actor<obj>) =
 
     let editionPDBName = initialMasterPDB.Name
 
@@ -93,7 +93,7 @@ let private masterPDBActorBody
         else
 
         ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
-        let! (msg:obj) = ctx.Receive()
+        let! msg = ctx.Receive()
         
         match msg with
         | :? LifecycleEvent as event ->

@@ -157,9 +157,9 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
         member this.PDBSnapshots name = async {
             return Ok []
         }
-        member this.GetPDBNamesLike (like:string) = 
-            raise (System.NotImplementedException())
-
+        member this.GetPDBNamesLike (like:string) = raise (System.NotImplementedException())
+        member this.GetPDBFilesFolder name = async { return Ok (Some "fake") }
+ 
 let fakeOracleAPI = FakeOracleAPI(Set.empty)
 
 type FakeOracleInstanceRepo(instance) =

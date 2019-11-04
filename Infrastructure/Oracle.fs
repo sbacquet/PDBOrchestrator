@@ -284,9 +284,10 @@ let getPDBFilesFolder connAsDBA (name:string) = async {
         use! result = 
             Sql.asyncExecReader 
                 connAsDBA 
-                (sprintf "select regexp_replace(f.file_name, '(^.+)/[A-Za-z0-9_]+\.[A-Za-z0-9_]+$', '\1') from (select con_id, file_name, row_number() over (partition by con_id order by file_name) as rownumber from cdb_data_files) f, v$pdbs p where f.rownumber=1 and p.con_id=f.con_id and p.name='%s'" (name.ToUpper()))
+                (sprintf "select regexp_replace(f.file_name, '(^.+)/[[:alnum:]_]+\.[[:alnum:]_]+$', '\1') from (select con_id, file_name, row_number() over (partition by con_id order by file_name) as rownumber from cdb_data_files) f, v$pdbs p where f.rownumber=1 and p.con_id=f.con_id and upper(p.name)='%s'" (name.ToUpper()))
                 [] 
-        return result |> Sql.mapFirst (Sql.asScalar) |> Ok
+        let folder:string option = result |> Sql.mapFirst (Sql.asScalar)
+        return Ok folder
     with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
         return Error ex
     
@@ -459,3 +460,8 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
         member __.GetPDBNamesLike like = 
             getPDBNamesLike connAsDBA like
             |> toOraclePDBResultAsync
+
+        member __.GetPDBFilesFolder name =
+            getPDBFilesFolder connAsDBA name
+            |> toOraclePDBResultAsync
+

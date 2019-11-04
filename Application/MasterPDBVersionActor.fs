@@ -10,6 +10,7 @@ open Application.Oracle
 open Application.Parameters
 open Domain.Common
 open Domain.OracleInstance
+open Application.Common
 
 type Command =
 | CreateWorkingCopy of WithRequestId<string, string, string, string, bool> // responds with OraclePDBResultWithReqId
@@ -66,9 +67,20 @@ let private masterPDBVersionActorBody
             return! loop ()
 
         | DeleteWorkingCopy (requestId, pdb) ->
-            // TODO: verify it is a working pdb
-            let! result = oracleLongTaskExecutor <? DeletePDB (Some requestId, pdb)
-            sender <! result
+            let! pdbFilesFolder = oracleAPI.GetPDBFilesFolder pdb
+            let result:OraclePDBResult =
+                match pdbFilesFolder with
+                | Ok (Some folder) ->
+                    if folder.StartsWith(instance.WorkingCopyDestPath) then
+                        oracleLongTaskExecutor <? DeletePDB (None, pdb) 
+                        |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
+                    else
+                        sprintf "PDB %s is not a working copy" pdb |> exn |> Error
+                | Ok None ->
+                    sprintf "cannot file any file folder for PDB %s" pdb |> exn |> Error
+                | Error error ->
+                    Error error
+            sender <! (requestId, result)
             return! loop ()
 
         | CollectGarbage ->
