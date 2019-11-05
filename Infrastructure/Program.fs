@@ -149,7 +149,7 @@ let main args =
 #if DEBUG
             MinimumLevel.Is(Events.LogEventLevel.Debug).
 #else
-            MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning).
+            MinimumLevel.Override("Microsoft.AspNetCore", Events.LogEventLevel.Warning).
 #endif
             Enrich.FromLogContext().
             CreateLogger()

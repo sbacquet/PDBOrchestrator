@@ -8,3 +8,4 @@ Serilog.Sinks.Console
 Serilog.Extensions.Logging
 Serilog.Settings.Configuration
 Serilog.AspNetCore
+Serilog.Sinks.Http
