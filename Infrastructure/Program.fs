@@ -12,94 +12,10 @@ open System
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
-open Microsoft.Extensions.Configuration
-open Giraffe
-
-let loggerFactory = new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory
-
-[<RequireQualifiedAccess>]
-module Rest =
-
-    let buildEndpoint dnsName port = sprintf "http://%s:%d" dnsName port
-
-    let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc = 
-        choose [
-            GET >=> choose [
-                routef "/requests/%O" (HttpHandlers.getRequestStatus apiCtx)
-                routef "/instances/%s/master-pdbs/%s" (HttpHandlers.getMasterPDB apiCtx)
-                routef "/instances/%s" (HttpHandlers.getInstance apiCtx) // works with /instance/primary as well
-                route "/instances" >=> HttpHandlers.getAllInstances apiCtx
-
-                // Routes for admins
-                route "/pending-changes" >=> HttpHandlers.getPendingChanges apiCtx
-                route "/mode" >=> HttpHandlers.getMode apiCtx
-            ]
-            POST >=> choose [
-                // Commit edition
-                routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.commitMasterPDB apiCtx)
-
-                // Routes for admins
-                route "/garbage-collection" >=> HttpHandlers.collectGarbage apiCtx
-            ]
-            PUT >=> choose [
-                // Prepare for edition
-                routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.prepareMasterPDBForModification apiCtx)
-                // Create working copy
-                routef "/instances/%s/master-pdbs/%s/%i/working-copies/%s" (HttpHandlers.createWorkingCopy apiCtx)
-
-                // Routes for admins
-                route "/mode/maintenance" >=> HttpHandlers.enterReadOnlyMode apiCtx
-                route "/mode/normal" >=> HttpHandlers.enterNormalMode apiCtx
-                route "/instances/primary" >=> HttpHandlers.switchPrimaryOracleInstanceWith apiCtx
-            ]
-            DELETE >=> choose [
-                // Rollback edition
-                routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
-                // Delete working copy
-                routef "/instances/%s/master-pdbs/%s/%i/working-copies/%s" (HttpHandlers.deleteWorkingCopy apiCtx)
-            ]
-            PATCH >=> choose [
-                // Declare the given instance synchronized with primary
-                routef "/instances/%s" (HttpHandlers.synchronizePrimaryInstanceWith apiCtx)
-            ]
-            RequestErrors.BAD_REQUEST "Unknown HTTP request"
-        ]
-
-    let errorHandler (ex : Exception) (logger : Microsoft.Extensions.Logging.ILogger) =
-        logger.LogError(ex, "An unhandled exception has occurred while executing the request.")
-        clearResponse >=> setStatusCode 500 >=> text ex.Message
-
-    let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
-        let env = app.ApplicationServices.GetService<IHostingEnvironment>()
-        (match env.IsDevelopment() with
-        | true  -> app.UseDeveloperExceptionPage()
-        | false -> app.UseGiraffeErrorHandler errorHandler)
-            //.UseHttpsRedirection()
-            //.UseCors(configureCors)
-            //.UseAuthentication()
-            .UseStaticFiles()
-            .UseSerilogRequestLogging()
-            .UseGiraffe(webApp apiCtx) |> ignore
-
-    let configureServices (services : IServiceCollection) =
-        services
-            .AddSingleton(typeof<ILoggerFactory>, loggerFactory)
-            .AddGiraffe() |> ignore
-
-    let buildConfiguration (args:string[]) =
-        let builder = ConfigurationBuilder().AddJsonFile("appsettings.json", optional=true)
-        let aspnetcoreEnv = System.Environment.GetEnvironmentVariable "ASPNETCORE_ENVIRONMENT"
-        let builder = 
-            if (not (System.String.IsNullOrEmpty aspnetcoreEnv)) then
-                builder.AddJsonFile(sprintf "appsettings.%s.json" aspnetcoreEnv, optional=true)
-            else builder
-        builder.
-            AddCommandLine(args).
-            Build()
 
 [<RequireQualifiedAccess>]
 module Config =
-    let invalidConfig (errors:string list) =
+    let private invalidConfig (errors:string list) =
         Serilog.Log.Logger.Error("The configuration is invalid : {0}", String.Join("; ", errors))
     #if DEBUG
         Console.WriteLine("Press a key to exit...")
@@ -126,7 +42,7 @@ module Config =
             Akkling.Configuration.parse @"
             akka { 
                 loglevel=DEBUG
-                loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] 
+                loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] l
                 actor {
                     debug {
                         receive = off
@@ -142,7 +58,7 @@ module Config =
 
 [<EntryPoint>]
 let main args =
-    let config = Rest.buildConfiguration args
+    let config = RestAPI.buildConfiguration args
     Serilog.Log.Logger <- 
         LoggerConfiguration().
             ReadFrom.Configuration(config).
@@ -165,25 +81,27 @@ let main args =
     let getInstanceFolder = OracleInstanceRepository.instanceFolder orchestratorPath
     let getMasterPDBRepo (instance:OracleInstance) name = MasterPDBRepository.MasterPDBRepository(getInstanceFolder instance.Name, name) :> IMasterPDBRepository
     let newMasterPDBRepo (instance:OracleInstance) pdb = MasterPDBRepository.NewMasterPDBRepository(getInstanceFolder instance.Name, pdb) :> IMasterPDBRepository
+    let loggerFactory = new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory
     let getOracleAPI (instance:OracleInstance) = Oracle.OracleAPI(loggerFactory, Oracle.connAsDBAFromInstance instance, Oracle.connAsDBAInFromInstance instance)
 
     use system = Akkling.System.create "sys" Config.akkaConfig
     let orchestratorActor = system |> OrchestratorActor.spawn validApplicationParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let port = infrastuctureParameters.Port
+    let endPoint = sprintf "http://%s:%d" infrastuctureParameters.DNSName port // TODO (https)
     let apiContext = 
         API.consAPIContext 
             system 
             orchestratorActor 
             loggerFactory 
-            (Rest.buildEndpoint infrastuctureParameters.DNSName port)
+            endPoint
 
     WebHostBuilder()
         .UseWebRoot("wwwroot")
         .UseConfiguration(config)
         .UseKestrel(fun options -> options.Listen(System.Net.IPAddress.IPv6Any, port))
         .UseIISIntegration()
-        .Configure(Action<IApplicationBuilder> (Rest.configureApp apiContext))
-        .ConfigureServices(Rest.configureServices)
+        .Configure(Action<IApplicationBuilder> (RestAPI.configureApp apiContext))
+        .ConfigureServices(Action<IServiceCollection> (RestAPI.configureServices loggerFactory))
         .UseSerilog()
         .Build()
         .Run()

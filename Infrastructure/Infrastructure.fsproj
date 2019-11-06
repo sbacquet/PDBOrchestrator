@@ -28,6 +28,7 @@
     <Compile Include="HttpHandlers.fs" />
     <Compile Include="Config.fs" />
     <Compile Include="Migration.fs" />
+    <Compile Include="RestAPI.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
