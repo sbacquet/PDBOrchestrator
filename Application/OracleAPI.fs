@@ -9,7 +9,7 @@ type OraclePDBResultWithReqId = Application.PendingRequest.WithRequestId<OracleP
 
 type IOracleAPI =
     //inherit System.IDisposable
-    abstract member NewPDBFromDump : adminUserName:string -> adminUserPassword:string -> dest:string -> dumpPath:string -> schemas:string list -> targetSchemas:(string * string) list -> directory:string -> manifest:string -> name:string -> Async<OraclePDBResult>
+    abstract member NewPDBFromDump : userForImport:string -> timeout:System.TimeSpan option -> adminUserName:string -> adminUserPassword:string -> dest:string -> dumpPath:string -> schemas:string list -> targetSchemas:(string * string) list -> directory:string -> manifest:string -> name:string -> Async<OraclePDBResult>
     abstract member ClosePDB : name:string -> Async<OraclePDBResult>
     abstract member DeletePDB : name:string -> Async<OraclePDBResult>
     abstract member ExportPDB : manifest:string -> name:string -> Async<OraclePDBResult>

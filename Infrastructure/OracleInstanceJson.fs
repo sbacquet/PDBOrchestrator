@@ -39,6 +39,8 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
         let! port = Decode.optional Decode.int "port"
         let! dbaUser = Decode.required Decode.string "dbaUser" 
         let! dbaPassword = Decode.required decoder "dbaPassword"
+        let! userForImport = Decode.required Decode.string "userForImport" 
+        let! userForImportPassword = Decode.required decoder "userForImportPassword"
         let! snapshotCapable = Decode.optional Decode.bool "snapshotCapable"
         let! masterPDBManifestsPath = Decode.required Decode.string "masterPDBManifestsPath" 
         let! masterPDBDestPath = Decode.required Decode.string "masterPDBDestPath" 
@@ -54,6 +56,8 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
                 port 
                 dbaUser 
                 dbaPassword 
+                userForImport
+                userForImportPassword
                 masterPDBManifestsPath 
                 masterPDBDestPath 
                 workingCopyDestPath 
@@ -70,6 +74,8 @@ let encodeOracleInstance (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:Or
     Encode.optional Encode.int "port" x.Port >>
     Encode.required Encode.string "dbaUser" x.DBAUser >>
     Encode.required (encryptPassword algo) "dbaPassword" x.DBAPassword >>
+    Encode.required Encode.string "userForImport" x.UserForImport >>
+    Encode.required (encryptPassword algo) "userForImportPassword" x.UserForImportPassword >>
     Encode.ifNotEqual true Encode.bool "snapshotCapable" x.SnapshotCapable >>
     Encode.required Encode.string "masterPDBManifestsPath" x.MasterPDBManifestsPath >>
     Encode.required Encode.string "masterPDBDestPath" x.MasterPDBDestPath >>

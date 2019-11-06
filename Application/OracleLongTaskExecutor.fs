@@ -7,9 +7,11 @@ open Akka.Routing
 open Application.Parameters
 open Domain.Common
 open Application.Parameters
+open System
 
 type CreatePDBFromDumpParams = {
     Name: string
+    UserForImport: string
     AdminUserName: string
     AdminUserPassword: string
     Destination: string 
@@ -30,7 +32,7 @@ type Command =
 let private newManifestName (pdb:string) version =
     sprintf "%s_V%03d.XML" (pdb.ToUpper()) version
 
-let private oracleLongTaskExecutorBody parameters (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
+let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
     let stopWatch = System.Diagnostics.Stopwatch()
 
@@ -39,8 +41,8 @@ let private oracleLongTaskExecutorBody parameters (oracleAPI : IOracleAPI) (ctx 
         let! n = ctx.Receive()
 
         match n with
-        | CreatePDBFromDump (requestId, parameters) -> 
-            let! result = oracleAPI.NewPDBFromDump parameters.AdminUserName parameters.AdminUserPassword parameters.Destination parameters.DumpPath parameters.Schemas parameters.TargetSchemas parameters.Directory (newManifestName parameters.Name 1) parameters.Name
+        | CreatePDBFromDump (requestId, pars) -> 
+            let! result = oracleAPI.NewPDBFromDump pars.UserForImport parameters.VeryLongTimeout pars.AdminUserName pars.AdminUserPassword pars.Destination pars.DumpPath pars.Schemas pars.TargetSchemas pars.Directory (newManifestName pars.Name 1) pars.Name
             match requestId with
             | Some reqId -> ctx.Sender() <! (reqId, result)
             | None -> ctx.Sender() <! result

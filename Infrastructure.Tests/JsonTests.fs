@@ -29,6 +29,8 @@ let ``Serialize and deserialize Oracle instance`` () =
             None
             "sys"
             "pass"
+            "userForImport"
+            "pass2"
             "x"
             "xx"
             "xxx"

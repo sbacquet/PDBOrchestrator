@@ -19,6 +19,8 @@ let ``Save and load Oracle instance`` () =
             None
             "sys"
             "pass"
+            "userForImport"
+            ""
             "x"
             "xx"
             "xxx"

@@ -253,6 +253,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                 | Valid _ -> 
                     let parameters2 = {
                         Name = parameters.Name
+                        UserForImport = sprintf "%s/%s" instance.UserForImport instance.UserForImportPassword
                         AdminUserName = instance.DBAUser
                         AdminUserPassword = instance.DBAPassword
                         Destination = instance.MasterPDBDestPath

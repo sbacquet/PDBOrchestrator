@@ -8,10 +8,28 @@ open Application.Oracle
 open Microsoft.Extensions.Logging
 open Domain.Common
 open System.Globalization
-open System
+open System.Diagnostics
+open Infrastructure.RunProcessAsync
+open Domain.Common.Validation
 
 type PDBCompensableAction = CompensableAction<string, Oracle.ManagedDataAccess.Client.OracleException>
 type PDBCompensableAsyncAction = CompensableAsyncAction<string, Oracle.ManagedDataAccess.Client.OracleException>
+
+let toOraclePDBResult result =
+    result |> Result.mapError (fun error -> error :> exn)
+
+let toOraclePDBResultAsync result = async {
+    let! r = result
+    return toOraclePDBResult r
+}
+
+let convertComp (comp:PDBCompensableAsyncAction) : CompensableAsyncAction<string, exn> =
+    let (action, compensation) = comp
+    let newAction t = async {
+        let! x = action t
+        return toOraclePDBResult x
+    }
+    (newAction, compensation)
 
 let openConn host port service user password sysdba = fun () ->
     let connectionString = 
@@ -146,9 +164,92 @@ let closePDBCompensable (logger:ILogger) connAsDBA readWrite =
         (closePDB logger connAsDBA)
         (openPDB logger connAsDBA readWrite) 
 
-let importSchemasInPDB (logger:ILogger) connAsDBA (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) name = async {
-    return Ok name // TODO
+let getOracleDirectoryPath connAsDBA (name:string) = async {
+    try
+        let! (path:string option) = 
+            Sql.asyncExecScalar 
+                connAsDBA 
+                (sprintf "select directory_path from dba_directories where upper(directory_name)='%s'" (name.ToUpper()))
+                [] 
+        return path |> Option.map Ok |> Option.defaultValue (sprintf "Oracle directory %s does not exist" name |> exn |> Error)
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return sprintf "cannot get Oracle directory %s" name |> exn |> Error
 }
+
+let createSchema (logger:ILogger) connAsDBAIn (schema:string) (pass:string) (name:string) =
+    logger.LogDebug("Creating schema {schema}", schema)
+    sprintf 
+        @"
+BEGIN
+execute immediate 'create user %s identified by %s default tablespace USERS temporary tablespace TEMP';
+execute immediate 'grant CONNECT, CREATE SESSION, CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE DATABASE LINK, ALTER SESSION, CREATE PROCEDURE, CREATE TRIGGER, CREATE TYPE, CREATE SYNONYM, RESOURCE, CREATE INDEXTYPE, CREATE MATERIALIZED VIEW, MANAGE SCHEDULER to %s';
+execute immediate 'alter user %s quota unlimited on USERS';
+END;
+"
+        schema pass schema schema
+    |> execAsync name (connAsDBAIn name)
+
+let createSchemas (logger:ILogger) connAsDBAIn (schemas:(string*string) list) name = async {
+    let! result = schemas |> AsyncValidation.traverseS (fun (schema, pass) -> createSchema logger connAsDBAIn schema pass name |> AsyncValidation.ofAsyncResult)
+    match result with
+    | Valid _ -> return Ok name
+    | Invalid errors -> return errors |> List.map (fun ex -> ex.Message) |> String.concat "; " |> exn |> Error
+}
+
+let deleteSchema (logger:ILogger) connAsDBAIn (schema:string) name =
+    logger.LogDebug("Creating schema {schema}", schema)
+    sprintf "drop user %s cascade" schema |> execAsync name (connAsDBAIn name)
+    
+let deleteSchemas (logger:ILogger) connAsDBAIn (schemas:string list) name = async {
+    let! result = schemas |> AsyncValidation.traverseS (fun schema -> deleteSchema logger connAsDBAIn schema name |> AsyncValidation.ofAsyncResult)
+    match result with
+    | Valid _ -> return Ok name
+    | Invalid errors -> return errors |> List.map (fun ex -> ex.Message) |> String.concat "; " |> exn |> Error
+}
+
+let createSchemaCompensable (logger:ILogger) connAsDBAIn (schema:string) (pass:string) =
+    compensableAsync
+        (createSchema logger connAsDBAIn schema pass)
+        (deleteSchema logger connAsDBAIn schema)
+
+let createSchemasCompensable (logger:ILogger) connAsDBAIn (schemas:(string*string) list) =
+    compensableAsync
+        (createSchemas logger connAsDBAIn schemas)
+        (deleteSchemas logger connAsDBAIn (schemas |> List.map fst))
+
+let importSchemas (logger:ILogger) userForImport (timeout:TimeSpan option) (dumpPath:string) (schemas:string list) (targetSchemas:string list) (directory:string) name = async {
+    let dumpFile = System.IO.Path.GetFileNameWithoutExtension(dumpPath).ToUpper()
+    let logFile = sprintf "%s_impdp.log" dumpFile
+    let args = [ 
+        sprintf "'%s'" userForImport 
+        sprintf "schemas=%s" (schemas |> String.concat ",")
+        sprintf "directory=%s" directory
+        sprintf "dumpfile=%s.DMP" dumpFile
+        sprintf "logfile=%s" logFile
+        sprintf "transform=\"OID:N\""
+        "version=COMPATIBLE"
+        targetSchemas 
+        |> List.zip schemas
+        |> List.map (fun (schema, targetSchema) -> sprintf "%s:%s" schema targetSchema)
+        |> String.concat ","
+        |> sprintf "remap_schema=%s"
+    ]
+    let! result = 
+        runProcessAsync 
+            (timeout |> Option.map (fun timeout -> (int)timeout.TotalMilliseconds)) 
+            "impdp" 
+            args
+    match result with
+    | Some 0 -> return Ok name
+    | Some exitCode -> return sprintf "error while importing dump %s in PDB %s : exit code %d" dumpPath name exitCode |> exn |> Error
+    | None -> return sprintf "timeout while importing dump %s in PDB %s" dumpPath name |> exn |> Error
+}
+
+let createAndImportSchemas (logger:ILogger) connAsDBAIn userForImport (timeout:TimeSpan option) (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) =
+    [
+        createSchemasCompensable logger connAsDBAIn targetSchemas
+        notCompensableAsync (importSchemas logger userForImport timeout dumpPath schemas (targetSchemas |> List.map fst) directory)
+    ] |> composeAsync logger
 
 let createAndGrantPDB (logger:ILogger) connAsDBA connAsDBAIn keepOpen adminUserName adminUserPassword dest = 
     [
@@ -176,13 +277,13 @@ let closeAndExportPDB (logger:ILogger) connAsDBA manifest =
     ] |> composeAsync logger
 
 
-let createManifestFromDump (logger:ILogger) connAsDBA connAsDBAIn adminUserName adminUserPassword dest (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) (manifest:string) = 
+let createManifestFromDump (logger:ILogger) connAsDBA connAsDBAIn userForImport timeout adminUserName adminUserPassword dest (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) (manifest:string) = 
     [
-        createPDBCompensable logger connAsDBA adminUserName adminUserPassword dest true
-        notCompensableAsync (grantPDB logger connAsDBAIn)
-        notCompensableAsync (importSchemasInPDB logger connAsDBA dumpPath schemas targetSchemas directory)
-        notCompensableAsync (closePDB logger connAsDBA)
-        notCompensableAsync (exportPDB logger connAsDBA manifest)
+        createPDBCompensable logger connAsDBA adminUserName adminUserPassword dest true |> convertComp
+        notCompensableAsync (grantPDB logger connAsDBAIn) |> convertComp
+        notCompensableAsync (createAndImportSchemas logger connAsDBAIn userForImport timeout dumpPath schemas targetSchemas directory)
+        notCompensableAsync (closePDB logger connAsDBA) |> convertComp
+        notCompensableAsync (exportPDB logger connAsDBA manifest) |> convertComp
     ] |> composeAsync logger
 
 let importPDB (logger:ILogger) connAsDBA manifest dest (name:string) =
@@ -405,14 +506,6 @@ let pdbHasSnapshots connAsDBA (name:string) = async {
         return Error ex
 }
 
-let toOraclePDBResult result =
-    result |> Result.mapError (fun error -> error :> exn)
-
-let toOraclePDBResultAsync result = async {
-    let! r = result
-    return toOraclePDBResult r
-}
-
 // Delete a PDB that can possibly be a snapshot source (check if snapshots first)
 let deleteSourcePDB (logger:ILogger) connAsDBA (name:string) = async {
     let! hasSnapshotsMaybe = pdbHasSnapshots connAsDBA name
@@ -464,9 +557,8 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
     member __.Logger = loggerFactory.CreateLogger("Oracle API")
 
     interface IOracleAPI with
-        member __.NewPDBFromDump adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name =
-            createManifestFromDump __.Logger connAsDBA connAsDBAIn adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name
-            |> toOraclePDBResultAsync
+        member __.NewPDBFromDump userForImport timeout adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name =
+            createManifestFromDump __.Logger connAsDBA connAsDBAIn userForImport timeout adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name
 
         member __.ClosePDB name =
             closePDB __.Logger connAsDBA name

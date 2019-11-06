@@ -91,6 +91,8 @@ let instance1 =
         None
         "xxx"
         "xxx"
+        "xxx"
+        ""
         ""
         ""
         ""
@@ -106,6 +108,8 @@ let instance2 =
         None
         "xxx"
         "xxx"
+        "xxx"
+        ""
         ""
         ""
         ""
@@ -116,7 +120,7 @@ let instance2 =
 type FakeOracleAPI(existingPDBs : Set<string>) = 
     member this.Logger = loggerFactory.CreateLogger("Fake Oracle API")
     interface IOracleAPI with
-        member this.NewPDBFromDump _ _ _ _ _ _ _ _ name = async {
+        member this.NewPDBFromDump _ _ _ _ _ _ _ _ _ _ name = async {
             this.Logger.LogDebug("Creating new PDB {PDB}...", name)
 #if DEBUG
             do! Async.Sleep 3000
