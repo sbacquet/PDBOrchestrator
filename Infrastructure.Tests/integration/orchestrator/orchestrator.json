@@ -1,7 +1,7 @@
 {
   "primaryInstance": "intcdb2",
   "oracleInstanceNames": [
-    "intcdb1",
+    "intcdb",
     "intcdb2"
   ],
   "_version": 1
