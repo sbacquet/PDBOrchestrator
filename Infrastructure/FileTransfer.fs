@@ -12,6 +12,7 @@ let uploadFile timeout fromPath toHost toPath user pass hostKey =
     if timeout |> Option.isSome then sessionParams.Timeout <- timeout.Value
 
     use session = new Session()
+    session.ExecutablePath <- sprintf "%s\WinSCP.exe" (System.IO.Directory.GetCurrentDirectory())
     session.Open(sessionParams)
  
     let transferOptions = new TransferOptions();
