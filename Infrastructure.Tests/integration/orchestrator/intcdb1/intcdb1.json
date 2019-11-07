@@ -2,9 +2,13 @@
   "name": "intcdb1",
   "server": "fr1psl015710.misys.global.ad",
   "dbaUser": "sys",
-  "dbaPassword": "syspwd8",
+  "dbaPassword": "FDqIcqnELQhl6kXsiMCqjQ==",
   "userForImport": "system",
-  "userForImportPassword": "syspwd8",
+  "userForImportPassword": "FDqIcqnELQhl6kXsiMCqjQ==",
+  "userForFileTransfer": "oraadm",
+  "userForFileTransferPassword": "fJt/FfcKXeMxZMRL950pDQ==",
+  "serverFingerPrint": "gXrmNrb2UUUinVl/8tEUgkmSHnzJ5//mt2D2zl+naobOYbX/4urJqSuqiiBefAH3Ug5KwGVzXy64gvs49H8df80rmtwS9A0M35Fe08X1WgCRe/nZJg/KVPLxo4QWJxRnt9p4PjSSwmitKIDdDaBkKxnFcwdEtH2xawgKGswzEbg=",
+  "snapshotCapable": false,
   "masterPDBManifestsPath": "/u01/app/oracle/oradata/MasterDBs",
   "masterPDBDestPath": "/u01/app/oracle/oradata/MasterDBs",
   "snapshotSourcePDBDestPath": "/u01/app/oracle/oradata/SB_PDBs/snaphot_sources",
@@ -13,5 +17,6 @@
   "masterPDBs": [
     "NORTHVIEW"
   ],
-  "_version": 1
+  "_version": 1,
+  "_iv": "n2A6bLCizMqnOVG1SZ9XTw=="
 }

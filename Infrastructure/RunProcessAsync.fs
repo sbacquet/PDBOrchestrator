@@ -18,7 +18,7 @@ type Microsoft.FSharp.Control.Async with
             else return None
         }
 
-let private runProcessAsyncInternal timeout (proc:Process) = async {
+let private runProcessAsyncInternal (timeout:System.TimeSpan option) (proc:Process) = async {
     let tcs = new TaskCompletionSource<int>()
     proc.Exited.Add(fun _ -> tcs.TrySetResult(proc.ExitCode) |> ignore)
     proc.OutputDataReceived.Add(fun args -> Console.WriteLine(args.Data))
@@ -31,7 +31,7 @@ let private runProcessAsyncInternal timeout (proc:Process) = async {
     else
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
-    return! Async.AwaitTask(tcs.Task, timeout)
+    return! Async.AwaitTask(tcs.Task, timeout |> Option.map (fun t -> (int)t.TotalMilliseconds))
 }
 
 let runProcessAsync timeout fileName args = async {
@@ -43,5 +43,9 @@ let runProcessAsync timeout fileName args = async {
     proc.StartInfo.RedirectStandardOutput <- true
     proc.StartInfo.RedirectStandardError <- true
     proc.EnableRaisingEvents <- true
-    return! proc |> runProcessAsyncInternal timeout
+    let! run = proc |> runProcessAsyncInternal timeout
+    return 
+        match run with
+        | Some exitCode -> Ok exitCode
+        | None -> sprintf "timeout exceeded while running %s" fileName |> exn |> Error
 }    

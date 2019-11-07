@@ -85,7 +85,7 @@ let private masterPDBActorBody
         let masterPDB = state.MasterPDB
         let requests = state.Requests
         let collaborators = state.Collaborators
-        let manifestPath = Domain.MasterPDB.manifestPath instance.MasterPDBManifestsPath masterPDB.Name
+        let manifestFromVersion = Domain.MasterPDB.manifestFile masterPDB.Name
 
         if (state.PreviousMasterPDB.IsNone || state.PreviousMasterPDB.Value <> masterPDB) then
             ctx.Log.Value.Debug("Persisted modified master PDB {pdb}", masterPDB.Name)
@@ -155,7 +155,7 @@ let private masterPDBActorBody
                         return! loop state
                     else
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                        oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestPath version), instance.MasterPDBDestPath, editionPDBName)
+                        oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestFromVersion version), instance.MasterPDBDestPath, editionPDBName)
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
 
             | Commit (requestId, unlocker, _) ->
@@ -173,7 +173,7 @@ let private masterPDBActorBody
                         sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
                         return! loop state
                     else
-                        let manifest = manifestPath (getNextAvailableVersion masterPDB)
+                        let manifest = manifestFromVersion (getNextAvailableVersion masterPDB)
                         oracleLongTaskExecutor <! OracleLongTaskExecutor.ExportPDB (Some requestId, manifest, editionPDBName)
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
@@ -199,7 +199,7 @@ let private masterPDBActorBody
             
             | CreateWorkingCopy (requestId, versionNumber, name, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
-                let manifest = manifestPath versionNumber
+                let manifest = manifestFromVersion versionNumber
                 let versionMaybe = masterPDB.Versions |> Map.tryFind versionNumber
                 match versionMaybe with
                 | None -> 
@@ -208,7 +208,7 @@ let private masterPDBActorBody
                 | Some version -> 
                     let newCollabs, versionActor = getOrSpawnVersionActor parameters oracleAPI instance masterPDB.Name version collaborators ctx
                     let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    versionActor <! MasterPDBVersionActor.CreateWorkingCopy (requestId, manifest, instance.SnapshotSourcePDBDestPath, name, instance.WorkingCopyDestPath, force)
+                    versionActor <! MasterPDBVersionActor.CreateWorkingCopy (requestId, manifest, name, force)
                     return! loop { state with Requests = newRequests; Collaborators = newCollabs }
 
             | CollectGarbage ->

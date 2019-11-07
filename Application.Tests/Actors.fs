@@ -86,13 +86,10 @@ let runQuick cont = runWithinElseTimeoutException quickTimeout cont
 let instance1 = 
     consOracleInstance
         [ "test1"; "test2" ]
-        "server1"
-        "xxx"
-        None
-        "xxx"
-        "xxx"
-        "xxx"
-        ""
+        "server1" "xxx" None
+        "xxx" "xxx"
+        "xxx" ""
+        "xxx" "" ""
         ""
         ""
         ""
@@ -103,13 +100,10 @@ let instance1 =
 let instance2 = 
     consOracleInstance
         [ "test2" ]
-        "server2"
-        "xxx"
-        None
-        "xxx"
-        "xxx"
-        "xxx"
-        ""
+        "server2" "xxx" None
+        "xxx" "xxx"
+        "xxx" ""
+        "xxx" "" ""
         ""
         ""
         ""
@@ -120,7 +114,7 @@ let instance2 =
 type FakeOracleAPI(existingPDBs : Set<string>) = 
     member this.Logger = loggerFactory.CreateLogger("Fake Oracle API")
     interface IOracleAPI with
-        member this.NewPDBFromDump _ _ _ _ _ _ _ _ _ _ name = async {
+        member this.NewPDBFromDump _ name _ _ _ = async {
             this.Logger.LogDebug("Creating new PDB {PDB}...", name)
 #if DEBUG
             do! Async.Sleep 3000
@@ -144,7 +138,7 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
             this.Logger.LogDebug("Importing PDB {PDB}...", name)
             return Ok name 
         }
-        member this.SnapshotPDB _ _ name = async { 
+        member this.SnapshotPDB _ name = async { 
             this.Logger.LogDebug("Snapshoting PDB {PDB}...", name)
             do! Async.Sleep 100
             return Ok name 

@@ -13,7 +13,7 @@ open Domain.OracleInstance
 open Application.Common
 
 type Command =
-| CreateWorkingCopy of WithRequestId<string, string, string, string, bool> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopy of WithRequestId<string, string, bool> // responds with OraclePDBResultWithReqId
 | DeleteWorkingCopy of WithRequestId<string> // responds with OraclePDBResultWithReqId
 | CollectGarbage // no response
 | HaraKiri // no response
@@ -41,7 +41,7 @@ let private masterPDBVersionActorBody
         let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
 
         match command with
-        | CreateWorkingCopy (requestId, sourceManifest, sourceDest, workingCopyName, workingCopyDest, force) -> 
+        | CreateWorkingCopy (requestId, sourceManifest, workingCopyName, force) -> 
             let! result = asyncResult {
                 let! wcExists = oracleAPI.PDBExists workingCopyName
                 if wcExists && (not force) then 
@@ -56,13 +56,13 @@ let private masterPDBVersionActorBody
                         let! snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName
                         let! _ = 
                             if (not snapshotSourceExists) then
-                                oracleDiskIntensiveTaskExecutor <? ImportPDB (None, sourceManifest, sourceDest, snapshotSourceName)
+                                oracleDiskIntensiveTaskExecutor <? ImportPDB (None, sourceManifest, instance.SnapshotSourcePDBDestPath, snapshotSourceName)
                             else
                                 ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
                                 AsyncResult.retn ""
-                        return! oracleLongTaskExecutor <? SnapshotPDB (None, snapshotSourceName, workingCopyDest, workingCopyName)
+                        return! oracleLongTaskExecutor <? SnapshotPDB (None, snapshotSourceName, workingCopyName)
                     else
-                        return! oracleDiskIntensiveTaskExecutor <? ImportPDB (None, sourceManifest, workingCopyDest, workingCopyName)
+                        return! oracleDiskIntensiveTaskExecutor <? ImportPDB (None, sourceManifest, instance.WorkingCopyDestPath, workingCopyName)
             }
             sender <! (requestId, result)
             return! loop ()

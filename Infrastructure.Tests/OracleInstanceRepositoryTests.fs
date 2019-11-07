@@ -14,13 +14,10 @@ let ``Save and load Oracle instance`` () =
     let instance1 =
         consOracleInstance
             [ "test1"; "test2" ]
-            instance1Name
-            "fr1psl010716.misys.global.ad"
-            None
-            "sys"
-            "pass"
-            "userForImport"
-            ""
+            instance1Name "fr1psl010716.misys.global.ad" None
+            "sys" "pass"
+            "userForImport" ""
+            "userForFileTransfer" "pass" "azerty"
             "x"
             "xx"
             "xxx"

@@ -78,7 +78,7 @@ let rowToValidMasterPDBVersion (row:MasterPDBVersionRow) =
         (if row.Ignore_SRM_schema = 0 then Map.empty else [ "IgnoreSMRSchema", "true" ] |> Map.ofList)
     |> Validation.map (fun version -> row.Name, version)
 
-let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword instanceName = 
+let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword userForFileTransfer userForFileTransferPassword oracelServerFingerPrint snapshotCapable instanceName = 
 
     let conn = Sql.withNewConnection (openConn fromServer 1521 "orclpdb" "c##pdba" "pass" false)
 
@@ -114,8 +114,9 @@ let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword i
                 None
                 dbaUser dbaPassword 
                 userForImport userForImportPassword 
+                userForFileTransfer userForFileTransferPassword oracelServerFingerPrint 
                 "" "" "" "" "" // paths to edit manually in the instance JSON file
-                false // not snapshot capable by default
+                snapshotCapable
         let repo = Infrastructure.OracleInstanceRepository.NewOracleInstanceRepository(".", instance) :> Application.Common.IOracleInstanceRepository
         repo.Put instance |> ignore
         sprintf "%s imported properly from %s" instanceName fromServer |> Validation.Valid

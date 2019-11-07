@@ -8,6 +8,9 @@ type OracleInstance = {
     DBAPassword: string
     UserForImport: string
     UserForImportPassword: string
+    UserForFileTransfer: string
+    UserForFileTransferPassword: string
+    ServerFingerPrint: string
     MasterPDBManifestsPath: string
     MasterPDBDestPath: string
     SnapshotSourcePDBDestPath: string
@@ -17,7 +20,16 @@ type OracleInstance = {
     SnapshotCapable: bool
 }
 
-let consOracleInstance masterPDBs name server port dbaUser dbaPassword userForImport userForImportPassword mPath mdPath wcPath ssdPath directory snapshotCapable = 
+let consOracleInstance 
+    masterPDBs 
+    name 
+    server port 
+    dbaUser dbaPassword 
+    userForImport userForImportPassword 
+    userForFileTransfer userForFileTransferPassword serverFingerPrint 
+    mPath mdPath wcPath ssdPath 
+    directory 
+    snapshotCapable = 
     { 
         Name = name
         Server = server
@@ -26,6 +38,9 @@ let consOracleInstance masterPDBs name server port dbaUser dbaPassword userForIm
         DBAPassword = dbaPassword
         UserForImport = userForImport
         UserForImportPassword = userForImportPassword
+        UserForFileTransfer = userForFileTransfer
+        UserForFileTransferPassword = userForFileTransferPassword
+        ServerFingerPrint = serverFingerPrint
         MasterPDBManifestsPath = mPath
         MasterPDBDestPath = mdPath
         WorkingCopyDestPath = wcPath

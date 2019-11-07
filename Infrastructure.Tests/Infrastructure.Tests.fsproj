@@ -7,6 +7,7 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="FileTransfer.fs" />
     <Compile Include="RunProcessAsync.fs" />
     <Compile Include="JsonTests.fs" />
     <Compile Include="MasterPDBRepositoryTests.fs" />

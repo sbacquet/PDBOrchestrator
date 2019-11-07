@@ -6,31 +6,21 @@ open Application.Oracle
 open Akka.Routing
 open Application.Parameters
 open Domain.Common
-open Application.Parameters
-open System
 
 type CreatePDBFromDumpParams = {
     Name: string
-    UserForImport: string
-    AdminUserName: string
-    AdminUserPassword: string
-    Destination: string 
     DumpPath:string
     Schemas: string list
     TargetSchemas: (string * string) list
-    Directory:string
 }
 
 type Command =
 | CreatePDBFromDump of WithOptionalRequestId<CreatePDBFromDumpParams> // responds with OraclePDBResultWithReqId
 | ClosePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
-| SnapshotPDB of WithOptionalRequestId<string, string, string> // responds with OraclePDBResultWithReqId
+| SnapshotPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
 | ExportPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
 | DeletePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
 | GarbageWorkingCopies of Domain.OracleInstance.OracleInstance // no response
-
-let private newManifestName (pdb:string) version =
-    sprintf "%s_V%03d.XML" (pdb.ToUpper()) version
 
 let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
@@ -42,7 +32,13 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
 
         match n with
         | CreatePDBFromDump (requestId, pars) -> 
-            let! result = oracleAPI.NewPDBFromDump pars.UserForImport parameters.VeryLongTimeout pars.AdminUserName pars.AdminUserPassword pars.Destination pars.DumpPath pars.Schemas pars.TargetSchemas pars.Directory (newManifestName pars.Name 1) pars.Name
+            let! result = 
+                oracleAPI.NewPDBFromDump 
+                    parameters.VeryLongTimeout 
+                    pars.Name
+                    pars.DumpPath 
+                    pars.Schemas 
+                    pars.TargetSchemas 
             match requestId with
             | Some reqId -> ctx.Sender() <! (reqId, result)
             | None -> ctx.Sender() <! result
@@ -55,9 +51,9 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             | None -> ctx.Sender() <! result
             return! loop ()
 
-        | SnapshotPDB (requestId, from, dest, name) -> 
+        | SnapshotPDB (requestId, from, name) -> 
             stopWatch.Restart()
-            let! result = oracleAPI.SnapshotPDB from dest name
+            let! result = oracleAPI.SnapshotPDB from name
             stopWatch.Stop()
             result |> Result.map (fun snap -> ctx.Log.Value.Info("Snapshot {snapshot} created in {0} s", snap, stopWatch.Elapsed.TotalSeconds)) |> ignore
             match requestId with

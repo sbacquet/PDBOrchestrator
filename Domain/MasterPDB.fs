@@ -103,5 +103,4 @@ let unlock masterPDB =
 
 let isLockedForEdition masterPDB = masterPDB.EditionState.IsSome
 
-let manifestFile = sprintf "%s_V%03d.XML"
-let manifestPath baseFolder name version = sprintf "%s/%s" baseFolder <| manifestFile name version
+let manifestFile (name:string) = sprintf "%s_V%03d.XML" (name.ToUpper())

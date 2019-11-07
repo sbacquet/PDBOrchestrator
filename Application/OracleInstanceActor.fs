@@ -253,14 +253,9 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                 | Valid _ -> 
                     let parameters2 = {
                         Name = parameters.Name
-                        UserForImport = sprintf "%s/%s" instance.UserForImport instance.UserForImportPassword
-                        AdminUserName = instance.DBAUser
-                        AdminUserPassword = instance.DBAPassword
-                        Destination = instance.MasterPDBDestPath
                         DumpPath = parameters.Dump
                         Schemas = parameters.Schemas
                         TargetSchemas = parameters.TargetSchemas |> List.map (fun (u, p, _) -> (u, p))
-                        Directory = instance.OracleDirectoryForDumps
                     }
                     let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
                     collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.CreatePDBFromDump (Some requestId, parameters2)

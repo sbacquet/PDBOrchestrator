@@ -243,11 +243,36 @@ let createSchemasCompensable (logger:ILogger) connAsDBAIn (schemas:(string*strin
         (createSchemas logger connAsDBAIn schemas deleteExisting)
         (deleteSchemas logger connAsDBAIn (schemas |> List.map fst))
 
-let importSchemas (logger:ILogger) userForImport (timeout:TimeSpan option) (dumpPath:string) (schemas:string list) (targetSchemas:string list) (directory:string) name = async {
+let transferFile fromPath toPath user pass =
+    let exe = "pscp.exe"
+    let args = [
+        "-batch"
+        "-hostkey \"d8:6e:e3:4b:bd:f4:c8:f6:ee:76:29:1e:b5:f9:e8:6b\""
+        sprintf "-l %s" user
+        sprintf "-pw %s" pass
+        sprintf "\"%s\"" fromPath
+        sprintf "\"%s\"" toPath
+    ]
+    ()
+
+let importSchemas 
+    (logger:ILogger) 
+    connAsDBA 
+    (timeout:TimeSpan option) 
+    userForImport userForImportPassword 
+    host userForFileTransfer userForFileTransferPassword serverFingerPrint 
+    (dumpPath:string) 
+    (schemas:string list) (targetSchemas:string list) 
+    (directory:string) 
+    name 
+    = asyncResult {
+
+    let! dumpDest = getOracleDirectoryPath connAsDBA directory
+    let! _ = FileTransfer.uploadFileAsync timeout dumpPath host dumpDest userForFileTransfer userForFileTransferPassword serverFingerPrint
     let dumpFile = System.IO.Path.GetFileNameWithoutExtension(dumpPath).ToUpper()
     let logFile = sprintf "%s_impdp.log" dumpFile
     let args = [ 
-        sprintf "'%s'" userForImport 
+        sprintf "'%s/%s'" userForImport userForImportPassword
         sprintf "schemas=%s" (schemas |> String.concat ",")
         sprintf "directory=%s" directory
         sprintf "dumpfile=%s.DMP" dumpFile
@@ -260,21 +285,30 @@ let importSchemas (logger:ILogger) userForImport (timeout:TimeSpan option) (dump
         |> String.concat ","
         |> sprintf "remap_schema=%s"
     ]
-    let! result = 
+    let! exitCode = 
         runProcessAsync 
-            (timeout |> Option.map (fun timeout -> (int)timeout.TotalMilliseconds)) 
+            timeout
             "impdp" 
             args
-    match result with
-    | Some 0 -> return Ok name
-    | Some exitCode -> return sprintf "error while importing dump %s in PDB %s : exit code %d" dumpPath name exitCode |> exn |> Error
-    | None -> return sprintf "timeout while importing dump %s in PDB %s" dumpPath name |> exn |> Error
+    return!
+        match exitCode with
+        | 0 -> Ok name
+        | exitCode -> sprintf "error while importing dump %s in PDB %s : exit code %d" dumpPath name exitCode |> exn |> Error
 }
 
-let createAndImportSchemas (logger:ILogger) connAsDBAIn userForImport (timeout:TimeSpan option) (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) deleteExisting (directory:string) =
+let createAndImportSchemas 
+    (logger:ILogger) 
+    connAsDBA connAsDBAIn 
+    (timeout:TimeSpan option)
+    userForImport userForImportPassword
+    host userForFileTransfer userForFileTransferPassword serverFingerPrint
+    (dumpPath:string) 
+    (schemas:string list) (targetSchemas:(string * string) list) 
+    deleteExisting 
+    (directory:string) =
     [
         createSchemasCompensable logger connAsDBAIn targetSchemas deleteExisting
-        notCompensableAsync (importSchemas logger userForImport timeout dumpPath schemas (targetSchemas |> List.map fst) directory)
+        notCompensableAsync (importSchemas logger connAsDBA timeout userForImport userForImportPassword host userForFileTransfer userForFileTransferPassword serverFingerPrint dumpPath schemas (targetSchemas |> List.map fst) directory)
     ] |> composeAsync logger
 
 let createAndGrantPDB (logger:ILogger) connAsDBA connAsDBAIn keepOpen adminUserName adminUserPassword dest = 
@@ -303,11 +337,32 @@ let closeAndExportPDB (logger:ILogger) connAsDBA manifest =
     ] |> composeAsync logger
 
 
-let createManifestFromDump (logger:ILogger) connAsDBA connAsDBAIn userForImport timeout adminUserName adminUserPassword dest (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) (manifest:string) = 
+let createManifestFromDump 
+    (logger:ILogger) 
+    connAsDBA connAsDBAIn 
+    timeout
+    userForImport userForImportPassword 
+    host userForFileTransfer userForFileTransferPassword serverFingerPrint
+    adminUserName adminUserPassword 
+    dest (dumpPath:string) 
+    (schemas:string list) (targetSchemas:(string * string) list) 
+    (directory:string) 
+    (manifest:string)
+    =
     [
         createPDBCompensable logger connAsDBA adminUserName adminUserPassword dest true |> convertComp
         notCompensableAsync (grantPDB logger connAsDBAIn) |> convertComp
-        notCompensableAsync (createAndImportSchemas logger connAsDBAIn userForImport timeout dumpPath schemas targetSchemas true directory)
+        notCompensableAsync 
+            (createAndImportSchemas 
+                logger 
+                connAsDBA connAsDBAIn 
+                timeout
+                userForImport userForImportPassword 
+                host userForFileTransfer userForFileTransferPassword serverFingerPrint 
+                dumpPath 
+                schemas targetSchemas 
+                true 
+                directory)
         notCompensableAsync (closePDB logger connAsDBA) |> convertComp
         notCompensableAsync (exportPDB logger connAsDBA manifest) |> convertComp
     ] |> composeAsync logger
@@ -578,31 +633,44 @@ let deleteWorkingCopiesOlderThan (logger:ILogger) connAsDBA (olderThan:System.Ti
     return! oldWorkingCopies |> AsyncValidation.traverseS (deleteSourcePDB logger connAsDBA >> AsyncValidation.ofAsyncResult)
 }
 
-type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager, connAsDBAIn : string -> Sql.ConnectionManager) = 
+type OracleAPI(loggerFactory : ILoggerFactory, instance) = 
 
-    member __.Logger = loggerFactory.CreateLogger("Oracle API")
+    let connAsDBA = connAsDBAFromInstance instance
+    let connAsDBAIn = connAsDBAInFromInstance instance
+    let logger = loggerFactory.CreateLogger(sprintf "Oracle API for instance %s" instance.Name)
 
     interface IOracleAPI with
-        member __.NewPDBFromDump userForImport timeout adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name =
-            createManifestFromDump __.Logger connAsDBA connAsDBAIn userForImport timeout adminUserName adminUserPassword dest dumpPath schemas targetSchemas directory manifest name
+        member __.NewPDBFromDump timeout name dumpPath schemas targetSchemas =
+            createManifestFromDump 
+                logger 
+                connAsDBA connAsDBAIn 
+                timeout 
+                instance.UserForImport instance.UserForImportPassword 
+                instance.Server instance.UserForFileTransfer instance.UserForFileTransferPassword instance.ServerFingerPrint
+                "dbadmin" "pass"
+                instance.MasterPDBManifestsPath dumpPath 
+                schemas targetSchemas 
+                instance.OracleDirectoryForDumps 
+                (Domain.MasterPDB.manifestFile name 1)
+                name
 
         member __.ClosePDB name =
-            closePDB __.Logger connAsDBA name
+            closePDB logger connAsDBA name
             |> toOraclePDBResultAsync
 
         member __.DeletePDB name =
-            deleteSourcePDB __.Logger connAsDBA name
+            deleteSourcePDB logger connAsDBA name
 
         member __.ExportPDB manifest name = 
-            closeAndExportPDB __.Logger connAsDBA manifest name
+            closeAndExportPDB logger connAsDBA manifest name
             |> toOraclePDBResultAsync
 
         member __.ImportPDB manifest dest name = 
-            importAndOpen __.Logger connAsDBA manifest dest name
+            importAndOpen logger connAsDBA (sprintf "%s/%s" instance.MasterPDBManifestsPath manifest) dest name
             |> toOraclePDBResultAsync
 
-        member __.SnapshotPDB from dest name = 
-            snapshotAndOpenPDB __.Logger connAsDBA from dest name
+        member __.SnapshotPDB from name = 
+            snapshotAndOpenPDB logger connAsDBA from instance.WorkingCopyDestPath name
             |> toOraclePDBResultAsync
 
         member __.PDBHasSnapshots name = 
@@ -618,7 +686,7 @@ type OracleAPI(loggerFactory : ILoggerFactory, connAsDBA : Sql.ConnectionManager
             |> toOraclePDBResultAsync
 
         member __.DeletePDBWithSnapshots (olderThan:System.TimeSpan) name =
-            deletePDBWithSnapshots __.Logger connAsDBA olderThan name
+            deletePDBWithSnapshots logger connAsDBA olderThan name
 
         member __.GetPDBNamesLike like = 
             getPDBNamesLike connAsDBA like

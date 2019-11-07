@@ -19,9 +19,22 @@ Serilog.Log.Logger <-
 
 let loggerFactory = (new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory)
 
-let conn = Sql.withNewConnection (openConn "fr1psl010716.misys.global.ad" 1521 "intcdb2" "sys" "syspwd8" true)
-let connIn pdb = Sql.withNewConnection (openConn "fr1psl010716.misys.global.ad" 1521 pdb "sys" "syspwd8" true)
-let oracleAPI : IOracleAPI = new OracleAPI (loggerFactory, conn, connIn) :> IOracleAPI
+let instance = 
+    Domain.OracleInstance.consOracleInstance
+        []
+        "intcdb2" "fr1psl010716.misys.global.ad" None
+        "sys" "syspwd8"
+        "" ""
+        "" "" ""
+        "/u01/app/oracle/oradata/SB_PDBs"
+        "/u01/app/oracle/oradata/SB_PDBs"
+        "/u01/app/oracle/oradata/SB_PDBs"
+        "/u01/app/oracle/oradata/SB_PDBs"
+        ""
+        true
+let oracleAPI : IOracleAPI = new OracleAPI (loggerFactory, instance) :> IOracleAPI
+let conn = connAsDBAFromInstance instance
+let connIn = connAsDBAInFromInstance instance
 
 let mapAsyncError (x:Async<Result<'a,OracleException>>) : Async<Result<'a,exn>> = AsyncResult.mapError (fun ex -> ex :> exn) x
 
@@ -38,7 +51,7 @@ let ``Import and delete PDB`` () =
         let! _ = if r.IsSome then Error (exn "PDB toto already exists") else Ok "good"
         let! r = getPDBOnServerLike conn "toto%" |> mapAsyncError
         let! _ = if List.length r <> 0 then Error (exn "PDB toto% already exists") else Ok "good"
-        let! _ = oracleAPI.ImportPDB "/u01/app/oracle/oradata/SB_PDBs/test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "toto"
+        let! _ = oracleAPI.ImportPDB "test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "toto"
         let! r = getPDBOnServer conn "toto" |> mapAsyncError
         let! _ = if r.IsNone then Error (exn "No PDB toto ??") else Ok "good"
         let! r = getPDBOnServerLike conn "toto%" |> mapAsyncError
@@ -56,11 +69,11 @@ let ``Import and delete PDB`` () =
 let ``Create a real working copy`` () =
     let commands1 = asyncResult {
         let stopWatch = System.Diagnostics.Stopwatch.StartNew()
-        let! _ = oracleAPI.ImportPDB "/u01/app/oracle/oradata/SB_PDBs/test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
+        let! _ = oracleAPI.ImportPDB "test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
         stopWatch.Stop()
         Log.Logger.Debug("Time to import : {time}", stopWatch.Elapsed.TotalSeconds)
         stopWatch.Restart()
-        let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot"
+        let! _ = oracleAPI.SnapshotPDB "source" "snapshot"
         stopWatch.Stop()
         Log.Logger.Debug("Time to snapshot : {time}", stopWatch.Elapsed.TotalSeconds)
         let! hasSnapshots = oracleAPI.PDBHasSnapshots "source"
@@ -87,8 +100,8 @@ let ``Create a real working copy`` () =
 [<Fact>]
 let ``Get snapshots older than 15 seconds`` () =
     let commands1 = asyncResult {
-        let! _ = oracleAPI.ImportPDB "/u01/app/oracle/oradata/SB_PDBs/test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
-        let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot"
+        let! _ = oracleAPI.ImportPDB "test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
+        let! _ = oracleAPI.SnapshotPDB "source" "snapshot"
         let! snapshots = oracleAPI.PDBSnapshots "source"
         let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot!") else Ok "# snapshots is 1, good"
         let seconds = 15
@@ -122,8 +135,8 @@ let ``Get snapshots older than 15 seconds`` () =
 let ``Delete snapshots older than 15 seconds`` () =
     let seconds = 15
     let res = asyncValidation {
-        let! _ = oracleAPI.ImportPDB "/u01/app/oracle/oradata/SB_PDBs/test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
-        let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot"
+        let! _ = oracleAPI.ImportPDB "test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
+        let! _ = oracleAPI.SnapshotPDB "source" "snapshot"
         let! snapshots = oracleAPI.PDBSnapshots "source"
         let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot!") else Ok "# snapshots is 1, good"
         Async.Sleep(1000*(seconds+5)) |> Async.RunSynchronously

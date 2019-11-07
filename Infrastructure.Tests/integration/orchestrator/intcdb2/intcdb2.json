@@ -2,9 +2,12 @@
   "name": "intcdb2",
   "server": "fr1psl010716.misys.global.ad",
   "dbaUser": "sys",
-  "dbaPassword": "syspwd8",
+  "dbaPassword": "Z9Yq5GTZSfmNtux/wQyBOg==",
   "userForImport": "system",
-  "userForImportPassword": "syspwd8",
+  "userForImportPassword": "Z9Yq5GTZSfmNtux/wQyBOg==",
+  "userForFileTransfer": "oracle",
+  "userForFileTransferPassword": "/aIDNuawYu+5TY4xAJtWJw==",
+  "serverFingerPrint": "QXvfh/0AQBTXgQGImP2BY6viECak0Ux1UeRRLBaZGOurt+syipgSqDXq6DdhNm4dSro43pMPv3wwb3bzxMcRh599DrPOgHH36nYaNusHVvS5iiNknDtsPPRToZXidCitfNqRin/fP2m3czRF+wX4i6pQNm59PTVlgsBP3lTUVpg=",
   "masterPDBManifestsPath": "/u01/app/oracle/oradata/MasterDBs",
   "masterPDBDestPath": "/u01/app/oracle/oradata/MasterDBs",
   "snapshotSourcePDBDestPath": "/u01/app/oracle/oradata/SB_PDBs/snaphot_sources",
@@ -14,5 +17,6 @@
     "OFI7210_FLA",
     "NORTHVIEW"
   ],
-  "_version": 1
+  "_version": 1,
+  "_iv": "X2Hr2UMkcrztSSipv86Epg=="
 }
