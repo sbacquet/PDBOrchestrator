@@ -22,7 +22,7 @@ let ``Save and load Oracle instance`` () =
             "xx"
             "xxx"
             "xxxx"
-            "xxxxx"
+            "xxxxx" ""
             true
 
     let repo' = repo.Put instance1

@@ -94,7 +94,7 @@ let instance1 =
         ""
         ""
         ""
-        ""
+        "" ""
         true
 
 let instance2 = 
@@ -108,7 +108,7 @@ let instance2 =
         ""
         ""
         ""
-        ""
+        "" ""
         false
 
 type FakeOracleAPI(existingPDBs : Set<string>) = 

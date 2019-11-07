@@ -115,7 +115,8 @@ let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword u
                 dbaUser dbaPassword 
                 userForImport userForImportPassword 
                 userForFileTransfer userForFileTransferPassword oracelServerFingerPrint 
-                "" "" "" "" "" // paths to edit manually in the instance JSON file
+                "" "" "" "" // paths to edit manually in the instance JSON file
+                "DP_DIR" "/u01/app/intcdb_dumps" 
                 snapshotCapable
         let repo = Infrastructure.OracleInstanceRepository.NewOracleInstanceRepository(".", instance) :> Application.Common.IOracleInstanceRepository
         repo.Put instance |> ignore

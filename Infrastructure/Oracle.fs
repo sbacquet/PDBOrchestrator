@@ -110,6 +110,17 @@ END;
 "
     |> execAsync name (connAsDBAIn name)
 
+let createDirectory (logger:ILogger) connAsDBAIn dirName dirPath grantUser (name:string) =
+    logger.LogDebug("Creating directory {dir} in PDB {pdb}", dirName, name)
+    sprintf 
+        @"
+BEGIN
+execute immediate 'CREATE DIRECTORY %s AS ''%s''';
+execute immediate 'GRANT READ, WRITE ON DIRECTORY %s TO %s';
+END;
+"
+        dirName dirPath dirName grantUser
+    |> execAsync name (connAsDBAIn name)
 
 let closePDB (logger:ILogger) connAsDBA (name:string) = async {
     logger.LogDebug("Closing PDB {pdb}", name)
@@ -164,16 +175,17 @@ let closePDBCompensable (logger:ILogger) connAsDBA readWrite =
         (closePDB logger connAsDBA)
         (openPDB logger connAsDBA readWrite) 
 
-let getOracleDirectoryPath connAsDBA (name:string) = async {
+let getOracleDirectoryPath connAsDBAIn pdb (dir:string) = async {
     try
-        let! (path:string option) = 
-            Sql.asyncExecScalar 
-                connAsDBA 
-                (sprintf "select directory_path from dba_directories where upper(directory_name)='%s'" (name.ToUpper()))
+        let! path = 
+            Sql.asyncExecReader 
+                (connAsDBAIn pdb) 
+                (sprintf "select directory_path from dba_directories where upper(directory_name)='%s'" (dir.ToUpper()))
                 [] 
-        return path |> Option.map Ok |> Option.defaultValue (sprintf "Oracle directory %s does not exist" name |> exn |> Error)
+        let path:string option = path |> Sql.mapFirst (Sql.asScalar)
+        return path |> Option.map Ok |> Option.defaultValue (sprintf "Oracle directory %s does not exist in PDB %s" dir pdb |> exn |> Error)
     with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
-        return sprintf "cannot get Oracle directory %s" name |> exn |> Error
+        return sprintf "cannot get Oracle directory %s in PDB %s" dir pdb |> exn |> Error
 }
 
 let schemaExists connAsDBAIn (schema:string) (name:string) = async {
@@ -257,7 +269,7 @@ let transferFile fromPath toPath user pass =
 
 let importSchemas 
     (logger:ILogger) 
-    connAsDBA 
+    connAsDBAIn 
     (timeout:TimeSpan option) 
     userForImport userForImportPassword 
     host userForFileTransfer userForFileTransferPassword serverFingerPrint 
@@ -267,24 +279,26 @@ let importSchemas
     name 
     = asyncResult {
 
-    let! dumpDest = getOracleDirectoryPath connAsDBA directory
-    let! _ = FileTransfer.uploadFileAsync timeout dumpPath host dumpDest userForFileTransfer userForFileTransferPassword serverFingerPrint
+    let! dumpDest = directory |> getOracleDirectoryPath connAsDBAIn name
+    let! _ = FileTransfer.uploadFileAsync timeout dumpPath host (sprintf "%s/" dumpDest) userForFileTransfer userForFileTransferPassword serverFingerPrint
     let dumpFile = System.IO.Path.GetFileNameWithoutExtension(dumpPath).ToUpper()
     let logFile = sprintf "%s_impdp.log" dumpFile
     let args = [ 
-        sprintf "'%s/%s'" userForImport userForImportPassword
+        sprintf "'%s/%s@%s/%s'" userForImport userForImportPassword host name
         sprintf "schemas=%s" (schemas |> String.concat ",")
         sprintf "directory=%s" directory
         sprintf "dumpfile=%s.DMP" dumpFile
         sprintf "logfile=%s" logFile
-        sprintf "transform=\"OID:N\""
+        "transform=\"OID:N\""
         "version=COMPATIBLE"
+        "exclude=user" // to ignore ORA-31684 because schema already exists
         targetSchemas 
         |> List.zip schemas
         |> List.map (fun (schema, targetSchema) -> sprintf "%s:%s" schema targetSchema)
         |> String.concat ","
         |> sprintf "remap_schema=%s"
     ]
+    logger.LogDebug("Running the following command : impdp {0:l}", args |> String.concat " ")
     let! exitCode = 
         runProcessAsync 
             timeout
@@ -298,7 +312,7 @@ let importSchemas
 
 let createAndImportSchemas 
     (logger:ILogger) 
-    connAsDBA connAsDBAIn 
+    connAsDBAIn 
     (timeout:TimeSpan option)
     userForImport userForImportPassword
     host userForFileTransfer userForFileTransferPassword serverFingerPrint
@@ -308,7 +322,7 @@ let createAndImportSchemas
     (directory:string) =
     [
         createSchemasCompensable logger connAsDBAIn targetSchemas deleteExisting
-        notCompensableAsync (importSchemas logger connAsDBA timeout userForImport userForImportPassword host userForFileTransfer userForFileTransferPassword serverFingerPrint dumpPath schemas (targetSchemas |> List.map fst) directory)
+        notCompensableAsync (importSchemas logger connAsDBAIn timeout userForImport userForImportPassword host userForFileTransfer userForFileTransferPassword serverFingerPrint dumpPath schemas (targetSchemas |> List.map fst) directory)
     ] |> composeAsync logger
 
 let createAndGrantPDB (logger:ILogger) connAsDBA connAsDBAIn keepOpen adminUserName adminUserPassword dest = 
@@ -347,15 +361,17 @@ let createManifestFromDump
     dest (dumpPath:string) 
     (schemas:string list) (targetSchemas:(string * string) list) 
     (directory:string) 
+    (directoryPath:string) 
     (manifest:string)
     =
     [
         createPDBCompensable logger connAsDBA adminUserName adminUserPassword dest true |> convertComp
         notCompensableAsync (grantPDB logger connAsDBAIn) |> convertComp
+        notCompensableAsync (createDirectory logger connAsDBAIn directory directoryPath userForImport) |> convertComp
         notCompensableAsync 
             (createAndImportSchemas 
                 logger 
-                connAsDBA connAsDBAIn 
+                connAsDBAIn 
                 timeout
                 userForImport userForImportPassword 
                 host userForFileTransfer userForFileTransferPassword serverFingerPrint 
@@ -639,8 +655,11 @@ type OracleAPI(loggerFactory : ILoggerFactory, instance) =
     let connAsDBAIn = connAsDBAInFromInstance instance
     let logger = loggerFactory.CreateLogger(sprintf "Oracle API for instance %s" instance.Name)
 
+    let getManifestPath = sprintf "%s/%s" instance.MasterPDBManifestsPath
+
     interface IOracleAPI with
         member __.NewPDBFromDump timeout name dumpPath schemas targetSchemas =
+            let manifest = Domain.MasterPDB.manifestFile name 1 |> getManifestPath
             createManifestFromDump 
                 logger 
                 connAsDBA connAsDBAIn 
@@ -651,7 +670,8 @@ type OracleAPI(loggerFactory : ILoggerFactory, instance) =
                 instance.MasterPDBManifestsPath dumpPath 
                 schemas targetSchemas 
                 instance.OracleDirectoryForDumps 
-                (Domain.MasterPDB.manifestFile name 1)
+                instance.OracleDirectoryPathForDumps 
+                manifest
                 name
 
         member __.ClosePDB name =
@@ -662,11 +682,11 @@ type OracleAPI(loggerFactory : ILoggerFactory, instance) =
             deleteSourcePDB logger connAsDBA name
 
         member __.ExportPDB manifest name = 
-            closeAndExportPDB logger connAsDBA manifest name
+            closeAndExportPDB logger connAsDBA (getManifestPath manifest) name
             |> toOraclePDBResultAsync
 
         member __.ImportPDB manifest dest name = 
-            importAndOpen logger connAsDBA (sprintf "%s/%s" instance.MasterPDBManifestsPath manifest) dest name
+            importAndOpen logger connAsDBA (getManifestPath manifest) dest name
             |> toOraclePDBResultAsync
 
         member __.SnapshotPDB from name = 

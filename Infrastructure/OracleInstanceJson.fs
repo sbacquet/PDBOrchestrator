@@ -50,6 +50,7 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
         let! snapshotSourcePDBDestPath = Decode.required Decode.string "snapshotSourcePDBDestPath" 
         let! workingCopyDestPath = Decode.required Decode.string "workingCopyDestPath" 
         let! oracleDirectoryForDumps = Decode.required Decode.string "oracleDirectoryForDumps" 
+        let! oracleDirectoryPathForDumps = Decode.required Decode.string "oracleDirectoryPathForDumps" 
         let! masterPDBs = Decode.required Decode.stringList "masterPDBs" 
         return 
             consOracleInstance 
@@ -68,7 +69,7 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
                 masterPDBDestPath 
                 workingCopyDestPath 
                 snapshotSourcePDBDestPath 
-                oracleDirectoryForDumps
+                oracleDirectoryForDumps oracleDirectoryPathForDumps
                 (snapshotCapable |> Option.defaultValue true)
     | _ -> 
         return! Decoder.alwaysFail (JsonFailure.SingleFailure (JsonFailureReason.InvalidJson (sprintf "unknown Oracle instance JSON version %d" version)))
@@ -91,6 +92,7 @@ let encodeOracleInstance (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:Or
     Encode.required Encode.string "snapshotSourcePDBDestPath" x.SnapshotSourcePDBDestPath >>
     Encode.required Encode.string "workingCopyDestPath" x.WorkingCopyDestPath >>
     Encode.required Encode.string "oracleDirectoryForDumps" x.OracleDirectoryForDumps >>
+    Encode.required Encode.string "oracleDirectoryPathForDumps" x.OracleDirectoryPathForDumps >>
     Encode.required Encode.stringList "masterPDBs" x.MasterPDBs >>
     Encode.required Encode.int "_version" cCurrentJsonVersion >>
     Encode.required Encode.bytes "_iv" algo.IV

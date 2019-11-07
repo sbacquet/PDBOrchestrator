@@ -32,7 +32,7 @@ let ``Serialize and deserialize Oracle instance`` () =
             "xx"
             "xxx"
             "xxxx"
-            "xxxxx"
+            "xxxxx" ""
             true
 
     let json = instance1 |> OracleInstanceJson.oracleInstanceToJson

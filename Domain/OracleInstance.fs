@@ -16,6 +16,7 @@ type OracleInstance = {
     SnapshotSourcePDBDestPath: string
     WorkingCopyDestPath: string
     OracleDirectoryForDumps: string
+    OracleDirectoryPathForDumps: string
     MasterPDBs: string list
     SnapshotCapable: bool
 }
@@ -28,7 +29,7 @@ let consOracleInstance
     userForImport userForImportPassword 
     userForFileTransfer userForFileTransferPassword serverFingerPrint 
     mPath mdPath wcPath ssdPath 
-    directory 
+    directory directoryPath
     snapshotCapable = 
     { 
         Name = name
@@ -46,6 +47,7 @@ let consOracleInstance
         WorkingCopyDestPath = wcPath
         SnapshotSourcePDBDestPath = ssdPath
         OracleDirectoryForDumps = directory
+        OracleDirectoryPathForDumps = directoryPath
         MasterPDBs = masterPDBs 
         SnapshotCapable = snapshotCapable
     }

@@ -14,6 +14,7 @@
   "snapshotSourcePDBDestPath": "/u01/app/oracle/oradata/SB_PDBs/snaphot_sources",
   "workingCopyDestPath": "/u01/app/oracle/oradata/SB_PDBs/snapshots",
   "oracleDirectoryForDumps": "DP_DIR",
+  "oracleDirectoryPathForDumps": "/u01/app/intcdb_dumps",
   "masterPDBs": [
     "NORTHVIEW"
   ],

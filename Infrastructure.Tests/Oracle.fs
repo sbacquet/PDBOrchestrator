@@ -24,13 +24,13 @@ let instance =
         []
         "intcdb2" "fr1psl010716.misys.global.ad" None
         "sys" "syspwd8"
-        "" ""
-        "" "" ""
+        "system" "syspwd8"
+        "oracle" "m15y5db" "ssh-ed25519 256 CcNFefba5mM1EW9RGjJrbxBmyyeVGIMHOCamkpgQJa8="
         "/u01/app/oracle/oradata/SB_PDBs"
         "/u01/app/oracle/oradata/SB_PDBs"
         "/u01/app/oracle/oradata/SB_PDBs"
         "/u01/app/oracle/oradata/SB_PDBs"
-        ""
+        "DP_DIR" "/u01/app/intcdb_dumps"
         true
 let oracleAPI : IOracleAPI = new OracleAPI (loggerFactory, instance) :> IOracleAPI
 let conn = connAsDBAFromInstance instance
@@ -41,8 +41,10 @@ let mapAsyncError (x:Async<Result<'a,OracleException>>) : Async<Result<'a,exn>> 
 [<Fact>]
 let ``Fail to get inexisting PDB from server`` () =
     let pdb = getPDBOnServer conn "xxxxxxxxxx" |> Async.RunSynchronously
-    pdb |> Result.mapError raise |> ignore
-    pdb |> Result.map (fun p -> Assert.True(p.IsNone)) |> ignore
+    match pdb with
+    | Ok None -> ()
+    | Ok (Some _) -> failwith "should not exist"
+    | Error error -> raise error
 
 [<Fact>]
 let ``Import and delete PDB`` () =
@@ -171,10 +173,17 @@ let ``Get PDB files folder`` () =
 
 [<Fact>]
 let ``Get Oracle directory`` () =
-    let path = Infrastructure.Oracle.getOracleDirectoryPath conn "DATA_PUMP_DIR" |> Async.RunSynchronously
+    let path = Infrastructure.Oracle.getOracleDirectoryPath connIn "orclpdb" "DATA_PUMP_DIR" |> Async.RunSynchronously
     match path with
-    | Ok path -> Assert.Equal("/u01/app/oracle/admin/INTCDB2/dpdump/", path)
+    | Ok path -> Assert.StartsWith("/u01/app/oracle/admin/INTCDB2/dpdump/", path)
     | Error error -> raise error
+
+[<Fact>]
+let ``Get wrong Oracle directory`` () =
+    let path = Infrastructure.Oracle.getOracleDirectoryPath connIn "orclpdb" "notexists" |> Async.RunSynchronously
+    match path with
+    | Ok _ -> failwith "should not exist"
+    | Error _ -> ()
 
 [<Fact>]
 let ``Create and delete PDB`` () =
@@ -186,3 +195,7 @@ let ``Create and delete PDB`` () =
     let res = tasks |> AsyncValidation.sequenceS |> Async.RunSynchronously
     res |> Validation.mapErrors (fun errors -> errors |> List.map (fun ex -> ex.Message) |> String.concat "\n" |> failwith) |> ignore
 
+[<Fact>]
+let ``Create PDB and import schema`` () =
+    let result = oracleAPI.NewPDBFromDump (TimeSpan.FromMinutes(3.) |> Some) "testsb" @"\\sophis\dumps\NEW_USER.DMP" [ "NEW_USER" ] [ "NEW_USER", "pass" ] |> Async.RunSynchronously
+    result |> Result.mapError raise |> ignore
