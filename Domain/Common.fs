@@ -51,7 +51,7 @@ module Validation =
     let mapErrors f vt =
         match vt with
         | Valid t -> Valid t
-        | Invalid errors -> Invalid (f errors)
+        | Invalid errors -> Invalid [ f errors ]
 
     let apply (vf: Validation<'T -> 'U, 'E>) (vt:Validation<'T, 'E>) : Validation<'U, 'E> =
         match vf, vt with

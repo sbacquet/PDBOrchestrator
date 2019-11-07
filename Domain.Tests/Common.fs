@@ -55,3 +55,36 @@ let ``AsyncValidation traverseS is sequential`` () =
         Assert.True( [ 10; 11; 20; 21; 30; 31 ] = steps)
     | Invalid errors -> failwith (System.String.Join("; ", errors))
 
+[<Fact>]
+let ``AsyncValidation sequenceM is monadic`` () =
+    let tasks = [
+        async { return Invalid [ "1" ] }
+        async { return Invalid [ "2" ] }
+    ]
+    let result = tasks |> AsyncValidation.sequenceM |> Async.RunSynchronously
+    match result with
+    | Invalid errors -> Assert.True([ "1" ] = errors)
+    | Valid _ -> failwith "valid!?"
+
+[<Fact>]
+let ``AsyncValidation sequenceS is not monadic`` () =
+    let tasks = [
+        async { return Invalid [ "1" ] }
+        async { return Valid "2" }
+        async { return Invalid [ "3" ] }
+    ]
+    let result = tasks |> AsyncValidation.sequenceS |> Async.RunSynchronously
+    match result with
+    | Invalid errors -> Assert.True([ "1"; "3" ] = errors)
+    | Valid _ -> failwith "valid!?"
+
+[<Fact>]
+let ``AsyncValidation sequenceP is not monadic`` () =
+    let tasks = [
+        async { return Invalid [ "1" ] }
+        async { return Invalid [ "2" ] }
+    ]
+    let result = tasks |> AsyncValidation.sequenceP |> Async.RunSynchronously
+    match result with
+    | Invalid errors -> Assert.True([ "1"; "2" ] = errors)
+    | Valid _ -> failwith "valid!?"

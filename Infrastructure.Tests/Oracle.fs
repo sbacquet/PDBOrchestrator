@@ -137,10 +137,15 @@ let ``Delete snapshots older than 15 seconds`` () =
         let! _ = if stillExists then Error (exn "Source not deleted ??!!") else Ok "Source deleted"
         return "Everything fine!"
     }
+    let tasks = [
+        res
+        oracleAPI.DeletePDB "source" |> Async.map (fun _ -> Validation.Valid "source") // delete source PDB in case the test failed
+    ]
 
-    res 
+    tasks 
+    |> AsyncValidation.sequenceS
     |> Async.RunSynchronously 
-    |> Validation.mapError raise 
+    |> Validation.mapErrors (fun errors -> errors |> List.map (fun ex -> ex.Message) |> String.concat "\n" |> failwith) 
     |> ignore
 
 [<Fact>]
@@ -161,12 +166,10 @@ let ``Get Oracle directory`` () =
 [<Fact>]
 let ``Create and delete PDB`` () =
     let logger = loggerFactory.CreateLogger()
-    let res = asyncValidation {
-        let! _ = Infrastructure.Oracle.createAndGrantPDB logger conn connIn false "dbadmin" "pass" "/u01/app/oracle/oradata/SB_PDBs" "testsb" |> Async.RunSynchronously
-        let! _ = Infrastructure.Oracle.deletePDB logger conn false "testsb"
-        return "Everything fine!"
-    }
-    res 
-    |> Async.RunSynchronously 
-    |> Validation.mapError raise 
-    |> ignore
+    let tasks = [
+        Infrastructure.Oracle.createAndGrantPDB logger conn connIn false "dbadmin" "pass" "/u01/app/oracle/oradata/SB_PDBs" "testsb" |> AsyncValidation.ofAsyncResult
+        Infrastructure.Oracle.deletePDB logger conn false "testsb" |> AsyncValidation.ofAsyncResult
+    ]
+    let res = tasks |> AsyncValidation.sequenceS |> Async.RunSynchronously
+    res |> Validation.mapErrors (fun errors -> errors |> List.map (fun ex -> ex.Message) |> String.concat "\n" |> failwith) |> ignore
+
