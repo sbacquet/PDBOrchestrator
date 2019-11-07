@@ -150,3 +150,23 @@ let ``Get PDB files folder`` () =
     | Ok (Some folder) -> Assert.Equal("/u01/app/oracle/oradata/INTCDB2/ORCLPDB", folder)
     | Ok None -> failwith "no PDB file found with name=ORCLPDB"
     | Error e -> failwithf "Oracle error : %s" e.Message
+
+[<Fact>]
+let ``Get Oracle directory`` () =
+    let path = Infrastructure.Oracle.getOracleDirectoryPath conn "DATA_PUMP_DIR" |> Async.RunSynchronously
+    match path with
+    | Ok path -> Assert.Equal("/u01/app/oracle/admin/INTCDB2/dpdump/", path)
+    | Error error -> raise error
+
+[<Fact>]
+let ``Create and delete PDB`` () =
+    let logger = loggerFactory.CreateLogger()
+    let res = asyncValidation {
+        let! _ = Infrastructure.Oracle.createAndGrantPDB logger conn connIn false "dbadmin" "pass" "/u01/app/oracle/oradata/SB_PDBs" "testsb" |> Async.RunSynchronously
+        let! _ = Infrastructure.Oracle.deletePDB logger conn false "testsb"
+        return "Everything fine!"
+    }
+    res 
+    |> Async.RunSynchronously 
+    |> Validation.mapError raise 
+    |> ignore

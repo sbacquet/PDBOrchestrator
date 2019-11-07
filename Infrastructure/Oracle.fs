@@ -176,30 +176,56 @@ let getOracleDirectoryPath connAsDBA (name:string) = async {
         return sprintf "cannot get Oracle directory %s" name |> exn |> Error
 }
 
-let createSchema (logger:ILogger) connAsDBAIn (schema:string) (pass:string) (name:string) =
-    logger.LogDebug("Creating schema {schema}", schema)
-    sprintf 
-        @"
-BEGIN
-execute immediate 'create user %s identified by %s default tablespace USERS temporary tablespace TEMP';
-execute immediate 'grant CONNECT, CREATE SESSION, CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE DATABASE LINK, ALTER SESSION, CREATE PROCEDURE, CREATE TRIGGER, CREATE TYPE, CREATE SYNONYM, RESOURCE, CREATE INDEXTYPE, CREATE MATERIALIZED VIEW, MANAGE SCHEDULER to %s';
-execute immediate 'alter user %s quota unlimited on USERS';
-END;
-"
-        schema pass schema schema
-    |> execAsync name (connAsDBAIn name)
-
-let createSchemas (logger:ILogger) connAsDBAIn (schemas:(string*string) list) name = async {
-    let! result = schemas |> AsyncValidation.traverseS (fun (schema, pass) -> createSchema logger connAsDBAIn schema pass name |> AsyncValidation.ofAsyncResult)
-    match result with
-    | Valid _ -> return Ok name
-    | Invalid errors -> return errors |> List.map (fun ex -> ex.Message) |> String.concat "; " |> exn |> Error
+let schemaExists connAsDBAIn (schema:string) (name:string) = async {
+    try
+        let! result = 
+            Sql.asyncExecScalar 
+                (connAsDBAIn name)
+                (sprintf "select count(*) from dba_users where upper(username)='%s'" (schema.ToUpper()))
+                [] 
+        return result |> Option.get <> 0M |> Ok
+    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+        return Error ex
 }
 
 let deleteSchema (logger:ILogger) connAsDBAIn (schema:string) name =
     logger.LogDebug("Creating schema {schema}", schema)
     sprintf "drop user %s cascade" schema |> execAsync name (connAsDBAIn name)
     
+let createSchema (logger:ILogger) connAsDBAIn (schema:string) (pass:string) deleteExisting (name:string) = asyncResult {
+    logger.LogDebug("Creating schema {schema}", schema)
+    let! _ = 
+        if deleteExisting then
+            asyncResult {
+                let! exists = schemaExists connAsDBAIn schema name
+                return! 
+                    if exists then
+                        deleteSchema logger connAsDBAIn schema name
+                    else
+                        AsyncResult.retn name
+            }
+        else
+            AsyncResult.retn name
+    return!
+        sprintf 
+            @"
+    BEGIN
+    execute immediate 'create user %s identified by %s default tablespace USERS temporary tablespace TEMP';
+    execute immediate 'grant CONNECT, CREATE SESSION, CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE DATABASE LINK, ALTER SESSION, CREATE PROCEDURE, CREATE TRIGGER, CREATE TYPE, CREATE SYNONYM, RESOURCE, CREATE INDEXTYPE, CREATE MATERIALIZED VIEW, MANAGE SCHEDULER to %s';
+    execute immediate 'alter user %s quota unlimited on USERS';
+    END;
+    "
+            schema pass schema schema
+        |> execAsync name (connAsDBAIn name)
+}
+
+let createSchemas (logger:ILogger) connAsDBAIn (schemas:(string*string) list) deleteExisting name = async {
+    let! result = schemas |> AsyncValidation.traverseS (fun (schema, pass) -> createSchema logger connAsDBAIn schema pass deleteExisting name |> AsyncValidation.ofAsyncResult)
+    match result with
+    | Valid _ -> return Ok name
+    | Invalid errors -> return errors |> List.map (fun ex -> ex.Message) |> String.concat "; " |> exn |> Error
+}
+
 let deleteSchemas (logger:ILogger) connAsDBAIn (schemas:string list) name = async {
     let! result = schemas |> AsyncValidation.traverseS (fun schema -> deleteSchema logger connAsDBAIn schema name |> AsyncValidation.ofAsyncResult)
     match result with
@@ -207,14 +233,14 @@ let deleteSchemas (logger:ILogger) connAsDBAIn (schemas:string list) name = asyn
     | Invalid errors -> return errors |> List.map (fun ex -> ex.Message) |> String.concat "; " |> exn |> Error
 }
 
-let createSchemaCompensable (logger:ILogger) connAsDBAIn (schema:string) (pass:string) =
+let createSchemaCompensable (logger:ILogger) connAsDBAIn (schema:string) (pass:string) deleteExisting =
     compensableAsync
-        (createSchema logger connAsDBAIn schema pass)
+        (createSchema logger connAsDBAIn schema pass deleteExisting)
         (deleteSchema logger connAsDBAIn schema)
 
-let createSchemasCompensable (logger:ILogger) connAsDBAIn (schemas:(string*string) list) =
+let createSchemasCompensable (logger:ILogger) connAsDBAIn (schemas:(string*string) list) deleteExisting =
     compensableAsync
-        (createSchemas logger connAsDBAIn schemas)
+        (createSchemas logger connAsDBAIn schemas deleteExisting)
         (deleteSchemas logger connAsDBAIn (schemas |> List.map fst))
 
 let importSchemas (logger:ILogger) userForImport (timeout:TimeSpan option) (dumpPath:string) (schemas:string list) (targetSchemas:string list) (directory:string) name = async {
@@ -245,9 +271,9 @@ let importSchemas (logger:ILogger) userForImport (timeout:TimeSpan option) (dump
     | None -> return sprintf "timeout while importing dump %s in PDB %s" dumpPath name |> exn |> Error
 }
 
-let createAndImportSchemas (logger:ILogger) connAsDBAIn userForImport (timeout:TimeSpan option) (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) (directory:string) =
+let createAndImportSchemas (logger:ILogger) connAsDBAIn userForImport (timeout:TimeSpan option) (dumpPath:string) (schemas:string list) (targetSchemas:(string * string) list) deleteExisting (directory:string) =
     [
-        createSchemasCompensable logger connAsDBAIn targetSchemas
+        createSchemasCompensable logger connAsDBAIn targetSchemas deleteExisting
         notCompensableAsync (importSchemas logger userForImport timeout dumpPath schemas (targetSchemas |> List.map fst) directory)
     ] |> composeAsync logger
 
@@ -281,7 +307,7 @@ let createManifestFromDump (logger:ILogger) connAsDBA connAsDBAIn userForImport 
     [
         createPDBCompensable logger connAsDBA adminUserName adminUserPassword dest true |> convertComp
         notCompensableAsync (grantPDB logger connAsDBAIn) |> convertComp
-        notCompensableAsync (createAndImportSchemas logger connAsDBAIn userForImport timeout dumpPath schemas targetSchemas directory)
+        notCompensableAsync (createAndImportSchemas logger connAsDBAIn userForImport timeout dumpPath schemas targetSchemas true directory)
         notCompensableAsync (closePDB logger connAsDBA) |> convertComp
         notCompensableAsync (exportPDB logger connAsDBA manifest) |> convertComp
     ] |> composeAsync logger
