@@ -13,6 +13,24 @@ module Result =
         member __.Bind(m, f) = Result.bind f m
         member __.Bind((m, error): (Option<'T> * 'E), f) = m |> ofOption error |> Result.bind f
         member __.Zero() = None
+        member __.Delay(f) = f
+        member __.Run(f) = f()
+        member __.TryWith(body, handler) =
+            try 
+                __.ReturnFrom(body())
+            with 
+            | e -> handler e
+        member __.TryFinally(body, compensation) =
+            try 
+                __.ReturnFrom(body())
+            finally 
+                compensation() 
+        member __.Using(disposable:#System.IDisposable, body) =
+            let body' = fun () -> body disposable
+            __.TryFinally(body', fun () -> 
+                match disposable with 
+                    | null -> () 
+                    | disp -> disp.Dispose())
 
     let apply f x = f |> Result.bind (fun g -> x |> Result.map (fun y -> g y))
 
@@ -24,9 +42,14 @@ module Result =
 
     let sequence x = traverse id x
 
+let result = new Result.ResultBuilder()
+
+module Exceptional =
     type Exceptional<'R> = Result<'R, exn>
 
-let result = new Result.ResultBuilder()
+    let ofException ex : Exceptional<_> = ex |> Error
+
+    let ofString message : Exceptional<_> = message |> exn |> ofException
 
 module Validation =
     type Validation<'T, 'E> =
@@ -178,6 +201,23 @@ module AsyncResult =
         member __.Bind(m:Result<'a,'e>, f:('a -> Async<Result<'b,'e>>)) : Async<Result<'b,'e>> = bind f (async { return m })
         member __.Bind(_:unit, f:(unit -> Async<Result<'b,'e>>)) : Async<Result<'b,'e>> = bind f (async { return Ok () })
         member __.Zero() = async { return Ok () }
+        member __.Delay(f) = f
+        member __.Run(f) = f()
+        member __.TryWith(body : unit -> Async<Result<'a, 'b>>, handler: exn -> Async<Result<'a, 'b>>) : Async<Result<'a, 'b>> =
+            try 
+                __.ReturnFrom(body())
+            with 
+            | e -> handler e
+        member __.TryFinally(body : unit -> Async<Result<'a, 'b>>, compensation: unit -> unit) : Async<Result<'a, 'b>> =
+            try 
+                __.ReturnFrom(body())
+            finally compensation() 
+        member __.Using(disposable:#System.IDisposable, body:#System.IDisposable -> Async<Result<_, _>>) =
+            let body' = fun () -> body disposable
+            __.TryFinally(body', fun () -> 
+                match disposable with 
+                    | null -> () 
+                    | disp -> disp.Dispose())
 
 let asyncResult = new AsyncResult.AsyncResultBuilder()
 
@@ -238,6 +278,24 @@ module AsyncValidation =
         member __.Bind(m:Result<'a,'e>, f:('a -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f (async { return m |> Validation.ofResult })
         member __.Bind(_:unit, f:(unit -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f (async { return Validation.retn () })
         member __.Zero() = async { return Valid () }
+        member __.Delay(f) = f
+        member __.Run(f) = f()
+        member __.TryWith(body : unit -> Async<Validation<'a, 'b>>, handler: exn -> Async<Validation<'a, 'b>>) : Async<Validation<'a, 'b>> =
+            try 
+                __.ReturnFrom(body())
+            with 
+            | e -> handler e
+        member __.TryFinally(body : unit -> Async<Validation<'a, 'b>>, compensation: unit -> unit) : Async<Validation<'a, 'b>> =
+            try 
+                __.ReturnFrom(body())
+            finally 
+                compensation() 
+        member __.Using(disposable:#System.IDisposable, body:#System.IDisposable -> Async<Validation<_, _>>) =
+            let body' = fun () -> body disposable
+            __.TryFinally(body', fun () -> 
+                match disposable with 
+                    | null -> () 
+                    | disp -> disp.Dispose())
 
 let asyncValidation = new AsyncValidation.AsyncValidationBuilder()
 

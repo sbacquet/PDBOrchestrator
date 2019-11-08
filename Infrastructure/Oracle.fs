@@ -267,6 +267,12 @@ let transferFile fromPath toPath user pass =
     ]
     ()
 
+let getFileNameWithoutExtension (path:string) =
+    try
+         System.IO.Path.GetFileNameWithoutExtension(path) |> Ok
+    with
+    | ex -> Error ex
+
 let importSchemas 
     (logger:ILogger) 
     connAsDBAIn 
@@ -276,38 +282,44 @@ let importSchemas
     (dumpPath:string) 
     (schemas:string list) (targetSchemas:string list) 
     (directory:string) 
+    (tolerantToErrors:bool)
     name 
     = asyncResult {
 
-    let! dumpDest = directory |> getOracleDirectoryPath connAsDBAIn name
-    let! _ = FileTransfer.uploadFileAsync timeout dumpPath host (sprintf "%s/" dumpDest) userForFileTransfer userForFileTransferPassword serverFingerPrint
-    let dumpFile = System.IO.Path.GetFileNameWithoutExtension(dumpPath).ToUpper()
-    let logFile = sprintf "%s_impdp.log" dumpFile
-    let args = [ 
-        sprintf "'%s/%s@%s/%s'" userForImport userForImportPassword host name
-        sprintf "schemas=%s" (schemas |> String.concat ",")
-        sprintf "directory=%s" directory
-        sprintf "dumpfile=%s.DMP" dumpFile
-        sprintf "logfile=%s" logFile
-        "transform=\"OID:N\""
-        "version=COMPATIBLE"
-        "exclude=user" // to ignore ORA-31684 because schema already exists
-        targetSchemas 
-        |> List.zip schemas
-        |> List.map (fun (schema, targetSchema) -> sprintf "%s:%s" schema targetSchema)
-        |> String.concat ","
-        |> sprintf "remap_schema=%s"
-    ]
-    logger.LogDebug("Running the following command : impdp {0:l}", args |> String.concat " ")
-    let! exitCode = 
-        runProcessAsync 
-            timeout
-            "impdp" 
-            args
-    return!
-        match exitCode with
-        | 0 -> Ok name
-        | exitCode -> sprintf "error while importing dump %s in PDB %s : exit code %d" dumpPath name exitCode |> exn |> Error
+    try
+        let! dumpDest = directory |> getOracleDirectoryPath connAsDBAIn name
+        use! session = FileTransfer.newSession timeout host userForFileTransfer userForFileTransferPassword serverFingerPrint
+        let! _ = FileTransfer.uploadFile session dumpPath (sprintf "%s/" dumpDest)
+        let! dumpFile = getFileNameWithoutExtension(dumpPath) |> Result.map (fun fileName -> fileName.ToUpper())
+        let logFile = sprintf "%s_impdp.log" dumpFile
+        let args = [ 
+            sprintf "'%s/%s@%s/%s'" userForImport userForImportPassword host name
+            sprintf "schemas=%s" (schemas |> String.concat ",")
+            sprintf "directory=%s" directory
+            sprintf "dumpfile=%s.DMP" dumpFile
+            sprintf "logfile=%s" logFile
+            "transform=\"OID:N\""
+            "version=COMPATIBLE"
+            "exclude=user" // to ignore ORA-31684 because schema already exists
+            targetSchemas 
+            |> List.zip schemas
+            |> List.map (fun (schema, targetSchema) -> sprintf "%s:%s" schema targetSchema)
+            |> String.concat ","
+            |> sprintf "remap_schema=%s"
+        ]
+        logger.LogDebug("Running the following command : impdp {0:l}", args |> String.concat " ")
+        let! exitCode = 
+            runProcessAsync 
+                timeout
+                "impdp" 
+                args
+        return!
+            match exitCode with
+            | 0 -> Ok name
+            | 5 -> if tolerantToErrors then Ok name else sprintf "dump %s imported with errors" dumpPath |> Exceptional.ofString
+            | exitCode -> sprintf "error while importing dump %s in PDB %s : exit code %d" dumpPath name exitCode |> Exceptional.ofString
+    with
+    | ex -> return! Error ex
 }
 
 let createAndImportSchemas 
@@ -319,10 +331,12 @@ let createAndImportSchemas
     (dumpPath:string) 
     (schemas:string list) (targetSchemas:(string * string) list) 
     deleteExisting 
-    (directory:string) =
+    (directory:string)
+    (tolerantToImportErrors:bool)
+    =
     [
         createSchemasCompensable logger connAsDBAIn targetSchemas deleteExisting
-        notCompensableAsync (importSchemas logger connAsDBAIn timeout userForImport userForImportPassword host userForFileTransfer userForFileTransferPassword serverFingerPrint dumpPath schemas (targetSchemas |> List.map fst) directory)
+        notCompensableAsync (importSchemas logger connAsDBAIn timeout userForImport userForImportPassword host userForFileTransfer userForFileTransferPassword serverFingerPrint dumpPath schemas (targetSchemas |> List.map fst) directory tolerantToImportErrors)
     ] |> composeAsync logger
 
 let createAndGrantPDB (logger:ILogger) connAsDBA connAsDBAIn keepOpen adminUserName adminUserPassword dest = 
@@ -363,6 +377,7 @@ let createManifestFromDump
     (directory:string) 
     (directoryPath:string) 
     (manifest:string)
+    (tolerantToImportErrors:bool)
     =
     [
         createPDBCompensable logger connAsDBA adminUserName adminUserPassword dest true |> convertComp
@@ -378,7 +393,8 @@ let createManifestFromDump
                 dumpPath 
                 schemas targetSchemas 
                 true 
-                directory)
+                directory
+                tolerantToImportErrors)
         notCompensableAsync (closePDB logger connAsDBA) |> convertComp
         notCompensableAsync (exportPDB logger connAsDBA manifest) |> convertComp
     ] |> composeAsync logger
@@ -672,6 +688,7 @@ type OracleAPI(loggerFactory : ILoggerFactory, instance) =
                 instance.OracleDirectoryForDumps 
                 instance.OracleDirectoryPathForDumps 
                 manifest
+                true // tolerant to import errors
                 name
 
         member __.ClosePDB name =

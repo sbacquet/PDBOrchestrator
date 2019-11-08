@@ -3,6 +3,7 @@ module Infrastructure.Tests.Oracle
 open System
 open Xunit
 
+open Infrastructure
 open Infrastructure.Oracle
 open Microsoft.Extensions.Logging.Abstractions
 open Application.Oracle
@@ -197,5 +198,10 @@ let ``Create and delete PDB`` () =
 
 [<Fact>]
 let ``Create PDB and import schema`` () =
-    let result = oracleAPI.NewPDBFromDump (TimeSpan.FromMinutes(3.) |> Some) "testsb" @"\\sophis\dumps\NEW_USER.DMP" [ "NEW_USER" ] [ "NEW_USER", "pass" ] |> Async.RunSynchronously
-    result |> Result.mapError raise |> ignore
+    let res = oracleAPI.NewPDBFromDump (TimeSpan.FromMinutes(3.) |> Some) "testsb" @"\\sophis\dumps\NEW_USER.DMP" [ "NEW_USER" ] [ "NEW_USER", "pass" ] |> Async.RunSynchronously
+    let deletionResult = result {
+        use! session = FileTransfer.newSessionFromInstance (System.TimeSpan.FromMinutes(1.) |> Some) instance
+        return! sprintf "%s/TESTSB_V001.XML" instance.MasterPDBManifestsPath |> FileTransfer.deleteRemoteFile session
+    }
+    res |> Result.mapError raise |> ignore
+    deletionResult |> Result.mapError raise |> ignore
