@@ -2,3 +2,4 @@ xunit
 xunit.runner.visualstudio
 FSharp.Core
 Serilog.Sinks.Trace
+WinSCP

@@ -74,3 +74,13 @@ let deleteRemoteFile (session:Session) filePath =
 let deleteRemoteFileAsync (session:Session) filePath = async {
     return deleteRemoteFile session filePath
 }
+
+let fileExists (session:Session) filePath =
+    try
+        session.FileExists filePath |> Ok
+    with 
+    | ex -> Error ex
+
+let fileExistsAsync (session:Session) filePath = async {
+    return fileExists session filePath
+}
