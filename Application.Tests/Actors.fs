@@ -75,7 +75,7 @@ let test, (loggerFactory : ILoggerFactory) =
         Akkling.TestKit.testDefault,
         (new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory() :> ILoggerFactory)
 #else
-let quickTimeout = TimeSpan.FromMilliseconds(100.) |> Some
+let quickTimeout = TimeSpan.FromSeconds(1.) |> Some
 let test = Akkling.TestKit.test (ConfigurationFactory.ParseString @"akka { actor { ask-timeout = 1s } }")
 let (loggerFactory : ILoggerFactory) = new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory() :> ILoggerFactory
 #endif
