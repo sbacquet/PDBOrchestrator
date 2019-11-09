@@ -5,6 +5,7 @@ open Xunit
 
 open Infrastructure
 open Infrastructure.Oracle
+open Infrastructure.OracleInstanceAPI
 open Microsoft.Extensions.Logging.Abstractions
 open Application.Oracle
 open Domain.Common
@@ -33,7 +34,7 @@ let instance =
         "/u01/app/oracle/oradata/SB_PDBs"
         "DP_DIR" "/u01/app/intcdb_dumps"
         true
-let oracleAPI : IOracleAPI = new OracleAPI (loggerFactory, instance) :> IOracleAPI
+let oracleAPI : IOracleAPI = new OracleInstanceAPI (loggerFactory, instance) :> IOracleAPI
 let conn = connAsDBAFromInstance instance
 let connIn = connAsDBAInFromInstance instance
 

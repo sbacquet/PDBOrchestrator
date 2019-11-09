@@ -27,6 +27,7 @@
     <Compile Include="OrchestratorRepository.fs" />
     <Compile Include="CompensableAction.fs" />
     <Compile Include="Oracle.fs" />
+    <Compile Include="OracleInstanceAPI.fs" />
     <Compile Include="HttpHandlers.fs" />
     <Compile Include="Config.fs" />
     <Compile Include="Migration.fs" />
