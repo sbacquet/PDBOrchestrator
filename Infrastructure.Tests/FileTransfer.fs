@@ -3,7 +3,6 @@
 open Xunit
 open Domain.Common
 open Infrastructure
-open WinSCP
 
 [<Fact>]
 let ``Upload and download file`` () =
@@ -26,7 +25,7 @@ let ``Upload and download file`` () =
                 FileTransfer.downloadFile 
                     session
                     "/u01/app/oracle/admin/INTCDB2/dpdump/explorer.exe"
-                    @".\" 
+                    (sprintf @"%s\" (System.IO.Directory.GetCurrentDirectory()))
             Assert.True(System.IO.File.Exists("explorer.exe"))
             System.IO.File.Delete("explorer.exe")
             return Ok ""
