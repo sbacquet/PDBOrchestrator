@@ -24,14 +24,14 @@ type CreateMasterPDBParams = {
     Comment: string
 }
 
-let consCreateMasterPDBParams name dump schemas targetSchemas user date comment = 
+let consCreateMasterPDBParams name dump schemas targetSchemas user (date:System.DateTime) comment = 
     { 
         Name=name
         Dump=dump
         Schemas=schemas
         TargetSchemas=targetSchemas
         User=user
-        Date=date
+        Date=date.ToUniversalTime()
         Comment=comment 
     }
 

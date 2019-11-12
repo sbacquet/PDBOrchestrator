@@ -13,7 +13,6 @@ let newSession timeout toHost user pass hostKey =
         sessionParams.SshHostKeyFingerprint <- hostKey
         if timeout |> Option.isSome then sessionParams.Timeout <- timeout.Value
         let session = new Session()
-        //session.ExecutablePath <- sprintf "%s\WinSCP.exe" (System.IO.Directory.GetCurrentDirectory())
         session.Open(sessionParams)
         Ok session
     with 

@@ -9,6 +9,7 @@ open Chiron.Formatting
 open Microsoft.Net.Http.Headers
 open Infrastructure.DTOJSON
 open Application.DTO
+open Chiron
 
 let json jsonStr : HttpHandler =
     fun _ (ctx : HttpContext) ->
@@ -19,13 +20,24 @@ let json jsonStr : HttpHandler =
 
 let withUser f : HttpHandler =
     fun next (ctx:HttpContext) -> task {
-        let user = 
+        let userNameMaybe = 
             if (ctx.User.Identity.Name = null) then None else Some ctx.User.Identity.Name
             |> Option.orElse (ctx.TryGetRequestHeader "user") // TODO: remove this line when authentication implemented
-        match user with
-        | Some user -> return! f user next ctx
+        let isAdmin = ctx.TryGetRequestHeader "admin" |> Option.contains "true" // TODO
+        match userNameMaybe with
+        | Some userName -> 
+            let user:Application.UserRights.User = { Name = userName; Roles = if isAdmin then [ "admin" ] else [] }
+            return! f user next ctx
         | None -> return! RequestErrors.badRequest (text "User cannot be determined.") next ctx
     }
+
+let withAdmin f : HttpHandler =
+    let ff user next ctx =
+        if UserRights.isAdmin user then
+            f user next ctx
+        else
+            RequestErrors.forbidden (text "User must be admin.") next ctx
+    withUser ff
 
 let getAllInstances apiCtx next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx
@@ -96,13 +108,13 @@ let createWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, na
         if not parsedOk then 
             return! RequestErrors.badRequest (text "When provided, the \"force\" query parameter must be \"true\" or \"false\".") next ctx
         else
-            let! requestValidation = API.createWorkingCopy apiCtx user instance masterPDB version name force
+            let! requestValidation = API.createWorkingCopy apiCtx user.Name instance masterPDB version name force
             return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
 let deleteWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, name:string) =
     withUser (fun user next ctx -> task {
-        let! requestValidation = API.deleteWorkingCopy apiCtx user instance masterPDB version name
+        let! requestValidation = API.deleteWorkingCopy apiCtx user.Name instance masterPDB version name
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
@@ -181,7 +193,7 @@ let prepareMasterPDBForModification apiCtx pdb = withUser (fun user next ctx -> 
     | Some version -> 
         let (ok, version) = System.Int32.TryParse version
         if ok then
-            let! requestValidation = API.prepareMasterPDBForModification apiCtx user pdb version
+            let! requestValidation = API.prepareMasterPDBForModification apiCtx user.Name pdb version
             return! returnRequest apiCtx.Endpoint requestValidation next ctx
         else 
             return! RequestErrors.badRequest (text "The current version must an integer.") next ctx
@@ -192,14 +204,14 @@ let prepareMasterPDBForModification apiCtx pdb = withUser (fun user next ctx -> 
 let commitMasterPDB apiCtx pdb = withUser (fun user next ctx -> task {
     let! comment = ctx.ReadBodyFromRequestAsync()
     if (comment <> "") then
-        let! requestValidation = API.commitMasterPDB apiCtx user pdb comment
+        let! requestValidation = API.commitMasterPDB apiCtx user.Name pdb comment
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     else
         return! RequestErrors.badRequest (text "A comment must be provided.") next ctx
 })
 
 let rollbackMasterPDB apiCtx pdb = withUser (fun user next ctx -> task {
-    let! requestValidation = API.rollbackMasterPDB apiCtx user pdb
+    let! requestValidation = API.rollbackMasterPDB apiCtx user.Name pdb
     return! returnRequest apiCtx.Endpoint requestValidation next ctx
 })
 
@@ -225,3 +237,51 @@ let switchPrimaryOracleInstanceWith apiCtx next (ctx:HttpContext) = task {
         | Ok newInstance -> return! (text <| sprintf "New primary Oracle instance is now %s" newInstance) next ctx
         | Error (error, currentInstance) -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot switch primary Oracle instance to %s : %s. The primary instance is unchanged (%s)." instance error currentInstance) next ctx
 }
+
+open Application.OracleInstanceActor
+
+let decodeCreateMasterPDBParams user = jsonDecoder {
+    let! name = Decode.required Decode.string "Name" 
+    let! dump = Decode.required Decode.string "Dump" 
+    let! schemas = Decode.required (Decode.listWith Decode.string) "Schemas"
+    let! targetSchemas = Decode.required (Decode.listWith (Decode.tuple3With Decode.string Decode.string Decode.string)) "TargetSchemas"
+    let! date = Decode.optional Decode.dateTime "Date"
+    let! comment = Decode.required Decode.string "Comment"
+    return 
+        consCreateMasterPDBParams 
+            name 
+            dump
+            schemas
+            targetSchemas
+            user
+            (date |> Option.defaultValue System.DateTime.Now)
+            comment
+}
+
+let encodeCreateMasterPDBParams = Encode.buildWith (fun (x:CreateMasterPDBParams) ->
+    Encode.required Encode.string "Name" x.Name >>
+    Encode.required Encode.string "Dump" x.Dump>>
+    Encode.required (Encode.listWith Encode.string) "Schemas" x.Schemas >>
+    Encode.required (Encode.listWith (Encode.tuple3 Encode.string Encode.string Encode.string)) "TargetSchemas" x.TargetSchemas >>
+    Encode.required Encode.string "User" x.User >>
+    Encode.required Encode.dateTime "Date" x.Date >>
+    Encode.required Encode.string "Comment" x.Comment
+)
+
+let jsonToCreateMasterPDBParams user json = 
+    json |> Json.deserializeWith (decodeCreateMasterPDBParams user)
+
+let createNewPDB apiCtx = withAdmin (fun user next ctx -> task {
+    let! body = ctx.ReadBodyFromRequestAsync()
+    let pars = jsonToCreateMasterPDBParams user.Name body
+    match pars with
+    | JPass result ->
+        let! requestValidation = API.createMasterPDB apiCtx result
+        return! returnRequest apiCtx.Endpoint requestValidation next ctx
+    | JFail error -> 
+        return! RequestErrors.badRequest (error |> JsonFailure.summarize |> sprintf "JSON in body is not well-formed :\n%s" |> text) next ctx
+})
+
+let createMasterPDBParamsToJson pars = 
+    pars |> Json.serializeWith encodeCreateMasterPDBParams JsonFormattingOptions.Pretty 
+

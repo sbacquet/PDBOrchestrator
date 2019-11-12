@@ -10,8 +10,7 @@ let normalUser name = { Name = name; Roles = [] }
 let adminUser = { Name = "admin"; Roles = [ "admin" ] }
 
 let isAdmin (user:User) = 
-    user.Name = "admin" // TODO
-    //user.Roles |> List.contains "admin"
+    user.Roles |> List.contains "admin" // TODO ?
 
 let canLockPDB (_:Domain.MasterPDB.MasterPDB) _ = true
 

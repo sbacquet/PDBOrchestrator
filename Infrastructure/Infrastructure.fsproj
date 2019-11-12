@@ -29,9 +29,9 @@
     <Compile Include="Oracle.fs" />
     <Compile Include="OracleInstanceAPI.fs" />
     <Compile Include="HttpHandlers.fs" />
-    <Compile Include="Config.fs" />
-    <Compile Include="Migration.fs" />
     <Compile Include="RestAPI.fs" />
+    <Compile Include="Migration.fs" />
+    <Compile Include="Config.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

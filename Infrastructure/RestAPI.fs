@@ -26,6 +26,8 @@ let private webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
         POST >=> choose [
             // Commit edition
             routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.commitMasterPDB apiCtx)
+            // New PDB
+            route "/instances/primary/master-pdbs" >=> HttpHandlers.createNewPDB apiCtx
 
             // Routes for admins
             route "/garbage-collection" >=> HttpHandlers.collectGarbage apiCtx

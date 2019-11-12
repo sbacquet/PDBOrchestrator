@@ -7,6 +7,7 @@ open Domain.OracleInstance
 open Domain.Orchestrator
 open Infrastructure
 open Chiron
+open Application.OracleInstanceActor
 
 [<Fact>]
 let ``Serialize and deserialize master PDB`` () =
@@ -16,7 +17,7 @@ let ``Serialize and deserialize master PDB`` () =
     let pdb' = json |> MasterPDBJson.jsonToMasterPDB
     match pdb' with
     | JPass p -> Assert.Equal(pdb, p)
-    | JFail e -> failwith (e.ToString())
+    | JFail e -> e |> JsonFailure.summarize |> failwith
 
 [<Fact>]
 let ``Serialize and deserialize Oracle instance`` () =
@@ -39,7 +40,7 @@ let ``Serialize and deserialize Oracle instance`` () =
     let instance1' = json |> OracleInstanceJson.jsonToOracleInstance
     match instance1' with
     | JPass i -> Assert.Equal(instance1, i)
-    | JFail e -> failwith (e.ToString())
+    | JFail e -> e |> JsonFailure.summarize |> failwith
 
 [<Fact>]
 let ``Serialize and deserialize orchestrator`` () =
@@ -48,4 +49,14 @@ let ``Serialize and deserialize orchestrator`` () =
     let orchestrator' = OrchestratorJson.jsonToOrchestrator json
     match orchestrator' with
     | JPass o -> Assert.Equal(orchestrator, o)
-    | JFail e -> failwith (e.ToString())
+    | JFail e -> e |> JsonFailure.summarize |> failwith
+
+[<Fact>]
+let ``Serialize and deserialize CreateMasterPDBParams`` () =
+    let user = "sbacquet"
+    let pars:CreateMasterPDBParams = newCreateMasterPDBParams "testsb" @"\\sophis\dumps\NEW_USER.DMP" [ "NEW_USER" ] [ "NEW_USER", "pass", "FusionInvest" ] user "this is a comment"
+    let json = pars |> Infrastructure.HttpHandlers.createMasterPDBParamsToJson
+    let pars' = json |> Infrastructure.HttpHandlers.jsonToCreateMasterPDBParams user
+    match pars' with
+    | JPass p -> Assert.Equal(pars, p)
+    | JFail e -> e |> JsonFailure.summarize |> failwith

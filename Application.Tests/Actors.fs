@@ -299,13 +299,15 @@ let ``API creates PDB`` () = test <| fun tck ->
     Assert.Equal(2, stateBefore.OracleInstances.[0].MasterPDBs.Length)
 
     let request = 
-        API.createMasterPDB ctx 
-            "me" 
-            "test3" 
-            @"c:\windows\system.ini" 
-            [ "schema1" ] 
-            [ "targetschema1", "pass1", "FusionInvest" ] 
-            "yeah" 
+        let pars = 
+            Application.OracleInstanceActor.newCreateMasterPDBParams
+                "test3" 
+                @"c:\windows\system.ini" 
+                [ "schema1" ] 
+                [ "targetschema1", "pass1", "FusionInvest" ] 
+                "me" 
+                "yeah" 
+        API.createMasterPDB ctx pars
         |> runQuick
     request |> throwIfRequestNotCompletedOk ctx
 
