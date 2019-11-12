@@ -6,7 +6,7 @@ open Chiron
 open Infrastructure
 open Application.Common
 
-let orchestratorPath = sprintf "%s\%s.json"
+let orchestratorPath folder name = Path.Combine(folder, sprintf "%s.json" name)
 
 let loadOrchestrator folder name : Orchestrator =
     use stream = new StreamReader (orchestratorPath folder name)

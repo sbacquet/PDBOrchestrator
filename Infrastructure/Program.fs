@@ -75,7 +75,7 @@ let main args =
 
     let rootFolder = infrastuctureParameters.Root
     let orchestratorName = "orchestrator"
-    let orchestratorPath = sprintf "%s\%s" rootFolder orchestratorName
+    let orchestratorPath = System.IO.Path.Combine(rootFolder, orchestratorName)
     let orchestratorRepo = OrchestratorRepository.OrchestratorRepository(orchestratorPath, orchestratorName) :> IOrchestratorRepository
     let getOracleInstanceRepo name = OracleInstanceRepository.OracleInstanceRepository(orchestratorPath, name) :> IOracleInstanceRepository
     let getInstanceFolder = OracleInstanceRepository.instanceFolder orchestratorPath

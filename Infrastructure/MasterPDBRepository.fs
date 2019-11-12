@@ -6,8 +6,8 @@ open Chiron
 open Infrastructure
 open Application.Common
 
-let masterPDBFolder folder _ = sprintf "%s\masterPDBs" folder
-let masterPDBPath folder name = sprintf "%s\%s.json" (masterPDBFolder folder name) name
+let masterPDBFolder folder _ = Path.Combine(folder, "masterPDBs")
+let masterPDBPath folder name = Path.Combine(masterPDBFolder folder name, sprintf "%s.json"  name)
 
 let loadMasterPDB folder name : MasterPDB =
     use stream = new StreamReader (masterPDBPath folder name)

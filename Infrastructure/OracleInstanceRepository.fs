@@ -6,8 +6,8 @@ open Chiron
 open Infrastructure
 open Application.Common
 
-let instanceFolder = sprintf "%s\%s"
-let instancePath folder name = sprintf "%s\%s.json" (instanceFolder folder name) name
+let instanceFolder folder name = Path.Combine(folder, name)
+let instancePath folder name = Path.Combine(instanceFolder folder name, sprintf "%s.json" name)
 
 let loadOracleInstance folder name : OracleInstance =
     use stream = new StreamReader (instancePath folder name)
