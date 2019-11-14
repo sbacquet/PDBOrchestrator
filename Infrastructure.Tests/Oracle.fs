@@ -27,7 +27,7 @@ let instance =
         "intcdb2" "fr1psl010716.misys.global.ad" None
         "sys" "syspwd8"
         "system" "syspwd8"
-        "oracle" "m15y5db" "ssh-ed25519 256 CcNFefba5mM1EW9RGjJrbxBmyyeVGIMHOCamkpgQJa8="
+        "oracle" "m15y5db" "ssh-ed25519 256 CcNFefba5mM1EW9RGjJrbxBmyyeVGIMHOCamkpgQJa8=" "not used"
         "/u01/app/oracle/oradata/SB_PDBs"
         "/u01/app/oracle/oradata/SB_PDBs"
         "/u01/app/oracle/oradata/SB_PDBs"

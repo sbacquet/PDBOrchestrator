@@ -149,6 +149,8 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
                         sprintf "Delete a working copy named %s of master PDB %s version %d on instance %s" name pdb version instance
                     | OrchestratorActor.GetRequest requestId ->
                         sprintf "Get request from id %O" requestId
+                    | OrchestratorActor.GetDumpTransferInfo instance ->
+                        sprintf "Get dump transfer info for Oracle instance %s" instance
                 jObj 
                 |> Encode.required Encode.string "description" description
             )
@@ -285,3 +287,22 @@ let createNewPDB apiCtx = withAdmin (fun user next ctx -> task {
 let createMasterPDBParamsToJson pars = 
     pars |> Json.serializeWith encodeCreateMasterPDBParams JsonFormattingOptions.Pretty 
 
+let encodeDumpTransferInfo = Encode.buildWith (fun (x:DumpTransferInfo) ->
+    Encode.required Encode.string "ImpDpLogin" x.ImpDpLogin >>
+    Encode.required Encode.string "OracleDirectory" x.OracleDirectory >>
+    Encode.required Encode.string "RemoteFolder" x.RemoteFolder >>
+    Encode.required Encode.string "ServerUser" x.ServerUser >>
+    Encode.required Encode.string "ServerPassword" x.ServerPassword >>
+    Encode.required Encode.string "ServerHostkeyMD5" x.ServerHostkeyMD5 >>
+    Encode.required Encode.string "ServerHostkeySHA256" x.ServerHostkeySHA256
+)
+
+let dumpTransferInfoToJson json = 
+    json |> Json.serializeWith encodeDumpTransferInfo JsonFormattingOptions.Pretty
+
+let getDumpTransferInfo apiCtx instance next (ctx:HttpContext) = task {
+    let! dumpTransferInfoMaybe = API.getDumpTransferInfo apiCtx instance
+    match dumpTransferInfoMaybe with
+    | Ok dumpTransferInfo -> return! (json <| dumpTransferInfoToJson dumpTransferInfo) next ctx
+    | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot get dump transfer info for instance %s : %s." instance error) next ctx
+}

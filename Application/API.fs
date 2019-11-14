@@ -66,3 +66,6 @@ let collectGarbage (ctx:APIContext) =
 
 let switchPrimaryOracleInstanceWith (ctx:APIContext) instance : Async<Result<string,string*string>> =
     retype ctx.Orchestrator <? SetPrimaryOracleInstance instance
+
+let getDumpTransferInfo (ctx:APIContext) instance : Async<Result<Application.OracleInstanceActor.DumpTransferInfo, string>> =
+    retype ctx.Orchestrator <? GetDumpTransferInfo instance

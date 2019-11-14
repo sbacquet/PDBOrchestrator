@@ -10,7 +10,8 @@ type OracleInstance = {
     UserForImportPassword: string
     UserForFileTransfer: string
     UserForFileTransferPassword: string
-    ServerFingerPrint: string
+    ServerHostkeySHA256: string
+    ServerHostkeyMD5: string
     MasterPDBManifestsPath: string
     MasterPDBDestPath: string
     SnapshotSourcePDBDestPath: string
@@ -27,7 +28,7 @@ let consOracleInstance
     server port 
     dbaUser dbaPassword 
     userForImport userForImportPassword 
-    userForFileTransfer userForFileTransferPassword serverFingerPrint 
+    userForFileTransfer userForFileTransferPassword serverHostkeySHA256 serverHostkeyMD5
     mPath mdPath wcPath ssdPath 
     directory directoryPath
     snapshotCapable = 
@@ -41,7 +42,8 @@ let consOracleInstance
         UserForImportPassword = userForImportPassword
         UserForFileTransfer = userForFileTransfer
         UserForFileTransferPassword = userForFileTransferPassword
-        ServerFingerPrint = serverFingerPrint
+        ServerHostkeySHA256 = serverHostkeySHA256
+        ServerHostkeyMD5 = serverHostkeyMD5
         MasterPDBManifestsPath = mPath
         MasterPDBDestPath = mdPath
         WorkingCopyDestPath = wcPath

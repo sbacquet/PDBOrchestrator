@@ -78,7 +78,7 @@ let rowToValidMasterPDBVersion (row:MasterPDBVersionRow) =
         (if row.Ignore_SRM_schema = 0 then Map.empty else [ "IgnoreSMRSchema", "true" ] |> Map.ofList)
     |> Validation.map (fun version -> row.Name, version)
 
-let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword userForFileTransfer userForFileTransferPassword oracelServerFingerPrint snapshotCapable instanceName = 
+let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword userForFileTransfer userForFileTransferPassword serverHostkeySHA256 serverHostkeyMD5 snapshotCapable instanceName = 
 
     let conn = Sql.withNewConnection (openConn fromServer 1521 "orclpdb" "c##pdba" "pass" false)
 
@@ -114,7 +114,7 @@ let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword u
                 None
                 dbaUser dbaPassword 
                 userForImport userForImportPassword 
-                userForFileTransfer userForFileTransferPassword oracelServerFingerPrint 
+                userForFileTransfer userForFileTransferPassword serverHostkeySHA256 serverHostkeyMD5
                 "" "" "" "" // paths to edit manually in the instance JSON file
                 "DP_DIR" "/u01/app/intcdb_dumps" 
                 snapshotCapable

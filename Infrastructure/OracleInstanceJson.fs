@@ -43,7 +43,8 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
         let! userForImportPassword = Decode.required decoder "userForImportPassword"
         let! userForFileTransfer = Decode.required Decode.string "userForFileTransfer" 
         let! userForFileTransferPassword = Decode.required decoder "userForFileTransferPassword"
-        let! serverFingerPrint = Decode.required decoder "serverFingerPrint"
+        let! serverHostkeySHA256 = Decode.required decoder "serverHostkeySHA256"
+        let! serverHostkeyMD5 = Decode.required decoder "serverHostkeyMD5"
         let! snapshotCapable = Decode.optional Decode.bool "snapshotCapable"
         let! masterPDBManifestsPath = Decode.required Decode.string "masterPDBManifestsPath" 
         let! masterPDBDestPath = Decode.required Decode.string "masterPDBDestPath" 
@@ -58,13 +59,9 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
                 name 
                 server 
                 port 
-                dbaUser 
-                dbaPassword 
-                userForImport
-                userForImportPassword
-                userForFileTransfer
-                userForFileTransferPassword
-                serverFingerPrint
+                dbaUser dbaPassword 
+                userForImport userForImportPassword userForFileTransfer userForFileTransferPassword
+                serverHostkeySHA256 serverHostkeyMD5
                 masterPDBManifestsPath 
                 masterPDBDestPath 
                 workingCopyDestPath 
@@ -85,7 +82,8 @@ let encodeOracleInstance (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:Or
     Encode.required (encryptPassword algo) "userForImportPassword" x.UserForImportPassword >>
     Encode.required Encode.string "userForFileTransfer" x.UserForFileTransfer >>
     Encode.required (encryptPassword algo) "userForFileTransferPassword" x.UserForFileTransferPassword >>
-    Encode.required (encryptPassword algo) "serverFingerPrint" x.ServerFingerPrint >>
+    Encode.required (encryptPassword algo) "serverHostkeySHA256" x.ServerHostkeySHA256 >>
+    Encode.required (encryptPassword algo) "serverHostkeyMD5" x.ServerHostkeyMD5 >>
     Encode.ifNotEqual true Encode.bool "snapshotCapable" x.SnapshotCapable >>
     Encode.required Encode.string "masterPDBManifestsPath" x.MasterPDBManifestsPath >>
     Encode.required Encode.string "masterPDBDestPath" x.MasterPDBDestPath >>

@@ -17,7 +17,7 @@ let ``Save and load Oracle instance`` () =
             instance1Name "fr1psl010716.misys.global.ad" None
             "sys" "pass"
             "userForImport" ""
-            "userForFileTransfer" "pass" "azerty"
+            "userForFileTransfer" "pass" "azerty" "toto"
             "x"
             "xx"
             "xxx"

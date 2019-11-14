@@ -271,7 +271,7 @@ let importSchemas
     connAsDBAIn 
     (timeout:TimeSpan option) 
     userForImport userForImportPassword 
-    host userForFileTransfer userForFileTransferPassword serverFingerPrint 
+    host userForFileTransfer userForFileTransferPassword serverHostkeySHA256 
     (dumpPath:string) 
     (schemas:string list) (targetSchemas:string list) 
     (directory:string) 
@@ -281,7 +281,7 @@ let importSchemas
 
     try
         let! dumpDest = directory |> getOracleDirectoryPath connAsDBAIn name
-        use! session = FileTransfer.newSession timeout host userForFileTransfer userForFileTransferPassword serverFingerPrint
+        use! session = FileTransfer.newSession timeout host userForFileTransfer userForFileTransferPassword serverHostkeySHA256
         let! _ = FileTransfer.uploadFile session dumpPath (sprintf "%s/" dumpDest)
         let! dumpFile = getFileNameWithoutExtension(dumpPath) |> Result.map (fun fileName -> fileName.ToUpper())
         let logFile = sprintf "%s_impdp.log" dumpFile
@@ -320,7 +320,7 @@ let createAndImportSchemas
     connAsDBAIn 
     (timeout:TimeSpan option)
     userForImport userForImportPassword
-    host userForFileTransfer userForFileTransferPassword serverFingerPrint
+    host userForFileTransfer userForFileTransferPassword serverHostkeySHA256
     (dumpPath:string) 
     (schemas:string list) (targetSchemas:(string * string) list) 
     deleteExisting 
@@ -329,7 +329,7 @@ let createAndImportSchemas
     =
     [
         createSchemasCompensable logger connAsDBAIn targetSchemas deleteExisting
-        notCompensableAsync (importSchemas logger connAsDBAIn timeout userForImport userForImportPassword host userForFileTransfer userForFileTransferPassword serverFingerPrint dumpPath schemas (targetSchemas |> List.map fst) directory tolerantToImportErrors)
+        notCompensableAsync (importSchemas logger connAsDBAIn timeout userForImport userForImportPassword host userForFileTransfer userForFileTransferPassword serverHostkeySHA256 dumpPath schemas (targetSchemas |> List.map fst) directory tolerantToImportErrors)
     ] |> composeAsync logger
 
 let createAndGrantPDB (logger:ILogger) connAsDBA connAsDBAIn keepOpen adminUserName adminUserPassword dest = 
@@ -363,7 +363,7 @@ let createManifestFromDump
     connAsDBA connAsDBAIn 
     timeout
     userForImport userForImportPassword 
-    host userForFileTransfer userForFileTransferPassword serverFingerPrint
+    host userForFileTransfer userForFileTransferPassword serverHostkeySHA256
     adminUserName adminUserPassword 
     dest (dumpPath:string) 
     (schemas:string list) (targetSchemas:(string * string) list) 
@@ -382,7 +382,7 @@ let createManifestFromDump
                 connAsDBAIn 
                 timeout
                 userForImport userForImportPassword 
-                host userForFileTransfer userForFileTransferPassword serverFingerPrint 
+                host userForFileTransfer userForFileTransferPassword serverHostkeySHA256 
                 dumpPath 
                 schemas targetSchemas 
                 true 

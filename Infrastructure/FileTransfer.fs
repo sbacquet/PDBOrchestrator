@@ -19,7 +19,7 @@ let newSession timeout toHost user pass hostKey =
     | ex -> Error ex
 
 let newSessionFromInstance timeout (instance:Domain.OracleInstance.OracleInstance) =
-    newSession timeout instance.Server instance.UserForFileTransfer instance.UserForFileTransferPassword instance.ServerFingerPrint
+    newSession timeout instance.Server instance.UserForFileTransfer instance.UserForFileTransferPassword instance.ServerHostkeySHA256
 
 let uploadFile (session:Session) fromPath toPath =
     try

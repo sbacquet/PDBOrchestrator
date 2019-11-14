@@ -29,6 +29,7 @@ type Command =
 | CreateWorkingCopy of OnInstance<string, int, string, bool> // responds with RequestValidation
 | DeleteWorkingCopy of OnInstance<string, int, string> // responds with RequestValidation
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
+| GetDumpTransferInfo of string // responds with Result<Application.OracleInstanceActor.DumpTransferInfo,string>
 
 type AdminCommand =
 | GetPendingChanges // responds with Result<PendingChanges option,string> = Result<pending changes if any, error>
@@ -45,6 +46,7 @@ let private pendingChangeCommandFilter mapper = function
 | GetMasterPDBState _
 | CreateWorkingCopy _
 | DeleteWorkingCopy _
+| GetDumpTransferInfo _
 | GetRequest _ ->
     false
 | CreateMasterPDB (user, _)
@@ -233,6 +235,19 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         sender <! (requestId, request.Status)
                         ctx.Log.Value.Debug("Request {requestId} completed => removed from the list", requestId)
                         return! loop { state with CompletedRequests = completedRequests |> Map.remove requestId }
+
+            | GetDumpTransferInfo instanceName ->
+                let sender = ctx.Sender().Retype<Result<OracleInstanceActor.DumpTransferInfo, string>>()
+                let instanceName = getInstanceName instanceName
+                if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
+                    let instance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[instanceName]
+                    let! (transferInfo:OracleInstanceActor.DumpTransferInfo) = instance <? OracleInstanceActor.GetDumpTransferInfo
+                    sender <! Ok transferInfo
+                    return! loop state
+                else
+                    sender <! (sprintf "cannot find Oracle instance %s" instanceName |> Error)
+                    return! loop state
+
 
         | :? AdminCommand as command ->
             let getPendingChanges () = async {

@@ -89,7 +89,7 @@ let instance1 =
         "server1" "xxx" None
         "xxx" "xxx"
         "xxx" ""
-        "xxx" "" ""
+        "xxx" "" "" ""
         ""
         ""
         ""
@@ -103,7 +103,7 @@ let instance2 =
         "server2" "xxx" None
         "xxx" "xxx"
         "xxx" ""
-        "xxx" "" ""
+        "xxx" "" "" ""
         ""
         ""
         ""

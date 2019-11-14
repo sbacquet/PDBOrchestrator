@@ -26,7 +26,7 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance) =
                 connAsDBA connAsDBAIn 
                 timeout 
                 instance.UserForImport instance.UserForImportPassword 
-                instance.Server instance.UserForFileTransfer instance.UserForFileTransferPassword instance.ServerFingerPrint
+                instance.Server instance.UserForFileTransfer instance.UserForFileTransferPassword instance.ServerHostkeySHA256
                 "dbadmin" "pass"
                 instance.MasterPDBManifestsPath dumpPath 
                 schemas targetSchemas 

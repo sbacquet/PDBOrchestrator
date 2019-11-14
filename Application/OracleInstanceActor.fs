@@ -100,6 +100,7 @@ type Command =
 | CreateWorkingCopy of WithRequestId<string, int, string, bool> // responds with WithRequest<MasterPDBActor.CreateWorkingCopyResult>
 | DeleteWorkingCopy of WithRequestId<string, int, string> // responds with OraclePDBResultWithReqId
 | CollectGarbage // no response
+| GetDumpTransferInfo // responds with DumpTransferInfo
 
 type StateResult = Result<OracleInstance.OracleInstanceDTO, string>
 let stateOk state : StateResult = Ok state
@@ -109,6 +110,16 @@ type MasterPDBCreationResult =
 | InvalidRequest of string list
 | MasterPDBCreated of Domain.MasterPDB.MasterPDB
 | MasterPDBCreationFailure of string * string
+
+type DumpTransferInfo = {
+    ImpDpLogin: string
+    OracleDirectory: string
+    RemoteFolder: string
+    ServerUser: string
+    ServerPassword: string
+    ServerHostkeyMD5: string
+    ServerHostkeySHA256: string
+}
 
 type private Collaborators = {
     OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
@@ -343,6 +354,19 @@ let private oracleInstanceActorBody
                 else
                     collaborators.OracleLongTaskExecutor <! GarbageWorkingCopies instance
                     return! loop state
+
+            | GetDumpTransferInfo ->
+                let transferInfo = {
+                    ImpDpLogin = sprintf "%s/%s" instance.UserForImport instance.UserForImportPassword
+                    OracleDirectory = instance.OracleDirectoryForDumps
+                    RemoteFolder = instance.OracleDirectoryPathForDumps
+                    ServerUser = instance.UserForFileTransfer
+                    ServerPassword = instance.UserForFileTransferPassword
+                    ServerHostkeySHA256 = instance.ServerHostkeySHA256
+                    ServerHostkeyMD5 = instance.ServerHostkeyMD5
+                }
+                ctx.Sender() <! transferInfo
+                return! loop state
                 
         // Callback from Oracle executor
         | :? OraclePDBResultWithReqId as requestResponse ->
