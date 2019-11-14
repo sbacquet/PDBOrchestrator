@@ -12,15 +12,17 @@ open System
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
+open FSharp.Control.Tasks.V2.ContextInsensitive
+open System.Threading.Tasks
 
 [<RequireQualifiedAccess>]
 module Config =
     let private invalidConfig (errors:string list) =
         Serilog.Log.Logger.Error("The configuration is invalid : {0}", String.Join("; ", errors))
-    #if DEBUG
+        #if DEBUG
         Console.WriteLine("Press a key to exit...")
         Console.ReadKey() |> ignore
-    #endif
+        #endif
         exit 1
 
     let validateConfig config =
@@ -38,7 +40,7 @@ module Config =
 
     let akkaConfig =
         let config =
-    #if DEBUG
+            #if DEBUG
             Akkling.Configuration.parse @"
             akka { 
                 loglevel=DEBUG
@@ -47,13 +49,13 @@ module Config =
                     debug {
                         receive = off
                         unhandled = on
-                        lifecycle = off
+                        lifecycle = on
                     }
                 }
             }"
-    #else
+            #else
             Akkling.Configuration.parse @"akka { loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] }"
-    #endif
+            #endif
         config
 
 [<EntryPoint>]
@@ -62,11 +64,11 @@ let main args =
     Serilog.Log.Logger <- 
         LoggerConfiguration().
             ReadFrom.Configuration(config).
-#if DEBUG
+            #if DEBUG
             MinimumLevel.Is(Events.LogEventLevel.Debug).
-#else
+            #else
             MinimumLevel.Override("Microsoft.AspNetCore", Events.LogEventLevel.Warning).
-#endif
+            #endif
             Enrich.FromLogContext().
             CreateLogger()
 
@@ -85,28 +87,55 @@ let main args =
     let getOracleAPI (instance:OracleInstance) = OracleInstanceAPI.OracleInstanceAPI(loggerFactory, instance)
 
     use system = Akkling.System.create "sys" Config.akkaConfig
-    let orchestratorActor = system |> OrchestratorActor.spawn validApplicationParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let port = infrastuctureParameters.Port
-    let endPoint = sprintf "http://%s:%d" infrastuctureParameters.DNSName port // TODO (https)
-    let apiContext = 
-        API.consAPIContext 
-            system 
-            orchestratorActor 
-            loggerFactory 
-            endPoint
+    try
+        let orchestratorActor = system |> OrchestratorActor.spawn validApplicationParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+        system |> OrchestratorWatcher.spawn orchestratorActor |> ignore
+        let port = infrastuctureParameters.Port
+        let endPoint = sprintf "http://%s:%d" infrastuctureParameters.DNSName port // TODO (https)
+        let apiContext = 
+            API.consAPIContext 
+                system 
+                orchestratorActor 
+                loggerFactory 
+                endPoint
 
-    WebHostBuilder()
-        .UseWebRoot("wwwroot")
-        .UseConfiguration(config)
-        .UseKestrel(fun options -> options.Listen(System.Net.IPAddress.IPv6Any, port))
-        .UseIISIntegration()
-        .Configure(Action<IApplicationBuilder> (RestAPI.configureApp apiContext))
-        .ConfigureServices(Action<IServiceCollection> (RestAPI.configureServices loggerFactory))
-        .UseSerilog()
-        .Build()
-        .Run()
+        let host =
+            WebHostBuilder()
+                .UseWebRoot("wwwroot")
+                .UseConfiguration(config)
+                .UseKestrel(fun options -> options.Listen(System.Net.IPAddress.IPv6Any, port))
+                .UseIISIntegration()
+                .Configure(Action<IApplicationBuilder> (RestAPI.configureApp apiContext))
+                .ConfigureServices(Action<IServiceCollection> (RestAPI.configureServices loggerFactory))
+                .UseSerilog()
+                .Build()
+        // Set up termination of web server on Akka system failure
+        let appLifetime = host.Services.GetRequiredService<IApplicationLifetime>()
+        Async.Start (async {
+            do! system.WhenTerminated |> Async.AwaitTask
+            appLifetime.StopApplication()
+        })
 
-    System.Console.WriteLine "Exiting..."
-    system.Stop(untyped orchestratorActor)
-    system.Terminate().Wait()
-    0
+        host.Run()
+
+        System.Console.WriteLine "Exiting..."
+        if not system.WhenTerminated.IsCompleted then
+            system.Stop(untyped orchestratorActor)
+            system.Terminate().Wait()
+            0
+        else
+            #if DEBUG
+            Console.WriteLine("Press a key to exit...")
+            Console.ReadKey() |> ignore
+            #endif
+            1
+    with ex ->
+        Serilog.Log.Logger.Fatal("A fatal error occurred : {error}", ex.Message)
+        System.Console.WriteLine "Aborting..."
+        system.Terminate().Wait()
+        #if DEBUG
+        Console.WriteLine("Press a key to exit...")
+        Console.ReadKey() |> ignore
+        #endif
+        1
+        

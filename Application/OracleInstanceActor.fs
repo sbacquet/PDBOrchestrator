@@ -172,7 +172,7 @@ let private updateMasterPDBs parameters (oracleAPI:IOracleAPI) (ctx : Actor<obj>
 let private spawnCollaborators parameters oracleAPI (getMasterPDBRepo:OracleInstance->string->IMasterPDBRepository) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
     let oracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn parameters oracleAPI
     let oracleDiskIntensiveTaskExecutor = ctx |> Application.OracleDiskIntensiveActor.spawn parameters oracleAPI
-    {
+    let collaborators = {
         OracleLongTaskExecutor = oracleLongTaskExecutor
         OracleDiskIntensiveTaskExecutor = oracleDiskIntensiveTaskExecutor
         MasterPDBActors = 
@@ -180,20 +180,33 @@ let private spawnCollaborators parameters oracleAPI (getMasterPDBRepo:OracleInst
             |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn parameters oracleAPI instance oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo pdb))
             |> Map.ofList
     }
+    collaborators.OracleLongTaskExecutor |> monitor ctx |> ignore
+    collaborators.OracleDiskIntensiveTaskExecutor |> monitor ctx |> ignore
+    collaborators.MasterPDBActors |> Map.iter (fun _ actor -> actor |> monitor ctx |> ignore)
+    collaborators
 
-let private oracleInstanceActorName (instance : OracleInstance) = 
+let private oracleInstanceActorName (instanceName : string) = 
     Common.ActorName 
-        (sprintf "OracleInstance='%s'" (instance.Name.ToUpper() |> System.Uri.EscapeDataString))
+        (sprintf "OracleInstance='%s'" (instanceName.ToUpper() |> System.Uri.EscapeDataString))
 
 type private State = {
     Instance: OracleInstance
-    PreviousInstance: OracleInstance option
+    PreviousInstance: OracleInstance
     Collaborators: Collaborators
     Requests: RequestMap<Command>
     Repository: IOracleInstanceRepository
 }
 
-let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAPI) (getMasterPDBRepo:OracleInstance -> string -> IMasterPDBRepository) (newMasterPDBRepo:OracleInstance -> MasterPDB -> IMasterPDBRepository) initialRepo initialInstance (ctx : Actor<obj>) =
+let private oracleInstanceActorBody 
+    (parameters:Parameters) 
+    getOracleAPI 
+    (getMasterPDBRepo:OracleInstance -> string -> IMasterPDBRepository) 
+    (newMasterPDBRepo:OracleInstance -> MasterPDB -> IMasterPDBRepository) 
+    (initialRepo:IOracleInstanceRepository)
+    (ctx : Actor<obj>) =
+
+    let initialInstance = initialRepo.Get()
+    let oracleAPI = getOracleAPI initialInstance
 
     let rec loop state = actor {
 
@@ -201,9 +214,9 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
         let collaborators = state.Collaborators
         let requests = state.Requests
 
-        if (state.PreviousInstance.IsNone || state.PreviousInstance.Value <> instance) then
+        if state.PreviousInstance <> instance then
             ctx.Log.Value.Debug("Persisted modified Oracle instance {instance}", instance.Name)
-            return! loop { state with Repository = state.Repository.Put instance; PreviousInstance = Some instance }
+            return! loop { state with Repository = state.Repository.Put instance; PreviousInstance = instance }
         else
 
         ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
@@ -416,6 +429,10 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
                 ctx.Log.Value.Error("internal error : request {0} not found", requestId)
                 return! loop state
 
+        | Terminated (child, _, _) ->
+            ctx.Log.Value.Error("Child actor {0} is down => disabling Oracle instance {1}...", child.Path, initialInstance.Name)
+            return! Stop
+            
         | _ -> return! loop state
     }
 
@@ -423,7 +440,7 @@ let private oracleInstanceActorBody (parameters:Parameters) (oracleAPI:IOracleAP
 
     loop { 
         Instance = initialInstance
-        PreviousInstance = Some initialInstance
+        PreviousInstance = initialInstance
         Collaborators = collaborators
         Requests = Map.empty
         Repository = initialRepo
@@ -440,14 +457,11 @@ let spawn
         instanceName =
 
     let initialRepo:IOracleInstanceRepository = getRepository instanceName
-    let initialInstance = initialRepo.Get()
 
-    let (Common.ActorName actorName) = oracleInstanceActorName initialInstance
-
-    let oracleAPI = getOracleAPI initialInstance
+    let (Common.ActorName actorName) = oracleInstanceActorName instanceName
 
     Akkling.Spawn.spawn actorFactory actorName 
-    <| props (oracleInstanceActorBody parameters oracleAPI getMasterPDBRepo newMasterPDBRepo initialRepo initialInstance)
+    <| props (oracleInstanceActorBody parameters getOracleAPI getMasterPDBRepo newMasterPDBRepo initialRepo)
 
 let spawnNew 
         parameters 
@@ -456,14 +470,12 @@ let spawnNew
         getMasterPDBRepo 
         newMasterPDBRepo 
         actorFactory 
-        instance =
+        (instance:OracleInstance) =
 
     let initialRepo:IOracleInstanceRepository = newRepository instance
 
-    let (Common.ActorName actorName) = oracleInstanceActorName instance
-
-    let oracleAPI = getOracleAPI instance
+    let (Common.ActorName actorName) = oracleInstanceActorName instance.Name
 
     Akkling.Spawn.spawn actorFactory actorName 
-    <| props (oracleInstanceActorBody parameters oracleAPI getMasterPDBRepo newMasterPDBRepo initialRepo instance)
+    <| props (oracleInstanceActorBody parameters getOracleAPI getMasterPDBRepo newMasterPDBRepo (initialRepo.Put instance))
 

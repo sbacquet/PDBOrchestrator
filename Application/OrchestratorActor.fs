@@ -8,6 +8,8 @@ open Application.UserPendingRequest
 open Domain.Common.Validation
 open Application.Common
 open Application.DTO.MasterPDB
+open Akka.Actor
+open System.Threading.Tasks
 
 type OnInstance<'T> = WithUser<string, 'T>
 type OnInstance<'T1, 'T2> = WithUser<string, 'T1, 'T2>
@@ -76,7 +78,7 @@ let completedOk dataList message = CompletedOk (message, dataList)
 
 let private spawnCollaborators parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo state (ctx : Actor<_>) = 
     let spawnInstance = OracleInstanceActor.spawn parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo ctx
-    {
+    let collaborators = {
         OracleInstanceActors =
             state.OracleInstanceNames 
             |> List.map (fun instanceName -> 
@@ -84,6 +86,8 @@ let private spawnCollaborators parameters getOracleAPI getOracleInstanceRepo get
                )
             |> Map.ofList
     }
+    collaborators.OracleInstanceActors |> Map.iter (fun _ actor -> actor |> monitor ctx |> ignore)
+    collaborators
 
 type private State = {
     Orchestrator : Orchestrator
@@ -95,7 +99,7 @@ type private State = {
     Repository : IOrchestratorRepository
 }
 
-let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo repository initialState (ctx : Actor<_>) =
+let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) (ctx : Actor<_>) =
 
     let rec loop state = actor {
         
@@ -439,9 +443,26 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
+        // Message sent when an Oracle instance actor died (could not initialize)
+        | Terminated (child, _, _) -> 
+            let terminatedInstanceNameMaybe = collaborators.OracleInstanceActors |> Map.tryFindKey (fun _ actorRef -> child = actorRef)
+            let newCollabs = 
+                terminatedInstanceNameMaybe
+                |> Option.map (fun name -> 
+                    ctx.Log.Value.Warning("Actor for Oracle instance {0} was terminated => disabled it", name)
+                    { collaborators with OracleInstanceActors = collaborators.OracleInstanceActors |> Map.remove name })
+                |> Option.defaultValue collaborators
+            let newInstances = newCollabs.OracleInstanceActors |> Map.toList |> List.map fst
+            if not (newInstances |> List.contains orchestrator.PrimaryInstance) then
+                ctx.Log.Value.Error("Primary Oracle instance is down => stopping the orchestrator...")
+                return! Stop
+            else
+                return! loop { state with Collaborators = newCollabs; Orchestrator = { state.Orchestrator with OracleInstanceNames = newInstances } }
+
         | _ -> return! loop state
     }
 
+    let initialState = repository.Get()
     let collaborators = ctx |> spawnCollaborators parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo initialState
 
     loop { 
@@ -458,8 +479,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 let [<Literal>]cOrchestratorActorName = "Orchestrator"
 
 let spawn parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) actorFactory =
-    let initialState = repository.Get()
     let actor = 
         Akkling.Spawn.spawn actorFactory cOrchestratorActorName 
-        <| props (orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo repository initialState)
+        <| props (orchestratorActorBody parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo repository)
     actor.Retype<Command>()

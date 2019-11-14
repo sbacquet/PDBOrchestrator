@@ -32,6 +32,7 @@
     <Compile Include="RestAPI.fs" />
     <Compile Include="Migration.fs" />
     <Compile Include="Config.fs" />
+    <Compile Include="OrchestratorWatcher.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

@@ -60,7 +60,7 @@ let private getOrSpawnVersionActor parameters (oracleAPI:IOracleAPI) instance (m
 
 type private State = {
     MasterPDB: MasterPDB
-    PreviousMasterPDB: MasterPDB option
+    PreviousMasterPDB: MasterPDB
     Requests: RequestMap<Command>
     Collaborators: Collaborators
     EditionOperationInProgress: bool
@@ -74,10 +74,9 @@ let private masterPDBActorBody
     oracleLongTaskExecutor 
     oracleDiskIntensiveTaskExecutor 
     (initialRepository:IMasterPDBRepository) 
-    (initialMasterPDB:MasterPDB)
-    (previousMasterPDB:MasterPDB option)
     (ctx : Actor<obj>) =
 
+    let initialMasterPDB = initialRepository.Get()
     let editionPDBName = initialMasterPDB.Name
 
     let rec loop state = actor {
@@ -87,9 +86,9 @@ let private masterPDBActorBody
         let collaborators = state.Collaborators
         let manifestFromVersion = Domain.MasterPDB.manifestFile masterPDB.Name
 
-        if (state.PreviousMasterPDB.IsNone || state.PreviousMasterPDB.Value <> masterPDB) then
+        if state.PreviousMasterPDB <> masterPDB then
             ctx.Log.Value.Debug("Persisted modified master PDB {pdb}", masterPDB.Name)
-            return! loop { state with Repository = state.Repository.Put masterPDB; PreviousMasterPDB = Some masterPDB }
+            return! loop { state with Repository = state.Repository.Put masterPDB; PreviousMasterPDB = masterPDB }
         else
 
         ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
@@ -117,7 +116,7 @@ let private masterPDBActorBody
                     ctx.Log.Value.Error("Cannot check integrity : {0}", error)
                     return! loop state
             | _ ->
-                return! unhandled()
+                return! loop state
 
         | :? Command as command -> 
             match command with
@@ -327,9 +326,11 @@ let private masterPDBActorBody
                         sender <! (requestId, Error error.Message)
                     return! loop { state with Requests = newRequests }
 
-                | _ -> failwithf "internal error"
+                | _ -> 
+                    ctx.Log.Value.Error("Unknown message received")
+                    return! loop state
 
-        | _ -> return! unhandled()
+        | _ -> return! loop state
     }
 
     let collaborators = { 
@@ -340,7 +341,7 @@ let private masterPDBActorBody
 
     loop { 
         MasterPDB = initialMasterPDB
-        PreviousMasterPDB = previousMasterPDB
+        PreviousMasterPDB = initialMasterPDB
         Requests = Map.empty
         Collaborators = collaborators
         EditionOperationInProgress = false 
@@ -360,7 +361,6 @@ let spawn
         (actorFactory:IActorRefFactory) =
     
     let initialRepository = getRepository instance name
-    let initialMasterPDB = initialRepository.Get()
 
     let (Common.ActorName actorName) = masterPDBActorName name
     
@@ -373,8 +373,6 @@ let spawn
                 longTaskExecutor 
                 oracleDiskIntensiveTaskExecutor 
                 initialRepository
-                initialMasterPDB
-                (Some initialMasterPDB)
         )
 
 let spawnNew
@@ -399,8 +397,6 @@ let spawnNew
                 instance 
                 longTaskExecutor 
                 oracleDiskIntensiveTaskExecutor 
-                initialRepository
-                masterPDB
-                None
+                (initialRepository.Put masterPDB)
         )
 
