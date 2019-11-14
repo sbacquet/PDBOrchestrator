@@ -10,12 +10,13 @@ let instanceFolder folder name = Path.Combine(folder, name)
 let instancePath folder name = Path.Combine(instanceFolder folder name, sprintf "%s.json" name)
 
 let loadOracleInstance folder name : OracleInstance =
-    use stream = new StreamReader (instancePath folder name)
+    let file = instancePath folder name
+    use stream = new StreamReader(file)
     let content = stream.ReadToEnd()
     let result = content |> OracleInstanceJson.jsonToOracleInstance
     match result with
     | JPass instance -> instance
-    | JFail error -> failwith (error.ToString())
+    | JFail error -> error |> JsonFailure.summarize |> failwithf "Oracle instance %s cannot be loaded from JSON file %s :\n%s" name file
 
 let saveOracleInstance folder name instance = 
     Directory.CreateDirectory (instanceFolder folder name) |> ignore

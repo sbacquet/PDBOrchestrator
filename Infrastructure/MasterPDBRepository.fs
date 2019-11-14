@@ -10,12 +10,13 @@ let masterPDBFolder folder _ = Path.Combine(folder, "masterPDBs")
 let masterPDBPath folder name = Path.Combine(masterPDBFolder folder name, sprintf "%s.json"  name)
 
 let loadMasterPDB folder name : MasterPDB =
-    use stream = new StreamReader (masterPDBPath folder name)
+    let file = masterPDBPath folder name
+    use stream = new StreamReader(file)
     let content = stream.ReadToEnd()
     let result = content |> MasterPDBJson.jsonToMasterPDB
     match result with
     | JPass masterPDB -> masterPDB
-    | JFail error -> failwith (error.ToString())
+    | JFail error -> error |> JsonFailure.summarize |> failwithf "master PDB %s cannot be loaded from JSON file %s :\n%s" name file
 
 let saveMasterPDB folder name pdb = 
     Directory.CreateDirectory (masterPDBFolder folder name) |> ignore

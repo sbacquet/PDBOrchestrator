@@ -279,7 +279,7 @@ let createNewPDB apiCtx = withAdmin (fun user next ctx -> task {
         let! requestValidation = API.createMasterPDB apiCtx result
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     | JFail error -> 
-        return! RequestErrors.badRequest (error |> JsonFailure.summarize |> sprintf "JSON in body is not well-formed :\n%s" |> text) next ctx
+        return! RequestErrors.badRequest (error |> JsonFailure.summarize |> sprintf "JSON provided in body is not well-formed :\n%s" |> text) next ctx
 })
 
 let createMasterPDBParamsToJson pars = 

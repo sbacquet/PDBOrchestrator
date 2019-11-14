@@ -9,12 +9,14 @@ open Application.Common
 let orchestratorPath folder name = Path.Combine(folder, sprintf "%s.json" name)
 
 let loadOrchestrator folder name : Orchestrator =
-    use stream = new StreamReader (orchestratorPath folder name)
+    let file = orchestratorPath folder name
+    use stream = new StreamReader(file)
     let content = stream.ReadToEnd()
     let result = content |> OrchestratorJson.jsonToOrchestrator
     match result with
     | JPass orchestrator -> orchestrator
-    | JFail error -> failwith (error.ToString())
+    | JFail error -> 
+        error |> JsonFailure.summarize |> failwithf "%s cannot be loaded from JSON file %s :\n%s" name file
 
 let saveOrchestrator folder name orchestrator = 
     Directory.CreateDirectory folder |> ignore
