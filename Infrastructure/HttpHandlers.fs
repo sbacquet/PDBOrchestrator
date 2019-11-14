@@ -290,7 +290,9 @@ let createMasterPDBParamsToJson pars =
 let encodeDumpTransferInfo = Encode.buildWith (fun (x:DumpTransferInfo) ->
     Encode.required Encode.string "ImpDpLogin" x.ImpDpLogin >>
     Encode.required Encode.string "OracleDirectory" x.OracleDirectory >>
+    Encode.required Encode.int "OraclePort" x.OraclePort >>
     Encode.required Encode.string "RemoteFolder" x.RemoteFolder >>
+    Encode.required Encode.string "Server" x.Server >>
     Encode.required Encode.string "ServerUser" x.ServerUser >>
     Encode.required Encode.string "ServerPassword" x.ServerPassword >>
     Encode.required Encode.string "ServerHostkeyMD5" x.ServerHostkeyMD5 >>

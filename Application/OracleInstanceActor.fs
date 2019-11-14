@@ -114,7 +114,9 @@ type MasterPDBCreationResult =
 type DumpTransferInfo = {
     ImpDpLogin: string
     OracleDirectory: string
+    OraclePort: int
     RemoteFolder: string
+    Server: string
     ServerUser: string
     ServerPassword: string
     ServerHostkeyMD5: string
@@ -359,7 +361,9 @@ let private oracleInstanceActorBody
                 let transferInfo = {
                     ImpDpLogin = sprintf "%s/%s" instance.UserForImport instance.UserForImportPassword
                     OracleDirectory = instance.OracleDirectoryForDumps
+                    OraclePort = instance.Port |> Option.defaultValue 1521
                     RemoteFolder = instance.OracleDirectoryPathForDumps
+                    Server = instance.Server
                     ServerUser = instance.UserForFileTransfer
                     ServerPassword = instance.UserForFileTransferPassword
                     ServerHostkeySHA256 = instance.ServerHostkeySHA256

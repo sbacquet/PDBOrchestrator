@@ -6,18 +6,12 @@ open Application.DTO.MasterPDB
 
 type OracleInstanceDTO = {
     Name: string
-    Server: string
-    Port: int option
-    OracleDirectoryForDumps: string
     MasterPDBs: MasterPDBDTO list
 }
 
-let consOracleInstanceDTO name server port directory masterPDBs = 
+let consOracleInstanceDTO name masterPDBs = 
     { 
         Name = name
-        Server = server
-        Port = port
-        OracleDirectoryForDumps = directory
         MasterPDBs = masterPDBs 
     }
 
@@ -38,9 +32,6 @@ let toDTO (masterPDBActors:Map<string, IActorRef<obj>>) (oracleInstance : Domain
     return 
         consOracleInstanceDTO 
             oracleInstance.Name 
-            oracleInstance.Server 
-            oracleInstance.Port 
-            oracleInstance.OracleDirectoryForDumps 
             (masterPDBs |> Array.toList)
 }
 

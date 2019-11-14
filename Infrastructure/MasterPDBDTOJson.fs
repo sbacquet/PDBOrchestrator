@@ -32,6 +32,7 @@ let encodeMasterPDB = Encode.buildWith (fun (x:MasterPDBDTO) ->
     Encode.ifNotEqual Map.empty (Encode.mapWith Encode.string) "properties" x.Properties >>
     Encode.ifNotEqual false Encode.bool "editionDisabled" x.EditionDisabled >>
     Encode.optional encodeLockInfo "edition" x.EditionState >>
+    Encode.required Encode.int "latestVersion" x.LatestVersion >>
     Encode.required (Encode.listWith encodeMasterPDBVersion) "versions" x.Versions
 )
 
