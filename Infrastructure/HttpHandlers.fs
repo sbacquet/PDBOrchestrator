@@ -47,7 +47,14 @@ let getAllInstances apiCtx next (ctx:HttpContext) = task {
 let getInstance apiCtx (name:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx name
     match stateMaybe with
-    | Ok state -> return! (text (OracleInstance.oracleInstanceToJson state)) next ctx
+    | Ok state -> return! json (OracleInstance.oracleInstanceToJson state) next ctx
+    | Error error -> return! RequestErrors.notFound (text error) next ctx
+}
+
+let getMasterPDBs apiCtx (instancename:string) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getInstanceState apiCtx instancename
+    match stateMaybe with
+    | Ok state -> return! json (OracleInstance.masterPDBsToJson state) next ctx
     | Error error -> return! RequestErrors.notFound (text error) next ctx
 }
 

@@ -246,11 +246,11 @@ let private oracleInstanceActorBody
 
             | GetMasterPDBState pdb ->
                 let sender = ctx.Sender().Retype<Application.MasterPDBActor.StateResult>()
-                let masterPDBOk = instance.MasterPDBs |> List.contains pdb
-                if (instance.MasterPDBs |> List.contains pdb) then 
+                match instance |> containsMasterPDB pdb with
+                | Some pdb ->
                     let masterPDBActor:IActorRef<MasterPDBActor.Command> = retype collaborators.MasterPDBActors.[pdb]
                     masterPDBActor <<! MasterPDBActor.GetState
-                else
+                | None ->
                     sender <! MasterPDBActor.stateError (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name)
                 return! loop state
 
@@ -292,11 +292,11 @@ let private oracleInstanceActorBody
 
             | PrepareMasterPDBForModification (requestId, pdb, version, user) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.PrepareForModificationResult>>()
-                let masterPDBOk = instance.MasterPDBs |> List.contains pdb
-                if (not masterPDBOk) then 
+                match instance |> containsMasterPDB pdb with
+                | None ->
                     sender <! (requestId, MasterPDBActor.PreparationFailure (pdb, sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
                     return! loop state
-                else
+                | Some pdb ->
                     let masterPDBActor = collaborators.MasterPDBActors.[pdb]
                     let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
                     retype masterPDBActor <! MasterPDBActor.PrepareForModification (requestId, version, user)
@@ -304,11 +304,11 @@ let private oracleInstanceActorBody
 
             | CommitMasterPDB (requestId, pdb, locker, comment) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionCommitted>>()
-                let masterPDBOk = instance.MasterPDBs |> List.contains pdb
-                if (not masterPDBOk) then 
+                match instance |> containsMasterPDB pdb with
+                | None ->
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
                     return! loop state
-                else
+                | Some pdb ->
                     let masterPDBActor = collaborators.MasterPDBActors.[pdb]
                     let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
                     retype masterPDBActor <! MasterPDBActor.Commit (requestId, locker, comment)
@@ -316,11 +316,11 @@ let private oracleInstanceActorBody
 
             | RollbackMasterPDB (requestId, user, pdb) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionRolledBack>>()
-                let masterPDBOk = instance.MasterPDBs |> List.contains pdb
-                if (not masterPDBOk) then 
+                match instance |> containsMasterPDB pdb with
+                | None ->
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
                     return! loop state
-                else
+                | Some pdb ->
                     let masterPDBActor = collaborators.MasterPDBActors.[pdb]
                     let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
                     retype masterPDBActor <! MasterPDBActor.Rollback (requestId, user)
@@ -328,22 +328,22 @@ let private oracleInstanceActorBody
 
             | CreateWorkingCopy (requestId, masterPDBName, versionNumber, wcName, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.CreateWorkingCopyResult>>()
-                let masterPDBOk = instance.MasterPDBs |> List.contains masterPDBName
-                if (not masterPDBOk) then 
+                match instance |> containsMasterPDB masterPDBName with
+                | None ->
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
                     return! loop state
-                else
+                | Some masterPDBName ->
                     let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
                     retype masterPDBActor <<! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, force)
                     return! loop state
 
             | DeleteWorkingCopy (requestId, masterPDBName, versionNumber, wcName) ->
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.CreateWorkingCopyResult>>()
-                let masterPDBOk = instance.MasterPDBs |> List.contains masterPDBName
-                if (not masterPDBOk) then 
+                match instance |> containsMasterPDB masterPDBName with
+                | None ->
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
                     return! loop state
-                else
+                | Some masterPDBName ->
                     let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
                     retype masterPDBActor <<! MasterPDBActor.DeleteWorkingCopy (requestId, wcName, versionNumber)
                     return! loop state

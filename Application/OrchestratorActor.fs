@@ -143,20 +143,22 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | GetInstanceState instanceName ->
                 let sender = ctx.Sender().Retype<Application.OracleInstanceActor.StateResult>()
                 let instanceName = getInstanceName instanceName
-                if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
+                match orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
                     let instance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[instanceName]
                     instance <<! OracleInstanceActor.GetState
-                else
+                | None ->
                     sender <! OracleInstanceActor.stateError (sprintf "cannot find Oracle instance %s" instanceName)
                 return! loop state
 
             | GetMasterPDBState (instanceName, pdb) ->
                 let sender = ctx.Sender().Retype<MasterPDBActor.StateResult>()
                 let instanceName = getInstanceName instanceName
-                if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
+                match orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
                     let instance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[instanceName]
                     instance <<! OracleInstanceActor.GetMasterPDBState pdb
-                else
+                | None ->
                     sender <! MasterPDBActor.stateError (sprintf "cannot find Oracle instance %s" instanceName)
                 return! loop state
 
@@ -194,27 +196,29 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 
             | CreateWorkingCopy (user, instanceName, masterPDBName, versionNumber, snapshotName, force) ->
                 let instanceName = getInstanceName instanceName
-                if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
+                match orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
                     let instance = collaborators.OracleInstanceActors.[instanceName]
                     let requestId = newRequestId()
                     let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
                     retype instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName, force)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
-                else
+                | None ->
                     sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
                     return! loop state
 
             | DeleteWorkingCopy (user, instanceName, masterPDBName, versionNumber, snapshotName) ->
                 let instanceName = getInstanceName instanceName
-                if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
+                match orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
                     let instance = collaborators.OracleInstanceActors.[instanceName]
                     let requestId = newRequestId()
                     let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
                     retype instance <! Application.OracleInstanceActor.DeleteWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
-                else
+                | None ->
                     sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
                     return! loop state
 
@@ -239,12 +243,13 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | GetDumpTransferInfo instanceName ->
                 let sender = ctx.Sender().Retype<Result<OracleInstanceActor.DumpTransferInfo, string>>()
                 let instanceName = getInstanceName instanceName
-                if (orchestrator.OracleInstanceNames |> List.contains instanceName) then 
+                match orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
                     let instance:IActorRef<OracleInstanceActor.Command> = retype collaborators.OracleInstanceActors.[instanceName]
                     let! (transferInfo:OracleInstanceActor.DumpTransferInfo) = instance <? OracleInstanceActor.GetDumpTransferInfo
                     sender <! Ok transferInfo
                     return! loop state
-                else
+                | None ->
                     sender <! (sprintf "cannot find Oracle instance %s" instanceName |> Error)
                     return! loop state
 
@@ -312,20 +317,22 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | Synchronize targetInstance ->
                 if not state.ReadOnly then
                     ctx.Sender() <! stateError "the server must be in maintenance mode"
-                elif not (orchestrator.OracleInstanceNames |> List.contains targetInstance) then
-                    ctx.Sender() <! stateError (sprintf "cannot find Oracle instance %s" targetInstance)
                 else
-                    let pendingChangesMaybe = getPendingChanges() |> runWithinElseDefaultError parameters.ShortTimeout
-                    match pendingChangesMaybe with
-                    | Ok (Ok None) ->
-                        let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
-                        let target = collaborators.OracleInstanceActors.[targetInstance]
-                        retype primaryInstance <<! TransferInternalState target
-                    | Ok (Ok (Some _)) ->
-                        ctx.Sender() <! stateError "primary instance has pending changes"
-                    | Ok (Error error)
-                    | Error error ->
-                        ctx.Sender() <! stateError (sprintf "cannot get pending changes : %s" error)
+                    match orchestrator |> containsOracleInstance targetInstance with
+                    | None ->
+                        ctx.Sender() <! stateError (sprintf "cannot find Oracle instance %s" targetInstance)
+                    | Some targetInstance ->
+                        let pendingChangesMaybe = getPendingChanges() |> runWithinElseDefaultError parameters.ShortTimeout
+                        match pendingChangesMaybe with
+                        | Ok (Ok None) ->
+                            let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
+                            let target = collaborators.OracleInstanceActors.[targetInstance]
+                            retype primaryInstance <<! TransferInternalState target
+                        | Ok (Ok (Some _)) ->
+                            ctx.Sender() <! stateError "primary instance has pending changes"
+                        | Ok (Error error)
+                        | Error error ->
+                            ctx.Sender() <! stateError (sprintf "cannot get pending changes : %s" error)
                 return! loop state
 
             | SetPrimaryOracleInstance newPrimary ->
@@ -336,21 +343,23 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 elif (orchestrator.PrimaryInstance = newPrimary) then
                     sender <! Error (sprintf "%s is already the primary Oracle instance" newPrimary, orchestrator.PrimaryInstance)
                     return! loop state
-                elif not (orchestrator.OracleInstanceNames |> List.contains newPrimary) then
-                    sender <! Error (sprintf "cannot find Oracle instance %s" newPrimary, orchestrator.PrimaryInstance)
-                    return! loop state
                 else
-                    let! pendingChangesMaybe = getPendingChanges()
-                    match pendingChangesMaybe with
-                    | Ok None ->
-                        sender <! Ok newPrimary
-                        return! loop { state with Orchestrator = { orchestrator with PrimaryInstance = newPrimary } }
-                    | Ok (Some _) ->
-                        sender <! Error ("primary instance has pending changes", orchestrator.PrimaryInstance)
+                    match orchestrator |> containsOracleInstance newPrimary with
+                    | None ->
+                        sender <! Error (sprintf "cannot find Oracle instance %s" newPrimary, orchestrator.PrimaryInstance)
                         return! loop state
-                    | Error error ->
-                        sender <! Error (sprintf "cannot get pending changes : %s" error, orchestrator.PrimaryInstance)
-                        return! loop state
+                    | Some newPrimary ->
+                        let! pendingChangesMaybe = getPendingChanges()
+                        match pendingChangesMaybe with
+                        | Ok None ->
+                            sender <! Ok newPrimary
+                            return! loop { state with Orchestrator = { orchestrator with PrimaryInstance = newPrimary } }
+                        | Ok (Some _) ->
+                            sender <! Error ("primary instance has pending changes", orchestrator.PrimaryInstance)
+                            return! loop state
+                        | Error error ->
+                            sender <! Error (sprintf "cannot get pending changes : %s" error, orchestrator.PrimaryInstance)
+                            return! loop state
 
         | :? WithRequestId<MasterPDBCreationResult> as responseToCreateMasterPDB ->
             let (requestId, result) = responseToCreateMasterPDB

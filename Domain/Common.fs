@@ -1,5 +1,8 @@
 ﻿module Domain.Common
 
+let (=~) s1 s2 =
+     System.String.Equals(s1, s2, System.StringComparison.CurrentCultureIgnoreCase)
+
 let ofOption error = function Some s -> Ok s | None -> Error error
 
 let toOption = function Ok s -> Some s | Error _ -> None

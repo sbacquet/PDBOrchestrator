@@ -1,5 +1,7 @@
 ﻿module Domain.OracleInstance
 
+open Common
+
 type OracleInstance = {
     Name: string
     Server: string
@@ -63,3 +65,6 @@ let addMasterPDB masterPDB oracleInstance =
         Error (sprintf "master PDB %s already exists" masterPDB)
     else
         Ok { oracleInstance with MasterPDBs = masterPDB :: oracleInstance.MasterPDBs }
+
+let containsMasterPDB (pdb:string) instance =
+    instance.MasterPDBs |> List.tryFind ((=~)pdb)
