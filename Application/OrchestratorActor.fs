@@ -69,6 +69,8 @@ type private Collaborators = {
 type CompletedRequestData =
 | PDBName of string
 | PDBVersion of int
+| PDBService of string
+| SchemaLogon of string * string
 
 type RequestStatus = 
 | NotFound
@@ -390,8 +392,9 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | Some request ->
                 let status = 
                     match result with
-                    | MasterPDBActor.Prepared pdb -> 
-                        sprintf "Master PDB %s prepared successfully for edition." pdb.Name |> completedOk [ PDBName pdb.Name ]
+                    | MasterPDBActor.Prepared (pdb, pdbService, schemas) -> 
+                        let schemasData = schemas |> List.map SchemaLogon
+                        sprintf "Master PDB %s prepared successfully for edition." pdb.Name |> completedOk ([ PDBName pdb.Name; PDBService pdbService ] @ schemasData)
                     | MasterPDBActor.PreparationFailure (pdb, error) -> 
                         sprintf "Error while preparing master PDB %s for edition : %s." pdb error |> CompletedWithError
                 let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests

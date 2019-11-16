@@ -22,7 +22,7 @@ type Command =
 | CollectGarbage // no response
 
 type PrepareForModificationResult = 
-| Prepared of MasterPDB
+| Prepared of MasterPDB * string * (string * string) list
 | PreparationFailure of string * string
 
 type StateResult = Result<Application.DTO.MasterPDB.MasterPDBDTO, string>
@@ -279,7 +279,9 @@ let private masterPDBActorBody
                     match result with
                     | Ok _ ->
                         let newMasterPDB = masterPDB |> lockForEdition locker
-                        sender <! (requestId, Prepared newMasterPDB)
+                        let pdbService = sprintf "%s/%s" instance.Server newMasterPDB.Name
+                        let schemaLogons = newMasterPDB.Schemas |> List.map (fun schema -> (schema.Type, sprintf "%s/%s@%s" schema.User schema.Password pdbService))
+                        sender <! (requestId, Prepared (newMasterPDB, pdbService, schemaLogons))
                         return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                     | Error error ->
                         sender <! (requestId, PreparationFailure (masterPDB.Name, error.Message))

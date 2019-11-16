@@ -70,6 +70,8 @@ let getRequestStatus apiCtx (requestId:PendingRequest.RequestId) next (ctx:HttpC
     let completedRequestDataKeyValue = function
     | OrchestratorActor.PDBName name -> "PDB name", name
     | OrchestratorActor.PDBVersion version -> "PDB version", version.ToString()
+    | OrchestratorActor.PDBService service -> "PDB service", service
+    | OrchestratorActor.SchemaLogon (schemaType, schemaLogon) -> sprintf "%s schema logon" schemaType, schemaLogon
 
     let! (_, requestStatus) = API.getRequestStatus apiCtx requestId
     
