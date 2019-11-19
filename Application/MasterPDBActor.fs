@@ -94,6 +94,7 @@ let private masterPDBActorBody
         ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
         let! msg = ctx.Receive()
         
+        try
         match msg with
         | :? LifecycleEvent as event ->
             match event with
@@ -333,6 +334,10 @@ let private masterPDBActorBody
                     return! loop state
 
         | _ -> return! loop state
+        
+        with ex -> 
+            ctx.Log.Value.Error("Unexpected error : {0}", ex)
+            return! loop state
     }
 
     let collaborators = { 

@@ -123,6 +123,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 
         let! (msg:obj) = ctx.Receive()
 
+        try
         match msg with
         | :? Command as command ->
             let sender = ctx.Sender().Retype<RequestValidation>()
@@ -487,6 +488,10 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 return! loop { state with Collaborators = newCollabs; Orchestrator = { state.Orchestrator with OracleInstanceNames = newInstances } }
 
         | _ -> return! loop state
+        
+        with ex -> 
+            ctx.Log.Value.Error("Unexpected error : {0}", ex)
+            return! loop state
     }
 
     let initialState = repository.Get()

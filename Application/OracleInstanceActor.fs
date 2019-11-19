@@ -235,6 +235,7 @@ let private oracleInstanceActorBody
         ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
         let! msg = ctx.Receive()
 
+        try
         match msg with
         | :? Command as command ->
             match command with
@@ -462,6 +463,10 @@ let private oracleInstanceActorBody
             return! Stop
             
         | _ -> return! loop state
+        
+        with ex -> 
+            ctx.Log.Value.Error("Unexpected error : {0}", ex)
+            return! loop state
     }
 
     let collaborators = ctx |> spawnCollaborators parameters oracleAPI getMasterPDBRepo initialInstance
