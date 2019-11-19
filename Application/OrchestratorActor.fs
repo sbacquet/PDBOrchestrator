@@ -103,7 +103,50 @@ type private State = {
     Repository : IOrchestratorRepository
 }
 
+let describeCommand = function
+| GetState ->
+    "get PDB orchestrator state"
+| GetInstanceState instance ->
+    sprintf "get state of Oracle instance \"%s\"" instance
+| GetMasterPDBState (instance, pdb) ->
+    sprintf "get state of master PDB \"%s\" in Oracle instance \"%s\"" pdb instance
+| CreateMasterPDB (user, parameters) ->
+    sprintf "create master PDB \"%s\" from dump \"%s\"" parameters.Name parameters.Dump
+| PrepareMasterPDBForModification (user, pdb, version) ->
+    sprintf "prepare master PDB \"%s\" for modifications" pdb
+| CommitMasterPDB (user, pdb, comment) ->
+    sprintf "commit modifications done in master PDB \"%s\"" pdb
+| RollbackMasterPDB (user, pdb) ->
+    sprintf "roll back modifications done in \"%s\"" pdb
+| CreateWorkingCopy (user, instance, pdb, version, name, force) ->
+    sprintf "create a working copy named \"%s\" of master PDB \"%s\" version %d on instance \"%s\"" name pdb version instance
+| DeleteWorkingCopy (user, instance, pdb, version, name) ->
+    sprintf "delete a working copy named \"%s\" of master PDB \"%s\" version %d on instance \"%s\"" name pdb version instance
+| GetRequest requestId ->
+    sprintf "get request from id %O" requestId
+| GetDumpTransferInfo instance ->
+    sprintf "get dump transfer info for Oracle instance \"%s\"" instance
+
+let describeAdminCommand = function
+| GetPendingChanges ->
+    "get pending changes"
+| EnterReadOnlyMode ->
+    "set maintenance mode"
+| EnterNormalMode ->
+    "set normal mode"
+| IsReadOnlyMode ->
+    "is maintenance mode ?"
+| CollectGarbage ->
+    "collect garbage"
+| Synchronize withInstance ->
+    sprintf "synchronize \"%s\" instance with primary" withInstance
+| SetPrimaryOracleInstance instance ->
+    sprintf "switch primary instance to \"%s\"" instance
+
 let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) (ctx : Actor<_>) =
+
+    let logRequest id command = ctx.Log.Value.Info("<< Command {0} : {1}", id, describeCommand command)
+    let logRequestResponse id command = ctx.Log.Value.Info(">> Command {0} completed ({1})", id, describeCommand command)
 
     let rec loop state = actor {
         
@@ -122,6 +165,8 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
         ctx.Log.Value.Debug("Number of completed requests : {0}", completedRequests.Count)
 
         let! (msg:obj) = ctx.Receive()
+
+        let requestDone = completeUserRequest logRequestResponse pendingRequests completedRequests
 
         try
         match msg with
@@ -168,7 +213,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | CreateMasterPDB (user, parameters) ->
                 let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                 let requestId = newRequestId()
-                let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
+                let newPendingRequests = pendingRequests |> registerUserRequest logRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.CreateMasterPDB (requestId, parameters)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
@@ -176,7 +221,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | PrepareMasterPDBForModification (user, pdb, version) ->
                 let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                 let requestId = newRequestId()
-                let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
+                let newPendingRequests = pendingRequests |> registerUserRequest logRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.PrepareMasterPDBForModification (requestId, pdb, version, user)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
@@ -184,7 +229,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | CommitMasterPDB (user, pdb, comment) ->
                 let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                 let requestId = newRequestId()
-                let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
+                let newPendingRequests = pendingRequests |> registerUserRequest logRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.CommitMasterPDB (requestId, pdb, user, comment)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
@@ -192,7 +237,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | RollbackMasterPDB (user, pdb) ->
                 let primaryInstance = collaborators.OracleInstanceActors.[orchestrator.PrimaryInstance]
                 let requestId = newRequestId()
-                let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
+                let newPendingRequests = pendingRequests |> registerUserRequest logRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.RollbackMasterPDB (requestId, user, pdb)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
@@ -203,7 +248,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 | Some instanceName ->
                     let instance = collaborators.OracleInstanceActors.[instanceName]
                     let requestId = newRequestId()
-                    let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
+                    let newPendingRequests = pendingRequests |> registerUserRequest logRequest requestId command user
                     retype instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName, force)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
@@ -217,7 +262,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 | Some instanceName ->
                     let instance = collaborators.OracleInstanceActors.[instanceName]
                     let requestId = newRequestId()
-                    let newPendingRequests = pendingRequests |> registerUserRequest requestId command user
+                    let newPendingRequests = pendingRequests |> registerUserRequest logRequest requestId command user
                     retype instance <! Application.OracleInstanceActor.DeleteWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
@@ -258,6 +303,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 
 
         | :? AdminCommand as command ->
+            ctx.Log.Value.Info("Received admin command : {0}", describeAdminCommand command)
             let getPendingChanges () = async {
                 let pendingChangeCommands = 
                     pendingRequests 
@@ -380,7 +426,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         CompletedWithError (sprintf "Error while creating master PDB %s : %s." pdb error)
                     | MasterPDBCreated pdb ->
                         sprintf "Master PDB %s created successfully." pdb.Name |> completedOk [ PDBName pdb.Name ]
-                let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
+                let (newPendingRequests, newCompletedRequests) = requestDone request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
         | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as responseToPrepareMasterPDBForModification ->
@@ -398,7 +444,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         sprintf "Master PDB %s prepared successfully for edition." pdb.Name |> completedOk ([ PDBName pdb.Name; PDBService pdbService ] @ schemasData)
                     | MasterPDBActor.PreparationFailure (pdb, error) -> 
                         sprintf "Error while preparing master PDB %s for edition : %s." pdb error |> CompletedWithError
-                let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
+                let (newPendingRequests, newCompletedRequests) = requestDone request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
         | :? WithRequestId<MasterPDBActor.EditionCommitted> as responseToMasterPDBEdition ->
@@ -415,7 +461,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         sprintf "Master PDB %s committed successfully." pdb.Name |> completedOk [ PDBName pdb.Name; PDBVersion newVersion ]
                     | Error error -> 
                         sprintf "Error while committing master PDB : %s." error |> CompletedWithError
-                let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
+                let (newPendingRequests, newCompletedRequests) = requestDone request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
         | :? WithRequestId<MasterPDBActor.EditionRolledBack> as responseToMasterPDBEdition ->
@@ -432,7 +478,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         sprintf "Master PDB %s rolled back successfully." pdb.Name |> completedOk [ PDBName pdb.Name ]
                     | Error error -> 
                         sprintf "Error while rolling back master PDB : %s." error |> CompletedWithError
-                let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
+                let (newPendingRequests, newCompletedRequests) = requestDone request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
         | :? WithRequestId<MasterPDBActor.CreateWorkingCopyResult> as responseToSnapshotMasterPDBVersion ->
@@ -450,7 +496,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         |> completedOk [ PDBName snapshotName ]
                     | Error error -> 
                         sprintf "Error while creating working copy : %s." error |> CompletedWithError
-                let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
+                let (newPendingRequests, newCompletedRequests) = requestDone request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
         | :? Application.Oracle.OraclePDBResultWithReqId as responseToDeleteWorkingCopy ->
@@ -468,7 +514,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         |> completedOk [ PDBName wcName ]
                     | Error error -> 
                         sprintf "Error while deleting working copy : %s." error.Message |> CompletedWithError
-                let (newPendingRequests, newCompletedRequests) = completeUserRequest request status pendingRequests completedRequests
+                let (newPendingRequests, newCompletedRequests) = requestDone request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
 
         // Message sent when an Oracle instance actor died (could not initialize)

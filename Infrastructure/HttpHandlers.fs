@@ -102,6 +102,7 @@ let getRequestStatus apiCtx (requestId:PendingRequest.RequestId) next (ctx:HttpC
 }
 
 open Domain.Common.Validation
+open Application
 
 let returnRequest endpoint requestValidation : HttpHandler =
     match requestValidation with
@@ -136,32 +137,8 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
         | None -> return! Successful.NO_CONTENT next ctx
         | Some pendingChanges -> 
             let encodeOrchestratorCommand = Encode.buildWith (fun (command:OrchestratorActor.Command) jObj ->
-                let description = 
-                    match command with
-                    | OrchestratorActor.GetState ->
-                        "Get global state"
-                    | OrchestratorActor.GetInstanceState instance ->
-                        sprintf "Get state of instance %s" instance
-                    | OrchestratorActor.GetMasterPDBState (instance, pdb) ->
-                        sprintf "Get state of master PDB %s on instance %s" pdb instance
-                    | OrchestratorActor.CreateMasterPDB (user, parameters) ->
-                        sprintf "Create master PDB %s from dump %s" parameters.Name parameters.Dump
-                    | OrchestratorActor.PrepareMasterPDBForModification (user, pdb, version) ->
-                        sprintf "Prepare master PDB %s for modifications" pdb
-                    | OrchestratorActor.CommitMasterPDB (user, pdb, comment) ->
-                        sprintf "Commit modifications done in master PDB %s" pdb
-                    | OrchestratorActor.RollbackMasterPDB (user, pdb) ->
-                        sprintf "Roll back modification done in %s" pdb
-                    | OrchestratorActor.CreateWorkingCopy (user, instance, pdb, version, name, force) ->
-                        sprintf "Create a working copy named %s of master PDB %s version %d on instance %s" name pdb version instance
-                    | OrchestratorActor.DeleteWorkingCopy (user, instance, pdb, version, name) ->
-                        sprintf "Delete a working copy named %s of master PDB %s version %d on instance %s" name pdb version instance
-                    | OrchestratorActor.GetRequest requestId ->
-                        sprintf "Get request from id %O" requestId
-                    | OrchestratorActor.GetDumpTransferInfo instance ->
-                        sprintf "Get dump transfer info for Oracle instance %s" instance
                 jObj 
-                |> Encode.required Encode.string "description" description
+                |> Encode.required Encode.string "description" (OrchestratorActor.describeCommand command)
             )
             let encodeOpenMasterPDB = Encode.buildWith (fun (x:string * MasterPDB.EditionInfoDTO) jObj ->
                 let name, lockInfo = x
