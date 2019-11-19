@@ -3,6 +3,7 @@
 open Infrastructure.Oracle
 open Microsoft.Extensions.Logging
 open Application.Oracle
+open Domain.Common
 
 let connAsDBAInFromInstance (instance:Domain.OracleInstance.OracleInstance) service =
     let port = instance.Port |> Option.defaultValue 1521
@@ -67,8 +68,9 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance) =
             pdbSnapshots connAsDBA name
             |> toOraclePDBResultAsync
 
-        member __.DeletePDBWithSnapshots (olderThan:System.TimeSpan) name =
+        member __.DeletePDBWithSnapshots (olderThan:System.TimeSpan option) name =
             deletePDBWithSnapshots logger connAsDBA olderThan name
+            |> toOraclePDBValidationAsync
 
         member __.GetPDBNamesLike like = 
             getPDBNamesLike connAsDBA like

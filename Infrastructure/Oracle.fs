@@ -22,6 +22,14 @@ let toOraclePDBResultAsync result = async {
     return toOraclePDBResult r
 }
 
+let toOraclePDBValidation validation =
+    validation |> Validation.mapError (fun error -> error :> exn)
+
+let toOraclePDBValidationAsync validation = async {
+    let! r = validation
+    return toOraclePDBValidation r
+}
+
 let convertComp (comp:PDBCompensableAsyncAction) : CompensableAsyncAction<string, exn> =
     let (action, compensation) = comp
     let newAction t = async {
@@ -594,8 +602,12 @@ let pdbsFilteredOlderThan connAsDBA filter (olderThan:System.TimeSpan) = async {
 
 let pdbsOlderThan connAsDBA = pdbsFilteredOlderThan connAsDBA None
 
-let pdbSnapshotsOlderThan connAsDBA (olderThan:System.TimeSpan) (name:string) = 
-    pdbsFilteredOlderThan connAsDBA (isSnapshotOfClause name |> Some) olderThan
+let pdbSnapshotsOlderThan connAsDBA (olderThan:System.TimeSpan option) (name:string) = 
+    match olderThan with
+    | Some olderThan ->
+        pdbsFilteredOlderThan connAsDBA (isSnapshotOfClause name |> Some) olderThan
+    | None ->
+        pdbSnapshots connAsDBA name
 
 let getOldPDBsHavingFilesFolderStartWith connAsDBA olderThan folder = 
     getPDBsHavingFilesFolderStartWith connAsDBA folder (Some (olderThanClause olderThan (Some "p")))
@@ -623,25 +635,23 @@ let deleteSourcePDB (logger:ILogger) connAsDBA (name:string) = async {
     | Error error -> return Error (upcast error)
 }
 
-let deletePDBWithSnapshots (logger:ILogger) connAsDBA (olderThan:System.TimeSpan) (name:string) = asyncValidation {
-    logger.LogDebug("Deleting PDB {pdb} and dependant snapshots older than {delay}...", name, olderThan)
-    let mapError (x:Async<Result<'a,OracleException>>) : Async<Result<'a,exn>> = AsyncResult.mapError (fun ex -> ex :> exn) x
-    let! snapshots = pdbSnapshotsOlderThan connAsDBA olderThan name |> mapError
+let deletePDBWithSnapshots (logger:ILogger) connAsDBA (olderThan:System.TimeSpan option) (name:string) = asyncValidation {
+    logger.LogDebug("Deleting PDB {pdb} and dependant snapshots...", name, olderThan)
+    let! snapshots = pdbSnapshotsOlderThan connAsDBA olderThan name
     let deleteSnapshot (snapshot:string) = asyncValidation {
         do! () // mandatory for the next line (log) to be in the same async block
         logger.LogDebug("Deleting PDB snapshot {pdb}...", snapshot)
         let! result = 
             snapshot
             |> deletePDB logger connAsDBA true
-            |> AsyncResult.mapError (fun oracleExn -> exn (sprintf "cannot delete snapshot PDB %s : %s" snapshot oracleExn.Message))
             |> AsyncValidation.ofAsyncResult
         logger.LogDebug("Deleted PDB snapshot {pdb}.", snapshot)
         return result
     }
     let! _ = snapshots |> AsyncValidation.traverseS deleteSnapshot
-    let! hasSnapshots = pdbHasSnapshots connAsDBA name |> mapError
+    let! hasSnapshots = pdbHasSnapshots connAsDBA name
     if not hasSnapshots then
-        let! _ = deletePDB logger connAsDBA true name |> mapError
+        let! _ = deletePDB logger connAsDBA true name
         logger.LogDebug("Deleted PDB {pdb} and all dependant snapshots.", name)
         return true
     else

@@ -90,7 +90,7 @@ let private masterPDBVersionActorBody
                 let like = getSnapshotSourceName masterPDBName masterPDBVersion "%"
                 let! _ = asyncValidation {
                     let! thisVersionSourcePDBs = oracleAPI.GetPDBNamesLike like
-                    let! isSourceDeletedList = thisVersionSourcePDBs |> AsyncValidation.traverseS (oracleAPI.DeletePDBWithSnapshots parameters.GarbageCollectionDelay)
+                    let! isSourceDeletedList = thisVersionSourcePDBs |> AsyncValidation.traverseS (oracleAPI.DeletePDBWithSnapshots (Some parameters.GarbageCollectionDelay))
                     let sourceAndIsDeleted = List.zip thisVersionSourcePDBs isSourceDeletedList
                     let isDeleted = sourceAndIsDeleted |> List.exists (fun (pdb, deleted) -> deleted && pdb.ToUpper() = snapshotSourceName.ToUpper())
                     if isDeleted then retype (ctx.Parent()) <! KillVersion masterPDBVersion.Number

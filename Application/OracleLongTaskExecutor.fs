@@ -69,7 +69,11 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             return! loop ()
 
         | DeletePDB (requestId, name) -> 
-            let! result = oracleAPI.DeletePDB name
+            let! validation = name |> oracleAPI.DeletePDBWithSnapshots None
+            let result = 
+                match validation with
+                | Validation.Valid _ -> Ok name
+                | Validation.Invalid errors -> Error (errors |> List.map (fun ex -> ex.Message) |> String.concat "; " |> exn)
             match requestId with
             | Some reqId -> ctx.Sender() <! (reqId, result)
             | None -> ctx.Sender() <! result
