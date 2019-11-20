@@ -77,7 +77,7 @@ let private masterPDBActorBody
     (ctx : Actor<obj>) =
 
     let initialMasterPDB = initialRepository.Get()
-    let editionPDBName = initialMasterPDB.Name
+    let editionPDBName = sprintf "%s_EDITION" initialMasterPDB.Name
 
     let rec loop state = actor {
 
