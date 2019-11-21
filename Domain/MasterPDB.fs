@@ -60,8 +60,13 @@ let isVersionDeleted version masterPDB =
 let getLatestAvailableVersion masterPDB =
     masterPDB.Versions 
     |> Map.toList
-    |> List.findBack (fun (_, version) -> not (version.Deleted)) 
-    |> snd
+    |> List.tryFindBack (fun (_, version) -> not (version.Deleted)) 
+    |> Option.map snd
+
+let getLatestAvailableVersionNumber masterPDB =
+    getLatestAvailableVersion masterPDB
+    |> Option.map (fun v -> v.Number)
+    |> Option.defaultValue 0
 
 let getNextAvailableVersion masterPDB =
     let highestVersionUsed = masterPDB.Versions |> Map.toList |> List.last |> snd

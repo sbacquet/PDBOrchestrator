@@ -30,8 +30,8 @@ let ``Previous version with deleted`` () =
         consPDBVersion 4 true "me" System.DateTime.Now "version 4" Map.empty
     ]
     let pdb = consMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None false Map.empty
-    let version = pdb |> getLatestAvailableVersion
-    Assert.Equal(2, version.Number)
+    let version = pdb |> getLatestAvailableVersionNumber
+    Assert.Equal(2, version)
 
 [<Fact>]
 let ``Can delete an existing version`` () =
@@ -42,14 +42,14 @@ let ``Can delete an existing version`` () =
         consPDBVersion 4 false "me" System.DateTime.Now "version 4" Map.empty
     ]
     let pdb = consMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None false Map.empty
-    let version = pdb |> getLatestAvailableVersion
-    Assert.Equal(4, version.Number)
+    let version = pdb |> getLatestAvailableVersionNumber
+    Assert.Equal(4, version)
     let result = pdb |> deleteVersion 4
     match result with
     | Ok pdb -> 
         Assert.True(pdb.Versions.[4].Deleted)
-        let version = pdb |> getLatestAvailableVersion
-        Assert.Equal(3, version.Number)
+        let version = pdb |> getLatestAvailableVersionNumber
+        Assert.Equal(3, version)
         let nextVersion = pdb |> getNextAvailableVersion
         Assert.Equal(5, nextVersion)
     | Error e -> failwith e
@@ -91,17 +91,17 @@ let ``Can add and delete a version`` () =
         consPDBVersion 4 true "me" System.DateTime.Now "version 4" Map.empty
     ]
     let pdb = consMasterPDB "test1" [ { User = "invest"; Password = ""; Type = "Invest" } ] versions None false Map.empty
-    Assert.Equal(2, (getLatestAvailableVersion pdb).Number)
+    Assert.Equal(2, getLatestAvailableVersionNumber pdb)
     let newPDB, newVersion = pdb |> addVersionToMasterPDB "me" "version 5"
     Assert.Equal(5, newVersion)
     Assert.Equal("version 5", newPDB.Versions.[5].Comment)
-    Assert.Equal(newVersion, (getLatestAvailableVersion newPDB).Number)
+    Assert.Equal(newVersion, getLatestAvailableVersionNumber newPDB)
     let result = newPDB |> deleteVersion 5
     match result with
     | Ok pdb -> 
         Assert.True(pdb.Versions.[5].Deleted)
-        let version = pdb |> getLatestAvailableVersion
-        Assert.Equal(2, version.Number)
+        let version = pdb |> getLatestAvailableVersionNumber
+        Assert.Equal(2, version)
         let nextVersion = pdb |> getNextAvailableVersion
         Assert.Equal(6, nextVersion)
     | Error e -> failwith e

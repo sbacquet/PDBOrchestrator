@@ -73,7 +73,7 @@ let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) =
     consMasterPDBDTO
         masterPDB.Name
         (masterPDB.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type }))
-        (masterPDB |> Domain.MasterPDB.getLatestAvailableVersion).Number
+        (masterPDB |> Domain.MasterPDB.getLatestAvailableVersionNumber)
         (masterPDB.Versions 
          |> Map.map (fun _ version -> version |> toMasterPDBVersionDTO (Domain.MasterPDB.manifestFile masterPDB.Name version.Number))
          |> Map.toList |> List.map snd)

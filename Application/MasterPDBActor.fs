@@ -146,9 +146,9 @@ let private masterPDBActorBody
                     sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "user %s is not authorized to lock PDB %s" user masterPDB.Name))
                     return! loop state
                 else
-                    let latestVersion = masterPDB |> getLatestAvailableVersion
-                    if (latestVersion.Number <> version) then 
-                        sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "version %d is not the latest version (%d) of \"%s\"" version latestVersion.Number masterPDB.Name))
+                    let latestVersion = masterPDB |> getLatestAvailableVersionNumber
+                    if (latestVersion <> version) then 
+                        sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "version %d is not the latest version (%d) of \"%s\"" version latestVersion masterPDB.Name))
                         return! loop state
                     elif (state.EditionOperationInProgress) then
                         sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
