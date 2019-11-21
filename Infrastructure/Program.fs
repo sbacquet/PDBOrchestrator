@@ -12,13 +12,15 @@ open System
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
-open FSharp.Control.Tasks.V2.ContextInsensitive
-open System.Threading.Tasks
+open Microsoft.Extensions.Configuration
+open Giraffe
 
 [<RequireQualifiedAccess>]
 module Config =
     let private invalidConfig (errors:string list) =
         Serilog.Log.Logger.Error("The configuration is invalid : {0}", String.Join("; ", errors))
+        Serilog.Log.Logger.Information("Exiting.")
+        Serilog.Log.CloseAndFlush()
         #if DEBUG
         Console.WriteLine("Press a key to exit...")
         Console.ReadKey() |> ignore
@@ -38,12 +40,10 @@ module Config =
             | Valid parameters -> parameters
         validInfrastuctureParameters, validApplicationParameters
 
-    let akkaConfig =
-        let config =
-            #if DEBUG
-            Akkling.Configuration.parse @"
+    let akkaConfig level =
+        Akkling.Configuration.parse (sprintf @"
             akka { 
-                loglevel=DEBUG
+                loglevel=%s
                 loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] l
                 actor {
                     debug {
@@ -52,28 +52,46 @@ module Config =
                         lifecycle = on
                     }
                 }
-            }"
-            #else
-            Akkling.Configuration.parse @"akka { loggers=[""Akka.Logger.Serilog.SerilogLogger, Akka.Logger.Serilog""] }"
-            #endif
-        config
+            }" level)
+
+let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
+    let env = app.ApplicationServices.GetService<IHostingEnvironment>()
+    (match env.IsDevelopment() with
+    | true  -> app.UseDeveloperExceptionPage()
+    | false -> app.UseGiraffeErrorHandler RestAPI.errorHandler)
+        .UseStaticFiles()
+        .UseSerilogRequestLogging()
+        .UseGiraffe(RestAPI.webApp apiCtx) |> ignore
+
+let configureServices (loggerFactory : ILoggerFactory) (services : IServiceCollection) =
+    services
+        .AddSingleton(typeof<ILoggerFactory>, loggerFactory)
+        .AddGiraffe() |> ignore
+
+let buildConfiguration (args:string[]) =
+    let aspnetcoreEnv = System.Environment.GetEnvironmentVariable "ASPNETCORE_ENVIRONMENT"
+    let env = if (System.String.IsNullOrEmpty aspnetcoreEnv) then "Production" else aspnetcoreEnv
+    let config = 
+        ConfigurationBuilder().
+            AddJsonFile("appsettings.json", optional=true).
+            AddJsonFile(sprintf "appsettings.%s.json" env, optional=true).
+            AddJsonFile("customappsettings.json", optional=true).
+            AddEnvironmentVariables().
+            AddCommandLine(args).
+            Build()
+    ConfigurationBuilder().
+        AddInMemoryCollection(config |> Configuration.mapConfigValuesToKeys [ "{{SERVER_INSTANCE}}", "UniqueName" ]).
+        Build()
 
 [<EntryPoint>]
 let main args =
-    let config = RestAPI.buildConfiguration args
+    let config = buildConfiguration args
     Serilog.Log.Logger <- 
         LoggerConfiguration().
             ReadFrom.Configuration(config).
-            #if DEBUG
-            MinimumLevel.Is(Events.LogEventLevel.Debug).
-            #else
-            MinimumLevel.Override("Microsoft.AspNetCore", Events.LogEventLevel.Warning).
-            #endif
-            Enrich.FromLogContext().
             CreateLogger()
 
-    let infrastuctureParameters, validApplicationParameters = 
-        Config.validateConfig config
+    let infrastuctureParameters, validApplicationParameters = Config.validateConfig config
 
     let rootFolder = infrastuctureParameters.Root
     let orchestratorName = "orchestrator"
@@ -86,7 +104,7 @@ let main args =
     let loggerFactory = new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory
     let getOracleAPI (instance:OracleInstance) = OracleInstanceAPI.OracleInstanceAPI(loggerFactory, instance)
 
-    use system = Akkling.System.create "sys" Config.akkaConfig
+    use system = Akkling.System.create "sys" (Config.akkaConfig (config.GetValue("Akka:LogLevel", "INFO")))
     try
         let orchestratorActor = system |> OrchestratorActor.spawn validApplicationParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
         system |> OrchestratorWatcher.spawn orchestratorActor |> ignore
@@ -105,8 +123,8 @@ let main args =
                 .UseConfiguration(config)
                 .UseKestrel(fun options -> options.Listen(System.Net.IPAddress.IPv6Any, port))
                 .UseIISIntegration()
-                .Configure(Action<IApplicationBuilder> (RestAPI.configureApp apiContext))
-                .ConfigureServices(Action<IServiceCollection> (RestAPI.configureServices loggerFactory))
+                .Configure(Action<IApplicationBuilder> (configureApp apiContext))
+                .ConfigureServices(Action<IServiceCollection> (configureServices loggerFactory))
                 .UseSerilog()
                 .Build()
         // Set up termination of web server on Akka system failure
@@ -122,8 +140,10 @@ let main args =
         if not system.WhenTerminated.IsCompleted then
             system.Stop(untyped orchestratorActor)
             system.Terminate().Wait()
+            Serilog.Log.CloseAndFlush()
             0
         else
+            Serilog.Log.CloseAndFlush()
             #if DEBUG
             Console.WriteLine("Press a key to exit...")
             Console.ReadKey() |> ignore
@@ -133,6 +153,7 @@ let main args =
         Serilog.Log.Logger.Fatal("A fatal error occurred : {error}", ex.Message)
         System.Console.WriteLine "Aborting..."
         system.Terminate().Wait()
+        Serilog.Log.CloseAndFlush()
         #if DEBUG
         Console.WriteLine("Press a key to exit...")
         Console.ReadKey() |> ignore

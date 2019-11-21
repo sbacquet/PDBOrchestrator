@@ -5,13 +5,8 @@ open Microsoft.Extensions.Logging
 open Application
 open Giraffe
 open System
-open Microsoft.AspNetCore.Builder
-open Microsoft.Extensions.Hosting
-open Serilog
-open Microsoft.Extensions.DependencyInjection
-open Microsoft.Extensions.Configuration
 
-let private webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc = 
+let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc = 
     choose [
         GET >=> choose [
             routef "/requests/%O" (HttpHandlers.getRequestStatus apiCtx)
@@ -58,35 +53,6 @@ let private webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
         RequestErrors.BAD_REQUEST "Unknown HTTP request"
     ]
 
-let private errorHandler (ex : Exception) (logger : Microsoft.Extensions.Logging.ILogger) =
+let errorHandler (ex : Exception) (logger : Microsoft.Extensions.Logging.ILogger) =
     logger.LogError(ex, "An unhandled exception has occurred while executing the request.")
     clearResponse >=> setStatusCode 500 >=> text ex.Message
-
-let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
-    let env = app.ApplicationServices.GetService<IHostingEnvironment>()
-    (match env.IsDevelopment() with
-    | true  -> app.UseDeveloperExceptionPage()
-    | false -> app.UseGiraffeErrorHandler errorHandler)
-        //.UseHttpsRedirection()
-        //.UseCors(configureCors)
-        //.UseAuthentication()
-        .UseStaticFiles()
-        .UseSerilogRequestLogging()
-        .UseGiraffe(webApp apiCtx) |> ignore
-
-let configureServices (loggerFactory : ILoggerFactory) (services : IServiceCollection) =
-    services
-        .AddSingleton(typeof<ILoggerFactory>, loggerFactory)
-        .AddGiraffe() |> ignore
-
-let buildConfiguration (args:string[]) =
-    let builder = ConfigurationBuilder().AddJsonFile("appsettings.json", optional=true)
-    let aspnetcoreEnv = System.Environment.GetEnvironmentVariable "ASPNETCORE_ENVIRONMENT"
-    let builder = 
-        if (not (System.String.IsNullOrEmpty aspnetcoreEnv)) then
-            builder.AddJsonFile(sprintf "appsettings.%s.json" aspnetcoreEnv, optional=true)
-        else builder
-    builder.
-        AddCommandLine(args).
-        Build()
-

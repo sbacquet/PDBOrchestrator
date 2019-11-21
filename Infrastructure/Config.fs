@@ -145,3 +145,13 @@ let configToInfrastuctureParameters (config:IConfigurationRoot) =
         <*> root
         <*> port
         <*> dnsName
+
+let mapConfigValues f (mapping:(string * string) list) (config:IConfigurationRoot) =
+    config.AsEnumerable() 
+    |> Seq.map (fun kvp -> System.Collections.Generic.KeyValuePair(kvp.Key, mapping |> List.fold (fun (value:string) (keyword, keyValue) -> if (value = null) then null else value.Replace(keyword, f keyValue)) kvp.Value))
+
+let mapConfigValuesToKeys (mapping:(string * string) list) (config:IConfigurationRoot) =
+    mapConfigValues (fun keywordKey -> config.[keywordKey]) mapping config
+
+let mapConfigValuesToValues (mapping:(string * string) list) (config:IConfigurationRoot) =
+    mapConfigValues id mapping config
