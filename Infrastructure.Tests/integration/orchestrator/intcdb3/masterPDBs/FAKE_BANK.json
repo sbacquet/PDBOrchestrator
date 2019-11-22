@@ -1,0 +1,28 @@
+{
+  "name": "FAKE_BANK",
+  "schemas": [
+    {
+      "user": "INVEST_FAKE_BANK",
+      "password": "M1Iyk/ZMoUoWI79kgvG4kQ==",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2018-01-24T23:00:00.0000000Z",
+      "comment": "Imported schemas INVEST_FAKE_BANK from dump //orapar1.misys.global.ad/AppDumps/INVEST_FAKE_BANK_2.DMP",
+      "deleted": true
+    },
+    {
+      "number": 3,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-27T22:00:00.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    }
+  ],
+  "_version": 1,
+  "_iv": "hd1HWw8dyDWWQ6687AmwFQ=="
+}

@@ -14,7 +14,6 @@ open Serilog
 open Microsoft.Extensions.Logging
 open System
 open Application.DTO.OracleInstance
-open Application.DTO.Orchestrator
 open Application.MasterPDBActor
 open Application.OrchestratorActor
 open Domain.Common.Validation
@@ -31,6 +30,7 @@ let parameters : Application.Parameters.Parameters = {
     LongTimeout = TimeSpan.FromMinutes(2.) |> Some
     VeryLongTimeout = TimeSpan.FromMinutes(20.) |> Some
 #endif
+    NumberOfOracleShortTaskExecutors = 5
     NumberOfOracleLongTaskExecutors = 3
     NumberOfOracleDiskIntensiveTaskExecutors = 1
     GarbageCollectionDelay = TimeSpan.FromMinutes(1.)
@@ -213,7 +213,7 @@ let orchestratorRepo = FakeOrchestratorRepo(orchestratorState)
 
 let spawnOrchestratorActor = OrchestratorActor.spawn parameters (fun _ -> fakeOracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
 let spawnOracleInstanceActor = OracleInstanceActor.spawn parameters (fun _ -> fakeOracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo
-let spawnMasterPDBActor = MasterPDBActor.spawn parameters fakeOracleAPI
+let spawnMasterPDBActor = MasterPDBActor.spawn parameters
 
 [<Fact>]
 let ``State transfer`` () = test <| fun tck ->
@@ -316,9 +316,10 @@ let ``API creates PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``Lock master PDB`` () = test <| fun tck ->
+    let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
-    let masterPDBActor = tck |> spawnMasterPDBActor instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
+    let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
     retype masterPDBActor <! MasterPDBActor.PrepareForModification (newRequestId(), 1, "me")
 
@@ -376,9 +377,10 @@ let ``API edits and commits master PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``MasterPDB creates a working copy`` () = test <| fun tck ->
+    let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
-    let masterPDBActor = tck |> spawnMasterPDBActor instance1 longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
+    let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
     let (_, result):WithRequestId<CreateWorkingCopyResult> = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore

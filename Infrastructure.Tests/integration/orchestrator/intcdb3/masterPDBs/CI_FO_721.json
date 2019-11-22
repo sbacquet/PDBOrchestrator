@@ -1,0 +1,46 @@
+{
+  "name": "CI_FO_721",
+  "schemas": [
+    {
+      "user": "CI_FO_721",
+      "password": "3Y1yALofkZNK+0b3+vJ83dPNnPbyujbav+GaqUKMC14=",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 7,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-22T22:00:00.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 8,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-27T22:00:00.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    },
+    {
+      "number": 13,
+      "createdBy": "aanghela",
+      "creationDate": "2018-09-03T22:00:00.0000000Z",
+      "comment": "Added new timecontext for forecast"
+    },
+    {
+      "number": 14,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?",
+      "deleted": true
+    },
+    {
+      "number": 15,
+      "createdBy": "xdelecroix",
+      "creationDate": "2019-03-28T23:00:00.0000000Z",
+      "comment": "Run dbms_stats.gather_schema_stats to tupdate stats."
+    }
+  ],
+  "_version": 1,
+  "_iv": "kfEHzZ6uEr/IsIsGJ5Vlzg=="
+}

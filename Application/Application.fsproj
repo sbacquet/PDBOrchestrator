@@ -10,6 +10,7 @@
     <Compile Include="UserPendingRequest.fs" />
     <Compile Include="Parameters.fs" />
     <Compile Include="OracleAPI.fs" />
+    <Compile Include="OracleShortTaskExecutor.fs" />
     <Compile Include="OracleLongTaskExecutor.fs" />
     <Compile Include="OracleDiskIntensiveActor.fs" />
     <Compile Include="MasterPDBVersionActor.fs" />

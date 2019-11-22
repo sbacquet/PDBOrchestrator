@@ -124,6 +124,7 @@ type DumpTransferInfo = {
 }
 
 type private Collaborators = {
+    OracleShortTaskExecutor: IActorRef<Application.OracleShortTaskExecutor.Command>
     OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
     OracleDiskIntensiveTaskExecutor : IActorRef<Application.OracleDiskIntensiveActor.Command>
     MasterPDBActors: Map<string, IActorRef<obj>>
@@ -139,8 +140,8 @@ let private addNewMasterPDB parameters (oracleAPI:IOracleAPI) (ctx : Actor<obj>)
                     masterPDB.Name, 
                     ctx |> MasterPDBActor.spawnNew 
                         parameters
-                        oracleAPI
                         instance 
+                        collaborators.OracleShortTaskExecutor
                         collaborators.OracleLongTaskExecutor 
                         collaborators.OracleDiskIntensiveTaskExecutor 
                         newMasterPDBRepo
@@ -183,14 +184,16 @@ let private updateMasterPDBs parameters (oracleAPI:IOracleAPI) (ctx : Actor<obj>
 
 // Spawn actors for master PDBs that already exist
 let private spawnCollaborators parameters oracleAPI (getMasterPDBRepo:OracleInstance->string->IMasterPDBRepository) (instance : OracleInstance) (ctx : Actor<obj>) : Collaborators = 
+    let oracleShortTaskExecutor = ctx |> OracleShortTaskExecutor.spawn parameters oracleAPI
     let oracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn parameters oracleAPI
     let oracleDiskIntensiveTaskExecutor = ctx |> Application.OracleDiskIntensiveActor.spawn parameters oracleAPI
     let collaborators = {
+        OracleShortTaskExecutor = oracleShortTaskExecutor
         OracleLongTaskExecutor = oracleLongTaskExecutor
         OracleDiskIntensiveTaskExecutor = oracleDiskIntensiveTaskExecutor
         MasterPDBActors = 
             instance.MasterPDBs 
-            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn parameters oracleAPI instance oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo pdb))
+            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn parameters instance oracleShortTaskExecutor oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo pdb))
             |> Map.ofList
     }
     collaborators.OracleLongTaskExecutor |> monitor ctx |> ignore

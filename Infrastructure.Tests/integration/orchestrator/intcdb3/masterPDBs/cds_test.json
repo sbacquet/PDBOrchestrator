@@ -1,0 +1,27 @@
+{
+  "name": "cds_test",
+  "schemas": [
+    {
+      "user": "CDS_TEST",
+      "password": "xbughqf3o08MPirV2Aym7A==",
+      "type": "Invest"
+    },
+    {
+      "user": "CDS_AF_TEST",
+      "password": "xbughqf3o08MPirV2Aym7A==",
+      "type": "SRM"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-02-20T23:00:00.0000000Z",
+      "comment": "First version",
+      "deleted": true
+    }
+  ],
+  "_version": 1,
+  "_iv": "lfZZcAjcNpxEXtuU1S2ytg=="
+}

@@ -1,0 +1,22 @@
+{
+  "name": "testmars72_04_07_2016",
+  "schemas": [
+    {
+      "user": "testmars72_04_07_2016",
+      "password": "1wAeg1raDp6BLlYoiZs69A==",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-03-22T23:00:00.0000000Z",
+      "comment": "Imported schemas testmars72_04_07_2016 from dump //fr1pswbld10.misys.global.ad/TestData/DatabaseDumps/testmars72_04_07_2016.dmp",
+      "deleted": true
+    }
+  ],
+  "_version": 1,
+  "_iv": "vrWTVFdCjHuhTJAoZov9ig=="
+}

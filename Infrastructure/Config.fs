@@ -52,6 +52,15 @@ let validateVeryLongTimeout (config:IConfigurationRoot) =
             Invalid [ sprintf "config entry %s must be > 0" configEntry ]
     with _ -> Invalid [ sprintf "config entry %s is not a valid integer" configEntry ] 
 
+let validateNumberOfOracleShortTaskExecutors (config:IConfigurationRoot) =
+    let configEntry = "NumberOfOracleShortTaskExecutors"
+    try
+        let number = config.GetValue(configEntry, 5)
+        if (number > 0)
+        then number |> Valid
+        else Invalid [ sprintf "config entry %s must be > 0" configEntry ]
+    with _ -> Invalid [ sprintf "config entry %s is not a valid integer" configEntry ] 
+
 let validateNumberOfOracleLongTaskExecutors (config:IConfigurationRoot) =
     let configEntry = "NumberOfOracleLongTaskExecutors"
     try
@@ -84,6 +93,7 @@ let configToApplicationParameters (config:IConfigurationRoot) =
     let shortTimeout = validateShortTimeout config
     let longTimeout = validateLongTimeout config
     let veryLongTimeout = validateVeryLongTimeout config
+    let numberOfOracleShortTaskExecutors = validateNumberOfOracleShortTaskExecutors config
     let numberOfOracleLongTaskExecutors = validateNumberOfOracleLongTaskExecutors config
     let numberOfOracleDiskIntensiveTaskExecutors = validateNumberOfOracleDiskIntensiveTaskExecutors config
     let garbageCollectionDelay = validateGarbageCollectionDelay config
@@ -92,6 +102,7 @@ let configToApplicationParameters (config:IConfigurationRoot) =
         <*> shortTimeout
         <*> longTimeout
         <*> veryLongTimeout
+        <*> numberOfOracleShortTaskExecutors
         <*> numberOfOracleLongTaskExecutors
         <*> numberOfOracleDiskIntensiveTaskExecutors
         <*> garbageCollectionDelay

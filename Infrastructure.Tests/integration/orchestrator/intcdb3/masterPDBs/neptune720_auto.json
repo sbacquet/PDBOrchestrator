@@ -1,0 +1,22 @@
+{
+  "name": "neptune720_auto",
+  "schemas": [
+    {
+      "user": "neptune720_auto",
+      "password": "+VDfq6SNG1iyjx/rjHoiRFn9U+5i8d8+G9sYBoBsess=",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-02-20T23:00:00.0000000Z",
+      "comment": "First version",
+      "deleted": true
+    }
+  ],
+  "_version": 1,
+  "_iv": "W6jjPVIhdOYS+A4or3QV+A=="
+}

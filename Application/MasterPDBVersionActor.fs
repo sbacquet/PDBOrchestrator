@@ -4,11 +4,11 @@ open Akkling
 open Akka.Actor
 open Domain.MasterPDBVersion
 open Application.PendingRequest
-open Application.OracleLongTaskExecutor
-open Application.OracleDiskIntensiveActor
 open Application.Oracle
 open Application.Parameters
 open Domain.Common
+open Domain.Common.Exceptional
+open Domain.Common.Validation
 open Domain.OracleInstance
 open Application.Common
 
@@ -25,8 +25,8 @@ let getSnapshotSourceName (pdb:string) (masterPDBVersion:MasterPDBVersion) (suff
 
 let private masterPDBVersionActorBody 
     (parameters:Parameters)
-    (oracleAPI:#Application.Oracle.IOracleAPI) 
     (instance:OracleInstance) 
+    (oracleShortTaskExecutor:IActorRef<OracleShortTaskExecutor.Command>) 
     (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 
     (oracleDiskIntensiveTaskExecutor:IActorRef<OracleDiskIntensiveActor.Command>) 
     (masterPDBName:string)
@@ -34,6 +34,11 @@ let private masterPDBVersionActorBody
     (ctx : Actor<Command>) =
 
     let snapshotSourceName = getSnapshotSourceName masterPDBName masterPDBVersion parameters.ServerInstanceName
+    let pdbExists pdb : Async<Exceptional<bool>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
+    let deletePDB pdb : Async<Exceptional<string>> = oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
+    let deletePDBOlderThan delay pdb : Async<Validation<bool, exn>> = oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDBOlderThan (None, pdb, delay)
+    let getPDBNamesLike like : Async<Exceptional<string list>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBNamesLike like
+    let getPDBFilesFolder pdb : Async<Exceptional.Exceptional<string option>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
 
     let rec loop () = actor {
 
@@ -43,37 +48,36 @@ let private masterPDBVersionActorBody
         match command with
         | CreateWorkingCopy (requestId, sourceManifest, workingCopyName, force) -> 
             let! result = asyncResult {
-                let! wcExists = oracleAPI.PDBExists workingCopyName
+                let! wcExists = pdbExists workingCopyName
                 if wcExists && (not force) then 
                     ctx.Log.Value.Info("Working copy {pdb} already exists, not enforcing creation.", workingCopyName)
                     return! AsyncResult.retn workingCopyName
                 else
                     let! _ = 
-                        if wcExists then // force creation
-                            oracleLongTaskExecutor <? DeletePDB (None, workingCopyName)
+                        if wcExists then deletePDB workingCopyName // force creation
                         else AsyncResult.retn ""
                     if (instance.SnapshotCapable) then
-                        let! snapshotSourceExists = oracleAPI.PDBExists snapshotSourceName
+                        let! snapshotSourceExists = pdbExists snapshotSourceName
                         let! _ = 
                             if (not snapshotSourceExists) then
-                                oracleDiskIntensiveTaskExecutor <? ImportPDB (None, sourceManifest, instance.SnapshotSourcePDBDestPath, snapshotSourceName)
+                                oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, sourceManifest, instance.SnapshotSourcePDBDestPath, snapshotSourceName)
                             else
                                 ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
                                 AsyncResult.retn ""
-                        return! oracleLongTaskExecutor <? SnapshotPDB (None, snapshotSourceName, workingCopyName)
+                        return! oracleLongTaskExecutor <? OracleLongTaskExecutor.SnapshotPDB (None, snapshotSourceName, workingCopyName)
                     else
-                        return! oracleDiskIntensiveTaskExecutor <? ImportPDB (None, sourceManifest, instance.WorkingCopyDestPath, workingCopyName)
+                        return! oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, sourceManifest, instance.WorkingCopyDestPath, workingCopyName)
             }
             sender <! (requestId, result)
             return! loop ()
 
         | DeleteWorkingCopy (requestId, pdb) ->
-            let! pdbFilesFolder = oracleAPI.GetPDBFilesFolder pdb
+            let! pdbFilesFolder = getPDBFilesFolder pdb
             let result:OraclePDBResult =
                 match pdbFilesFolder with
                 | Ok (Some folder) ->
                     if folder.StartsWith(instance.WorkingCopyDestPath) then
-                        oracleLongTaskExecutor <? DeletePDB (None, pdb) 
+                        deletePDB pdb
                         |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
                     else
                         sprintf "PDB %s is not a working copy" pdb |> exn |> Error
@@ -89,8 +93,8 @@ let private masterPDBVersionActorBody
             if instance.SnapshotCapable then
                 let like = getSnapshotSourceName masterPDBName masterPDBVersion "%"
                 let! _ = asyncValidation {
-                    let! thisVersionSourcePDBs = oracleAPI.GetPDBNamesLike like
-                    let! isSourceDeletedList = thisVersionSourcePDBs |> AsyncValidation.traverseS (oracleAPI.DeletePDBWithSnapshots (Some parameters.GarbageCollectionDelay))
+                    let! thisVersionSourcePDBs = getPDBNamesLike like
+                    let! isSourceDeletedList = thisVersionSourcePDBs |> AsyncValidation.traverseS (deletePDBOlderThan parameters.GarbageCollectionDelay)
                     let sourceAndIsDeleted = List.zip thisVersionSourcePDBs isSourceDeletedList
                     let isDeleted = sourceAndIsDeleted |> List.exists (fun (pdb, deleted) -> deleted && pdb.ToUpper() = snapshotSourceName.ToUpper())
                     if isDeleted then retype (ctx.Parent()) <! KillVersion masterPDBVersion.Number
@@ -108,14 +112,14 @@ let private masterPDBVersionActorBody
 
     loop ()
 
-let spawn parameters (oracleAPI:#Application.Oracle.IOracleAPI) instance longTaskExecutor oracleDiskIntensiveTaskExecutor (masterPDBName:string) (masterPDBVersion:MasterPDBVersion) (actorFactory:IActorRefFactory) =
+let spawn parameters instance shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor (masterPDBName:string) (masterPDBVersion:MasterPDBVersion) (actorFactory:IActorRefFactory) =
 
     (Akkling.Spawn.spawnAnonymous actorFactory
         <| props (
             masterPDBVersionActorBody 
                 parameters
-                oracleAPI
                 instance
+                shortTaskExecutor 
                 longTaskExecutor 
                 oracleDiskIntensiveTaskExecutor 
                 masterPDBName

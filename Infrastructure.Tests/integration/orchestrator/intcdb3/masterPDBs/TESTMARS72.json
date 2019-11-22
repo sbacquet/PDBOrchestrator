@@ -1,0 +1,32 @@
+{
+  "name": "TESTMARS72",
+  "schemas": [
+    {
+      "user": "TESTMARS72",
+      "password": "tsWy77wK1CE3yG3dvkduDg==",
+      "type": "Invest"
+    },
+    {
+      "user": "TESTMARS72_SRM",
+      "password": "tsWy77wK1CE3yG3dvkduDg==",
+      "type": "SRM"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 7,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-22T22:00:00.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 8,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-27T22:00:00.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    }
+  ],
+  "_version": 1,
+  "_iv": "0PjCDvj8iWJu8zzqcjj9sQ=="
+}

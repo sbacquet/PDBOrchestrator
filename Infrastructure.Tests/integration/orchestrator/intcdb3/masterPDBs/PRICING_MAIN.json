@@ -1,0 +1,70 @@
+{
+  "name": "PRICING_MAIN",
+  "schemas": [
+    {
+      "user": "pricing_main",
+      "password": "S5obPMtkbdFe0tWIKDwwpw==",
+      "type": "Invest"
+    }
+  ],
+  "versions": [
+    {
+      "number": 5,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-27T22:00:00.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    },
+    {
+      "number": 6,
+      "createdBy": "xdelecroix",
+      "creationDate": "2018-05-01T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 15,
+      "createdBy": "maranton",
+      "creationDate": "2018-09-23T22:00:00.0000000Z",
+      "comment": "Change the bump size for Delta and Vega from 0.01 to 1 on user IR_Derivatives"
+    },
+    {
+      "number": 19,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2018-12-03T23:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 23,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?",
+      "deleted": true
+    },
+    {
+      "number": 24,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-03-26T23:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 25,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-10T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 26,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-29T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 27,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-10-07T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    }
+  ],
+  "_version": 1,
+  "_iv": "ecqXoye1J1GdE3blZfOZgw=="
+}

@@ -1,0 +1,22 @@
+{
+  "name": "Jupiter",
+  "schemas": [
+    {
+      "user": "jupiter72_dev",
+      "password": "lXmbllhOazU9npNHHzTDpQ==",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-02-20T23:00:00.0000000Z",
+      "comment": "First version",
+      "deleted": true
+    }
+  ],
+  "_version": 1,
+  "_iv": "vNqfhC47bpLZi1K2vbeXBg=="
+}

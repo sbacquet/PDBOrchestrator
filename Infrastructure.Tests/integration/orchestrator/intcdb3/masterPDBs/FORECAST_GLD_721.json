@@ -1,0 +1,28 @@
+{
+  "name": "FORECAST_GLD_721",
+  "schemas": [
+    {
+      "user": "FORECAST_GLD_721",
+      "password": "DMW2Iop8XJjFpP2yTh8I81PUd0LYzRWrhYcZLisIg/xneIDL3O8TWm+cXXerHogt",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "xdelecroix",
+      "creationDate": "2017-08-30T22:00:00.0000000Z",
+      "comment": "Imported schemas FORECAST_GLD_721 from dump //fr1pswbld10.misys.global.ad/TestData/DatabaseDumps/FORECAST_GLD_721_TEST.DMP",
+      "deleted": true
+    },
+    {
+      "number": 2,
+      "createdBy": "rpoenaru",
+      "creationDate": "2017-09-03T22:00:00.0000000Z",
+      "comment": "SIMPLE-5936: Add new auto-transmit selector entry."
+    }
+  ],
+  "_version": 1,
+  "_iv": "PINKk8tL8xsA8bMU9HHq3Q=="
+}

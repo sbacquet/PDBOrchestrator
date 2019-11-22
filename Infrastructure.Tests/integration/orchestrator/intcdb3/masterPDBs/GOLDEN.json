@@ -1,0 +1,450 @@
+{
+  "name": "GOLDEN",
+  "schemas": [
+    {
+      "user": "fusioninvest",
+      "password": "lUphj8GMzVlkV4ZGnv1dBg==",
+      "type": "Invest"
+    },
+    {
+      "user": "af",
+      "password": "lUphj8GMzVlkV4ZGnv1dBg==",
+      "type": "SRM"
+    }
+  ],
+  "edition": {
+    "editor": "sbacquet",
+    "date": "2019-11-22T16:20:42.8099339Z"
+  },
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2018-09-03T22:00:00.0000000Z",
+      "comment": "Imported schemas golden_723 from dump //sophis/dumps/golden_723_sb.dmp"
+    },
+    {
+      "number": 5,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2018-11-27T23:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 15,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-02-04T23:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 25,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-03-06T23:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 26,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-03-10T23:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 30,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-03-19T23:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 31,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?",
+      "deleted": true
+    },
+    {
+      "number": 32,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?",
+      "deleted": true
+    },
+    {
+      "number": 33,
+      "createdBy": "xdelecroix",
+      "creationDate": "2019-03-28T23:00:00.0000000Z",
+      "comment": "Run dbms_stats.gather_schema_stats",
+      "deleted": true
+    },
+    {
+      "number": 34,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-03-31T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 35,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-03T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 36,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-16T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 37,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-18T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 38,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-22T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 39,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-23T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 40,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-02T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 41,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-05T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 42,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-08T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 43,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-13T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 44,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-14T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 45,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-15T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 46,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-19T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 47,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-21T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 48,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-22T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 49,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-27T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 50,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-28T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 51,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-29T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 52,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-06-05T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 53,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-06-06T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 54,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-06-11T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 55,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-06-16T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 56,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-06-18T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 57,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-06-25T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 58,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-07-01T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 59,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-07-08T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 60,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-07-11T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 61,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-07-14T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 62,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-07-23T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 63,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-07-29T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 64,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-08-01T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 65,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-08-19T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 66,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-08-22T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 67,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-08-25T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 68,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-08-29T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 69,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-09-03T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 70,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-09-04T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 71,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-09-09T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 72,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-09-10T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 73,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-09-15T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 74,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-09-16T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 75,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-09-23T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 76,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-09-25T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 77,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-09-29T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 78,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-10-03T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 79,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-10-08T22:00:00.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 80,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-10-14T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 81,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-10-17T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 82,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-10-21T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 83,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-10-23T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 84,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-10-27T23:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 85,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-11-05T23:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 86,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-11-07T23:00:00.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 87,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-11-11T23:00:00.0000000Z",
+      "comment": "Import new dump file."
+    }
+  ],
+  "_version": 1,
+  "_iv": "sWoXXnpKVu77JvYlzF+Nxw=="
+}

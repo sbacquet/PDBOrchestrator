@@ -1,0 +1,26 @@
+{
+  "name": "SMAM",
+  "schemas": [
+    {
+      "user": "SMAM",
+      "password": "gefVbeaBqGsrU6tDZ1OJ8Q==",
+      "type": "Invest"
+    }
+  ],
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2018-07-08T22:00:00.0000000Z",
+      "comment": "Imported schemas SMAM_180307_72X from dump d:/Datapump/SMAM.dmp"
+    },
+    {
+      "number": 2,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-08-22T22:00:00.0000000Z",
+      "comment": "Import new dump file."
+    }
+  ],
+  "_version": 1,
+  "_iv": "P/KHiAH5Yx//o+9wa2ZUlA=="
+}

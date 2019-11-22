@@ -20,8 +20,8 @@ type Command =
 | SnapshotPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
 | ExportPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
 | DeletePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
+| DeletePDBOlderThan of WithOptionalRequestId<string, System.TimeSpan> // response with WithRequestId<Validation<bool,exn>>
 | GarbageWorkingCopies of Domain.OracleInstance.OracleInstance // no response
-| PDBExists of string
 
 let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
@@ -80,6 +80,13 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             | None -> ctx.Sender() <! result
             return! loop ()
 
+        | DeletePDBOlderThan (requestId, name, delay) -> 
+            let! validation = name |> oracleAPI.DeletePDBWithSnapshots (Some delay)
+            match requestId with
+            | Some reqId -> ctx.Sender() <! (reqId, validation)
+            | None -> ctx.Sender() <! validation
+            return! loop ()
+
         | GarbageWorkingCopies instance ->
             // Warning : here we are deleting working copies that could currently be accessed by version actors
             let! deleteResult = 
@@ -89,10 +96,6 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             deleteResult |> Validation.mapErrors (fun errors -> let message = System.String.Join("; ", errors |> List.map (fun ex -> ex.Message)) in ctx.Log.Value.Warning(message); List.empty) |> ignore
             ctx.Log.Value.Info("Garbage collection of instance {instance} done.", instance.Name)
             return! loop ()
-
-        | PDBExists pdb ->
-            let! exists = oracleAPI.PDBExists pdb
-            ctx.Sender() <! exists
     }
     loop ()
 

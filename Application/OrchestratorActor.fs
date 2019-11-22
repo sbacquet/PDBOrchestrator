@@ -472,9 +472,9 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | Some request ->
                 let status = 
                     match result with
-                    | MasterPDBActor.Prepared (pdb, pdbService, schemas) -> 
+                    | MasterPDBActor.Prepared (pdb, editionPDB, editionPDBService, schemas) -> 
                         let schemasData = schemas |> List.map SchemaLogon
-                        sprintf "Master PDB %s prepared successfully for edition." pdb.Name |> completedOk ([ PDBName pdb.Name; PDBService pdbService ] @ schemasData)
+                        sprintf "Master PDB %s prepared successfully for edition." pdb.Name |> completedOk ([ PDBName editionPDB; PDBService editionPDBService ] @ schemasData)
                     | MasterPDBActor.PreparationFailure (pdb, error) -> 
                         sprintf "Error while preparing master PDB %s for edition : %s." pdb error |> CompletedWithError
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status

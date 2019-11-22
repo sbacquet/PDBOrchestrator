@@ -1,0 +1,27 @@
+{
+  "name": "ValueCore",
+  "schemas": [
+    {
+      "user": "valuecore_720",
+      "password": "XVIeB4SGgaogROQcUfUDuw==",
+      "type": "Invest"
+    },
+    {
+      "user": "valuecoresrm_720",
+      "password": "XVIeB4SGgaogROQcUfUDuw==",
+      "type": "SRM"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-02-20T23:00:00.0000000Z",
+      "comment": "First version",
+      "deleted": true
+    }
+  ],
+  "_version": 1,
+  "_iv": "Jr7VUjd5ScQ2j22oGXjwzQ=="
+}

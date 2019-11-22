@@ -1,0 +1,30 @@
+{
+  "name": "SDBC",
+  "schemas": [
+    {
+      "user": "SDBC_TEST",
+      "password": "2pF37wFBB2VWHzE15ZJtF9Xiz24WBI9zoXgYVcHA73Y=",
+      "type": "Invest"
+    }
+  ],
+  "properties": {
+    "NotUpdatable": "true"
+  },
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 3,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-22T22:00:00.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 4,
+      "createdBy": "jbaltie",
+      "creationDate": "2017-09-20T22:00:00.0000000Z",
+      "comment": "Adding new table for test"
+    }
+  ],
+  "_version": 1,
+  "_iv": "MmotY22SJgKhqdgKIXcovg=="
+}

@@ -1,0 +1,27 @@
+{
+  "name": "QA_VIC_721",
+  "schemas": [
+    {
+      "user": "locked_pricing632to721",
+      "password": "Gp2HMpnXfitCAvkxBF8pRA==",
+      "type": "Invest"
+    }
+  ],
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "xdelecroix",
+      "creationDate": "2017-07-26T22:00:00.0000000Z",
+      "comment": "Imported schemas locked_pricing632to721 from dump //fr1csltsoqa0015/intcdb_dumps/QA_VIC_721.DMP",
+      "deleted": true
+    },
+    {
+      "number": 4,
+      "createdBy": "xdelecroix",
+      "creationDate": "2017-08-23T22:00:00.0000000Z",
+      "comment": "Updating TCA context settings."
+    }
+  ],
+  "_version": 1,
+  "_iv": "zTiJ72JIk0LmgWw0IA0avA=="
+}

@@ -5,6 +5,7 @@ type Parameters = {
     ShortTimeout : System.TimeSpan option
     LongTimeout : System.TimeSpan option
     VeryLongTimeout : System.TimeSpan option
+    NumberOfOracleShortTaskExecutors : int
     NumberOfOracleLongTaskExecutors : int
     NumberOfOracleDiskIntensiveTaskExecutors : int
     GarbageCollectionDelay : System.TimeSpan
@@ -15,6 +16,7 @@ let consParameters
     shortTimeout 
     longTimeout 
     veryLongTimeout 
+    numberOfOracleShortTaskExecutors 
     numberOfOracleLongTaskExecutors 
     numberOfOracleDiskIntensiveTaskExecutors 
     garbageCollectionDelay = 
@@ -23,6 +25,7 @@ let consParameters
         ShortTimeout = shortTimeout
         LongTimeout = longTimeout
         VeryLongTimeout = veryLongTimeout
+        NumberOfOracleShortTaskExecutors = numberOfOracleShortTaskExecutors
         NumberOfOracleLongTaskExecutors = numberOfOracleLongTaskExecutors
         NumberOfOracleDiskIntensiveTaskExecutors = numberOfOracleDiskIntensiveTaskExecutors
         GarbageCollectionDelay = garbageCollectionDelay

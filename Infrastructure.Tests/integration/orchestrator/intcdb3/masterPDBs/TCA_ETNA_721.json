@@ -1,0 +1,52 @@
+{
+  "name": "TCA_ETNA_721",
+  "schemas": [
+    {
+      "user": "etna_test",
+      "password": "4ebojgyhP2MdSu2aq7kZuQ==",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "vlpatuna",
+      "creationDate": "2017-08-01T22:00:00.0000000Z",
+      "comment": "Imported schemas etna_test from dump //fr1pswbld10.misys.global.ad/TestData/DatabaseDumps/TCA_ETNA_721.DMP",
+      "deleted": true
+    },
+    {
+      "number": 4,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-22T22:00:00.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 5,
+      "createdBy": "vbergeret",
+      "creationDate": "2017-10-12T22:00:00.0000000Z",
+      "comment": "fix issue with credit risk triggers (install again CREDITRISK_CDSMKTPLOT and CREDITRISK_CREDIT_MODEL)"
+    },
+    {
+      "number": 7,
+      "createdBy": "mgiordano",
+      "creationDate": "2017-12-05T23:00:00.0000000Z",
+      "comment": "complete review of test cases in tca columns test. Normally it shouldnt move everyday anymore :D"
+    },
+    {
+      "number": 9,
+      "createdBy": "thkhayat",
+      "creationDate": "2018-04-10T22:00:00.0000000Z",
+      "comment": "Add two time contexts needed by the ReportingSourceTest"
+    },
+    {
+      "number": 10,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?"
+    }
+  ],
+  "_version": 1,
+  "_iv": "PGIecMGcasbSwUdF0IaevQ=="
+}

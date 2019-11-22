@@ -1,0 +1,50 @@
+{
+  "name": "BSG",
+  "schemas": [
+    {
+      "user": "demo_72_am",
+      "password": "zyVIgG/OEs+lu6WMOVLwkQ==",
+      "type": "Invest"
+    },
+    {
+      "user": "demo_72_af",
+      "password": "zyVIgG/OEs+lu6WMOVLwkQ==",
+      "type": "SRM"
+    }
+  ],
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2018-05-29T22:00:00.0000000Z",
+      "comment": "Imported schemas demo_72_am, demo_72_af from dump d:/Datapump/BSG_2018-05-28.DMP"
+    },
+    {
+      "number": 4,
+      "createdBy": "sbacquet",
+      "creationDate": "2018-07-11T22:00:00.0000000Z",
+      "comment": "Added mapping between FFDC Azure AD accounts and Value users + upgraded DB"
+    },
+    {
+      "number": 6,
+      "createdBy": "sbacquet",
+      "creationDate": "2018-11-07T23:00:00.0000000Z",
+      "comment": "Cleaned negative durations + cleaned SCR configuration"
+    },
+    {
+      "number": 7,
+      "createdBy": "sbacquet",
+      "creationDate": "2018-12-06T23:00:00.0000000Z",
+      "comment": "migrated to 724RC3007 + removed unused ranking categories"
+    },
+    {
+      "number": 8,
+      "createdBy": "sbacquet",
+      "creationDate": "2019-10-03T22:00:00.0000000Z",
+      "comment": "Fusion Invest version 732.0.0.8024 and compliance advanced limits migrated",
+      "deleted": true
+    }
+  ],
+  "_version": 1,
+  "_iv": "TxSD6rPifBlb+PdJsNG9+A=="
+}
