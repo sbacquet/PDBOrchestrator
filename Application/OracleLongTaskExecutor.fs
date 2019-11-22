@@ -21,6 +21,7 @@ type Command =
 | ExportPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
 | DeletePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
 | GarbageWorkingCopies of Domain.OracleInstance.OracleInstance // no response
+| PDBExists of string
 
 let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
@@ -89,6 +90,9 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             ctx.Log.Value.Info("Garbage collection of instance {instance} done.", instance.Name)
             return! loop ()
 
+        | PDBExists pdb ->
+            let! exists = oracleAPI.PDBExists pdb
+            ctx.Sender() <! exists
     }
     loop ()
 

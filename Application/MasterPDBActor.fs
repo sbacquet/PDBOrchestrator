@@ -99,22 +99,22 @@ let private masterPDBActorBody
         | :? LifecycleEvent as event ->
             match event with
             | LifecycleEvent.PreStart ->
-                ctx.Log.Value.Debug("Checking integrity...")
-                let! editionPDBExists = oracleAPI.PDBExists editionPDBName
+                ctx.Log.Value.Info("Checking integrity of {pdb}...", masterPDB.Name)
+                let! (editionPDBExists:Result<bool,exn>) = oracleLongTaskExecutor <? OracleLongTaskExecutor.PDBExists editionPDBName
                 match editionPDBExists, masterPDB.EditionState.IsSome with
                 | Ok true, false ->
-                    ctx.Log.Value.Warning("Master PDB is not locked whereas its edition PDB exists on server => deleting the PDB...")
-                    let result = oracleAPI.DeletePDB editionPDBName |> Async.RunSynchronously
-                    result |> Result.mapError (fun error -> ctx.Log.Value.Error("Could not delete edition PDB {pdb} : {1}", editionPDBName, error.Message)) |> ignore
+                    ctx.Log.Value.Warning("Master PDB {pdb} is not locked whereas its edition PDB exists on server => deleting the PDB...", masterPDB.Name)
+                    let (result:Result<string,exn>) = oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, editionPDBName) |> Async.RunSynchronously // does not work with let! (??)
+                    result |> Result.mapError (fun error -> ctx.Log.Value.Error("Could not delete edition PDB {pdb} : {error}", editionPDBName, error.Message)) |> ignore
                     return! loop state
                 | Ok false, true ->
-                    ctx.Log.Value.Warning("Master PDB is declared as locked whereas its edition PDB does not exist on server => unlocked it")
+                    ctx.Log.Value.Warning("Master PDB {pdb} is declared as locked whereas its edition PDB does not exist on server => unlocked it", masterPDB.Name)
                     return! loop { state with MasterPDB = { masterPDB with EditionState = None } }
                 | Ok _, _->
-                    ctx.Log.Value.Debug("Integrity OK.")
+                    ctx.Log.Value.Info("Integrity of {pdb} OK.", masterPDB.Name)
                     return! loop state
                 | Error error, _ ->
-                    ctx.Log.Value.Error("Cannot check integrity : {0}", error)
+                    ctx.Log.Value.Error("Cannot check integrity of {pdb} : {error}", masterPDB.Name, error)
                     return! loop state
             | _ ->
                 return! loop state

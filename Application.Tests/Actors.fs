@@ -428,7 +428,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
         | name -> failwithf "Oracle instance %s does not exist" name
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with MasterPDBs = "locked" :: instance1.MasterPDBs }) :> IOracleInstanceRepository
     let orchestratorRepo = FakeOrchestratorRepo { OracleInstanceNames = [ "server1" ]; PrimaryInstance = "server1" }
-    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "locked" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "locked"; "locked_EDITION" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
     // Enqueue a read-only request
     API.createWorkingCopy ctx "me" "server1" "test1" 1 "snap1" false |> runQuick |> ignore

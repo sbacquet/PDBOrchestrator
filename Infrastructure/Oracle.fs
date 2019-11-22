@@ -38,16 +38,36 @@ let convertComp (comp:PDBCompensableAsyncAction) : CompensableAsyncAction<string
     }
     (newAction, compensation)
 
-let openConn host port service user password sysdba = fun () ->
+let openConnF (f:string -> IDbConnection) host port service user password sysdba () =
     let connectionString = 
         let sysdbaString = if (sysdba) then "DBA Privilege=SYSDBA" else ""
         sprintf 
             @"Data Source=(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=%s)(PORT=%d)))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=%s)));User Id=%s;Password=%s;%s"
             host port service user password sysdbaString
 
-    let conn = new OracleConnection(connectionString)
+    let conn = f connectionString
     conn.Open()
-    conn :> IDbConnection
+    conn
+
+let openConn = 
+    openConnF (fun connectionString -> new OracleConnection(connectionString) :> IDbConnection)
+
+let openConnWithLogging (logger:ILogger) = 
+
+    let loggingConnection conn =
+        { new DbConnectionWrapper(conn) with
+            override __.Open() =
+                logger.LogTrace("Opening connection")
+                conn.Open()
+            override __.Close() =
+                logger.LogTrace("Closing connection")
+                conn.Close()
+            override __.Dispose() =
+                logger.LogTrace("Disposing connection")
+                conn.Dispose()
+        } :> IDbConnection
+
+    openConnF (fun connectionString -> loggingConnection (new OracleConnection(connectionString) :> IDbConnection))
 
 let exec result conn a = 
     try 
@@ -178,7 +198,7 @@ let closePDBCompensable (logger:ILogger) connAsDBA readWrite =
 
 let getOracleDirectoryPath connAsDBAIn pdb (dir:string) = async {
     try
-        let! path = 
+        use! path = 
             Sql.asyncExecReader 
                 (connAsDBAIn pdb) 
                 (sprintf "select directory_path from dba_directories where upper(directory_name)='%s'" (dir.ToUpper()))
@@ -530,7 +550,7 @@ let getPDBFilesFolder connAsDBA (name:string) = async {
 
 let getPDBNamesLike connAsDBA (like:string) = async {
     try
-        let! result =
+        use! result =
             Sql.asyncExecReader 
                 connAsDBA 
                 (sprintf "select name from v$pdbs where upper(name) like '%s'" (like.ToUpper()))

@@ -20,6 +20,7 @@ Serilog.Log.Logger <-
         CreateLogger()
 
 let loggerFactory = (new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory)
+let logger = loggerFactory.CreateLogger("tests")
 
 let instance = 
     Domain.OracleInstance.consOracleInstance
@@ -35,8 +36,8 @@ let instance =
         "DP_DIR" "/u01/app/intcdb_dumps"
         true
 let oracleAPI : IOracleAPI = new OracleInstanceAPI (loggerFactory, instance) :> IOracleAPI
-let conn = connAsDBAFromInstance instance
-let connIn = connAsDBAInFromInstance instance
+let conn = connAsDBAFromInstance logger instance
+let connIn = connAsDBAInFromInstance logger instance
 
 let mapAsyncError (x:Async<Result<'a,OracleException>>) : Async<Result<'a,exn>> = AsyncResult.mapError (fun ex -> ex :> exn) x
 

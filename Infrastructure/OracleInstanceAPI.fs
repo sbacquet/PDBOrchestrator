@@ -5,17 +5,17 @@ open Microsoft.Extensions.Logging
 open Application.Oracle
 open Domain.Common
 
-let connAsDBAInFromInstance (instance:Domain.OracleInstance.OracleInstance) service =
+let connAsDBAInFromInstance (logger:ILogger) (instance:Domain.OracleInstance.OracleInstance) service =
     let port = instance.Port |> Option.defaultValue 1521
     Sql.withNewConnection (openConn instance.Server port service instance.DBAUser instance.DBAPassword true)
 
-let connAsDBAFromInstance instance = connAsDBAInFromInstance instance instance.Name
+let connAsDBAFromInstance (logger:ILogger) instance = connAsDBAInFromInstance logger instance instance.Name
 
-type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance) = 
+type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleInstance.OracleInstance) = 
 
-    let connAsDBA = connAsDBAFromInstance instance
-    let connAsDBAIn = connAsDBAInFromInstance instance
     let logger = loggerFactory.CreateLogger(sprintf "Oracle API for instance %s" instance.Name)
+    let connAsDBA = connAsDBAFromInstance logger instance
+    let connAsDBAIn = connAsDBAInFromInstance logger instance
 
     let getManifestPath = sprintf "%s/%s" instance.MasterPDBManifestsPath
 
