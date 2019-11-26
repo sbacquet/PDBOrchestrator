@@ -3,19 +3,15 @@
   "schemas": [
     {
       "user": "fusioninvest",
-      "password": "UylREAwsx7m1sKrQIs4T2w==",
+      "password": "7KX3zwhIbIk8IGCRpXykbg==",
       "type": "Invest"
     },
     {
       "user": "af",
-      "password": "UylREAwsx7m1sKrQIs4T2w==",
+      "password": "7KX3zwhIbIk8IGCRpXykbg==",
       "type": "SRM"
     }
   ],
-  "edition": {
-    "editor": "sbacquet",
-    "date": "2019-04-17T22:00:00.0000000Z"
-  },
   "versions": [
     {
       "number": 1,
@@ -38,5 +34,5 @@
     }
   ],
   "_version": 1,
-  "_iv": "Bn0R+b5XNwU+kVXS0Yqd8A=="
+  "_iv": "4ZBcee3Kal8FFAb1Wvfp+g=="
 }
