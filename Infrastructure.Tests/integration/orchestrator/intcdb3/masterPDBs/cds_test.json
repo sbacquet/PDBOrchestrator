@@ -1,14 +1,14 @@
 {
-  "name": "cds_test",
+  "name": "CDS_TEST",
   "schemas": [
     {
       "user": "CDS_TEST",
-      "password": "xbughqf3o08MPirV2Aym7A==",
+      "password": "VYXIqEHgjl3K238yi8hajQ==",
       "type": "Invest"
     },
     {
       "user": "CDS_AF_TEST",
-      "password": "xbughqf3o08MPirV2Aym7A==",
+      "password": "VYXIqEHgjl3K238yi8hajQ==",
       "type": "SRM"
     }
   ],
@@ -20,8 +20,56 @@
       "creationDate": "2017-02-20T23:00:00.0000000Z",
       "comment": "First version",
       "deleted": true
+    },
+    {
+      "number": 18,
+      "createdBy": "violiver",
+      "creationDate": "2017-08-31T22:00:00.0000000Z",
+      "comment": "Remove temporaly japan bonds from scope and create new reference calculation in SRM"
+    },
+    {
+      "number": 44,
+      "createdBy": "ricdally",
+      "creationDate": "2017-12-04T23:00:00.0000000Z",
+      "comment": "Modify inflation volatility shocks to use strike and maturity interpolation"
+    },
+    {
+      "number": 47,
+      "createdBy": "oroussel",
+      "creationDate": "2018-01-02T23:00:00.0000000Z",
+      "comment": "following previous modification, the cds_test db must be updated by sophisscript"
+    },
+    {
+      "number": 59,
+      "createdBy": "vstriche",
+      "creationDate": "2018-04-08T22:00:00.0000000Z",
+      "comment": "bugfix CompareXmlTables"
+    },
+    {
+      "number": 66,
+      "createdBy": "oroussel",
+      "creationDate": "2018-06-12T22:00:00.0000000Z",
+      "comment": "inflation migration + setup inflation breakdown set for user manager "
+    },
+    {
+      "number": 69,
+      "createdBy": "mihborea",
+      "creationDate": "2018-08-22T22:00:00.0000000Z",
+      "comment": "SIMPLE-8454, added an IR Hedge Delta Swap scenario to the Solvency scenario group."
+    },
+    {
+      "number": 71,
+      "createdBy": "mihborea",
+      "creationDate": "2018-10-08T22:00:00.0000000Z",
+      "comment": "SRQ-65894 - Changed bump size to 1, for IRH Delta Swap scenario, in order to avoid test failures, due to rounding."
+    },
+    {
+      "number": 73,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?"
     }
   ],
   "_version": 1,
-  "_iv": "lfZZcAjcNpxEXtuU1S2ytg=="
+  "_iv": "FPHnm6/3WbvjS0yerJJdJg=="
 }

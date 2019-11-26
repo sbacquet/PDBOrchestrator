@@ -30,7 +30,7 @@ type MasterPDBVersionRow = {
 
 let getMasterPDBRows conn = async {
     try
-        use! result = Sql.asyncExecReader conn "select Name, Schema, Srm_Schema, locked, lockdate, lockuser, updatable from master_test_databases" [] 
+        use! result = Sql.asyncExecReader conn "select upper(Name) as Name, Schema, Srm_Schema, locked, lockdate, lockuser, updatable from master_test_databases" [] 
         return result |> Sql.map (Sql.asRecord<MasterPDBRow> "") |> List.ofSeq |> Ok
     with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
         return Error ex
@@ -38,7 +38,7 @@ let getMasterPDBRows conn = async {
 
 let getMasterPDBVersionRows conn = async {
     try
-        use! result = Sql.asyncExecReader conn "select Name, Version, RevisionDate, OSUser, Reason, Erased, NotExist, Ignore_SRM_schema from master_test_database_ver" [] 
+        use! result = Sql.asyncExecReader conn "select upper(Name) as Name, Version, RevisionDate, OSUser, Reason, Erased, NotExist, Ignore_SRM_schema from master_test_database_ver" [] 
         return result |> Sql.map (Sql.asRecord<MasterPDBVersionRow> "") |> List.ofSeq |> Ok
     with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
         return Error ex

@@ -1,9 +1,9 @@
 {
-  "name": "neptune720_auto",
+  "name": "NEPTUNE720_AUTO",
   "schemas": [
     {
       "user": "neptune720_auto",
-      "password": "+VDfq6SNG1iyjx/rjHoiRFn9U+5i8d8+G9sYBoBsess=",
+      "password": "5oi+Bq85l2dOJTLw4cPXCWjvYgv2bngH6jzWohqUx7g=",
       "type": "Invest"
     }
   ],
@@ -15,8 +15,14 @@
       "creationDate": "2017-02-20T23:00:00.0000000Z",
       "comment": "First version",
       "deleted": true
+    },
+    {
+      "number": 7,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-22T22:00:00.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
     }
   ],
   "_version": 1,
-  "_iv": "W6jjPVIhdOYS+A4or3QV+A=="
+  "_iv": "/fLL8K2NSg0r/coSMa74LQ=="
 }
