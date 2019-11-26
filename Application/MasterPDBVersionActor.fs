@@ -82,7 +82,7 @@ let private masterPDBVersionActorBody
                     else
                         sprintf "PDB %s is not a working copy" pdb |> exn |> Error
                 | Ok None ->
-                    sprintf "cannot file any file folder for PDB %s" pdb |> exn |> Error
+                    sprintf "cannot find any file folder for PDB %s" pdb |> exn |> Error
                 | Error error ->
                     Error error
             sender <! (requestId, result)

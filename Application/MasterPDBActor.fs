@@ -287,7 +287,7 @@ let private masterPDBActorBody
                     match result with
                     | Ok editionPDB ->
                         let newMasterPDB = masterPDB |> lockForEdition locker
-                        let editionPDBService = sprintf "%s:%d/%s" instance.Server (instance.Port |> Option.defaultValue 1521) editionPDB
+                        let editionPDBService = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port) editionPDB
                         let schemaLogons = newMasterPDB.Schemas |> List.map (fun schema -> (schema.Type, sprintf "%s/%s@%s" schema.User schema.Password editionPDBService))
                         sender <! (requestId, Prepared (newMasterPDB, editionPDB, editionPDBService, schemaLogons))
                         return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }

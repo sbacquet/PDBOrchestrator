@@ -95,10 +95,10 @@ type Command =
 | TransferInternalState of IActorRef<obj> // responds with StateResult
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
-| CommitMasterPDB of WithRequestId<string, string, string> // responds with WithRequestId<MasterPDBActor.EditionDone>
-| RollbackMasterPDB of WithRequestId<string, string> // responds with WithRequestId<MasterPDBActor.EditionDone>
-| CreateWorkingCopy of WithRequestId<string, int, string, bool> // responds with WithRequest<MasterPDBActor.CreateWorkingCopyResult>
+| CommitMasterPDB of WithRequestId<string, string, string> // responds with WithRequestId<MasterPDBActor.EditionCommitted>
+| RollbackMasterPDB of WithRequestId<string, string> // responds with WithRequestId<MasterPDBActor.EditionRolledBack>
 | DeleteWorkingCopy of WithRequestId<string, int, string> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopy of WithRequestId<string, int, string, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | CollectGarbage // no response
 | GetDumpTransferInfo // responds with DumpTransferInfo
 
@@ -110,6 +110,8 @@ type MasterPDBCreationResult =
 | InvalidRequest of string list
 | MasterPDBCreated of Domain.MasterPDB.MasterPDB
 | MasterPDBCreationFailure of string * string
+
+type CreateWorkingCopyResult = Result<string * int * string * string * string, string>
 
 type DumpTransferInfo = {
     ImpDpLogin: string
@@ -331,21 +333,22 @@ let private oracleInstanceActorBody
                     return! loop { state with Requests = newRequests }
 
             | CreateWorkingCopy (requestId, masterPDBName, versionNumber, wcName, force) ->
-                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.CreateWorkingCopyResult>>()
+                let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
                 match instance |> containsMasterPDB masterPDBName with
                 | None ->
                     sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
                     return! loop state
                 | Some masterPDBName ->
                     let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
-                    retype masterPDBActor <<! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, force)
-                    return! loop state
+                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                    retype masterPDBActor <! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, force)
+                    return! loop { state with Requests = newRequests }
 
             | DeleteWorkingCopy (requestId, masterPDBName, versionNumber, wcName) ->
-                let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.CreateWorkingCopyResult>>()
+                let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
                 match instance |> containsMasterPDB masterPDBName with
                 | None ->
-                    sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
+                    sender <! (requestId, sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name |> exn |> Error)
                     return! loop state
                 | Some masterPDBName ->
                     let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
@@ -365,7 +368,7 @@ let private oracleInstanceActorBody
                 let transferInfo = {
                     ImpDpLogin = sprintf "%s/%s" instance.UserForImport instance.UserForImportPassword
                     OracleDirectory = instance.OracleDirectoryForDumps
-                    OraclePort = instance.Port |> Option.defaultValue 1521
+                    OraclePort = instance.Port |> getOracleServerPort
                     RemoteFolder = instance.OracleDirectoryPathForDumps
                     Server = instance.Server
                     ServerUser = instance.UserForFileTransfer
@@ -423,40 +426,61 @@ let private oracleInstanceActorBody
                     return! loop state
 
         // Callback from Master PDB actor in response to PrepareForModification
-        | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as preparationResult ->
-            let (requestId, _) = preparationResult
+        | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as preparationResponse ->
+            let (requestId, _) = preparationResponse
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
 
             match requestMaybe with
             | Some request -> 
-                retype request.Requester <! preparationResult
+                retype request.Requester <! preparationResponse
                 return! loop { state with Requests = newRequests }
             | None -> 
                 ctx.Log.Value.Error("internal error : request {0} not found", requestId)
                 return! loop { state with Requests = newRequests }
 
         // Callback from Master PDB actor in response to Commit or Rollback
-        | :? WithRequestId<MasterPDBActor.EditionCommitted> as editionResult ->
-            let (requestId, _) = editionResult
+        | :? WithRequestId<MasterPDBActor.EditionCommitted> as editionResponse ->
+            let (requestId, _) = editionResponse
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
 
             match requestMaybe with
             | Some request -> 
-                retype request.Requester <! editionResult
+                retype request.Requester <! editionResponse
                 return! loop { state with Requests = newRequests }
             | None -> 
                 ctx.Log.Value.Error("internal error : request {0} not found", requestId)
                 return! loop state
 
         // Callback from Master PDB actor in response to Commit or Rollback
-        | :? WithRequestId<MasterPDBActor.EditionRolledBack> as editionResult ->
-            let (requestId, _) = editionResult
+        | :? WithRequestId<MasterPDBActor.EditionRolledBack> as editionResponse ->
+            let (requestId, _) = editionResponse
             let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
 
             match requestMaybe with
             | Some request -> 
-                retype request.Requester <! editionResult
+                retype request.Requester <! editionResponse
                 return! loop { state with Requests = newRequests }
+            | None -> 
+                ctx.Log.Value.Error("internal error : request {0} not found", requestId)
+                return! loop state
+
+        // Callback from Master PDB actor in response to Create working copy
+        | :? WithRequestId<MasterPDBActor.CreateWorkingCopyResult> as workingCopyResponse ->
+            let (requestId, result) = workingCopyResponse
+            let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
+
+            match requestMaybe with
+            | Some request -> 
+                let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
+                match result with
+                | Ok (masterPDBName, versionNumber, wcName) ->
+                    let wcService = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port) wcName
+                    let result:CreateWorkingCopyResult = Ok (masterPDBName, versionNumber, wcName, wcService, instance.Name)
+                    sender <! (requestId, result)
+                    return! loop { state with Requests = newRequests }
+                | Error error ->
+                    sender <! (requestId, Error error)
+                    return! loop { state with Requests = newRequests }
             | None -> 
                 ctx.Log.Value.Error("internal error : request {0} not found", requestId)
                 return! loop state

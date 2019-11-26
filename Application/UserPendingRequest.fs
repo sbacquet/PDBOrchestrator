@@ -29,7 +29,7 @@ type CompletedUserRequest<'S> = {
 type CompletedUserRequestMap<'R> = Map<RequestId, CompletedUserRequest<'R>>
 
 let completeUserRequest<'C, 'S> log (pendingRequests : PendingUserRequestMap<'C>) (completedRequests : CompletedUserRequestMap<'S>) (pendingRequest:PendingUserRequest<'C>) (status : 'S) =
-    log pendingRequest.Id pendingRequest.Command
+    log pendingRequest.Id pendingRequest.Command status
     let newPendingRequests = pendingRequests |> unregisterRequest pendingRequest.Id
     let newCompletedRequests = completedRequests |> Map.add pendingRequest.Id { Id = pendingRequest.Id; Status = status; User = pendingRequest.User }
     (newPendingRequests, newCompletedRequests)
