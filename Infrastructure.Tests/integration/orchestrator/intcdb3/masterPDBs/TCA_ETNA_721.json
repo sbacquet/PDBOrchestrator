@@ -3,11 +3,10 @@
   "schemas": [
     {
       "user": "etna_test",
-      "password": "4ebojgyhP2MdSu2aq7kZuQ==",
+      "password": "XRpHqM07w3Ob47ZjN7yOpA==",
       "type": "Invest"
     }
   ],
-  "editionDisabled": true,
   "versions": [
     {
       "number": 1,
@@ -45,8 +44,14 @@
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
+    },
+    {
+      "number": 11,
+      "createdBy": "mgiordano",
+      "creationDate": "2019-11-20T23:00:00.0000000Z",
+      "comment": "adding test cases for TCA Credit Spread Simulation 732"
     }
   ],
   "_version": 1,
-  "_iv": "PGIecMGcasbSwUdF0IaevQ=="
+  "_iv": "9X8ldoTYLyKI7GL8KdxH6g=="
 }
