@@ -160,7 +160,7 @@ let enterReadOnlyMode apiCtx next (ctx:HttpContext) = task {
     if switched then
         return! text "The system is now in maintenance mode." next ctx
     else
-        return! RequestErrors.notAcceptable (text "The system was already in maintenance mode.") next ctx
+        return! text "The system was already in maintenance mode." next ctx
 }
 
 let enterNormalMode apiCtx next (ctx:HttpContext) = task {
@@ -168,7 +168,7 @@ let enterNormalMode apiCtx next (ctx:HttpContext) = task {
     if switched then
         return! text "The system is now in normal mode." next ctx
     else
-        return! RequestErrors.notAcceptable (text "The system was already in normal mode.") next ctx
+        return! text "The system was already in normal mode." next ctx
 }
 
 let getMode apiCtx next (ctx:HttpContext) = task {
