@@ -10,7 +10,6 @@ open Domain.MasterPDBVersion
 open Application.Parameters
 open Application.Common
 open Domain.Common.Exceptional
-open Domain.Common.Validation
 
 type Command =
 | GetState // responds with StateResult

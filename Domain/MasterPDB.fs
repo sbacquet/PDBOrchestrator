@@ -1,6 +1,5 @@
 ﻿module Domain.MasterPDB
 
-open Domain.Common.Result
 open Domain.MasterPDBVersion
 
 type Schema = {

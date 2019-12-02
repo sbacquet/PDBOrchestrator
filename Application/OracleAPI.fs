@@ -1,6 +1,5 @@
 ﻿module Application.Oracle
 
-open Domain.Common.Result
 open Domain.Common.Exceptional
 open Domain.Common.Validation
 

@@ -8,8 +8,6 @@ open Application.UserPendingRequest
 open Domain.Common.Validation
 open Application.Common
 open Application.DTO.MasterPDB
-open Akka.Actor
-open System.Threading.Tasks
 
 type OnInstance<'T> = WithUser<string, 'T>
 type OnInstance<'T1, 'T2> = WithUser<string, 'T1, 'T2>

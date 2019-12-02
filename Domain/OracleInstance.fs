@@ -1,6 +1,6 @@
 ﻿module Domain.OracleInstance
 
-open Common
+open Domain.Common
 
 type OracleInstance = {
     Name: string

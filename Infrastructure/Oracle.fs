@@ -7,7 +7,6 @@ open Compensable
 open Microsoft.Extensions.Logging
 open Domain.Common
 open System.Globalization
-open System.Diagnostics
 open Infrastructure.RunProcessAsync
 open Domain.Common.Validation
 

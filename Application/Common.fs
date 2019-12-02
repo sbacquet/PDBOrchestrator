@@ -1,8 +1,6 @@
 ﻿module Application.Common
 
 open Akkling
-open Akka.Actor
-open System
 
 type ActorName = ActorName of string
 

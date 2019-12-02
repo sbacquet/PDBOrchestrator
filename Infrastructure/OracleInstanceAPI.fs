@@ -3,7 +3,6 @@
 open Infrastructure.Oracle
 open Microsoft.Extensions.Logging
 open Application.Oracle
-open Domain.Common
 
 let connAsDBAInFromInstance (logger:ILogger) (instance:Domain.OracleInstance.OracleInstance) service =
     let port = instance.Port |> Option.defaultValue 1521

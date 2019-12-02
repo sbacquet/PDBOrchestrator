@@ -1,11 +1,9 @@
 ﻿module Application.OracleShortTaskExecutor
 
 open Akkling
-open Application.PendingRequest
 open Application.Oracle
 open Akka.Routing
 open Application.Parameters
-open Domain.Common
 
 type Command =
 | PDBExists of string
