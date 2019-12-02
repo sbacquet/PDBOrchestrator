@@ -276,18 +276,6 @@ let createSchemasCompensable (logger:ILogger) connAsDBAIn (schemas:(string*strin
         (createSchemas logger connAsDBAIn schemas deleteExisting)
         (deleteSchemas logger connAsDBAIn (schemas |> List.map fst))
 
-let transferFile fromPath toPath user pass =
-    let exe = "pscp.exe"
-    let args = [
-        "-batch"
-        "-hostkey \"d8:6e:e3:4b:bd:f4:c8:f6:ee:76:29:1e:b5:f9:e8:6b\""
-        sprintf "-l %s" user
-        sprintf "-pw %s" pass
-        sprintf "\"%s\"" fromPath
-        sprintf "\"%s\"" toPath
-    ]
-    ()
-
 let getFileNameWithoutExtension (path:string) =
     try
          System.IO.Path.GetFileNameWithoutExtension(path) |> Ok
