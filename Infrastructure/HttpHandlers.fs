@@ -86,17 +86,19 @@ let getRequestStatus apiCtx (requestId:PendingRequest.RequestId) next (ctx:HttpC
             | OrchestratorActor.Pending -> 
                 jObj 
                 |> Encode.required Encode.string "status" "Pending"
-            | OrchestratorActor.CompletedOk (message, data) -> 
+            | OrchestratorActor.Done (OrchestratorActor.CompletedOk (message, data), duration) -> 
                 jObj 
                 |> Encode.required Encode.string "status" "Completed"
                 |> Encode.required Encode.string "message" message
+                |> Encode.required Encode.float "durationInSec" duration.TotalSeconds
                 |> Encode.required (Encode.propertyListWith Encode.string) 
                     "data" 
                     (data |> List.map completedRequestDataKeyValue)
-            | OrchestratorActor.CompletedWithError error -> 
+            | OrchestratorActor.Done (OrchestratorActor.CompletedWithError error, duration) -> 
                 jObj 
                 |> Encode.required Encode.string "status" "Completed with error"
                 |> Encode.required Encode.string "error" error
+                |> Encode.required Encode.float "durationInSec" duration.TotalSeconds
             | _ -> jObj // cannot happen
         )
         return! json (requestStatus |> serializeWith encodeRequestStatus JsonFormattingOptions.Pretty) next ctx

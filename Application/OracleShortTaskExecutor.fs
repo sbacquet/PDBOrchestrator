@@ -12,8 +12,6 @@ type Command =
 
 let private oracleShortTaskExecutorBody (parameters:Parameters) (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
-    let stopWatch = System.Diagnostics.Stopwatch()
-
     let rec loop () = actor {
 
         let! n = ctx.Receive()

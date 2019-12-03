@@ -297,7 +297,7 @@ let throwIfRequestNotCompletedOk (ctx:API.APIContext) request =
     | Valid requestId ->
         let status = requestId |> pollRequestStatus ctx
         match status with
-        | CompletedOk (_, data) -> data
+        | Done (CompletedOk (_, data), _) -> data
         | _ -> failwith "operation not completed successfully"
 
 let throwIfRequestNotCompletedWithError (ctx:API.APIContext) request =
@@ -306,7 +306,7 @@ let throwIfRequestNotCompletedWithError (ctx:API.APIContext) request =
     | Valid requestId ->
         let status = requestId |> pollRequestStatus ctx
         match status with
-        | CompletedWithError error -> ()
+        | Done (CompletedWithError _, _) -> ()
         | _ -> failwith "operation should not complete successfully"
 
 [<Fact>]

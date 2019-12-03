@@ -237,7 +237,7 @@ let private oracleInstanceActorBody
             return! loop { state with Repository = state.Repository.Put instance; PreviousInstance = instance }
         else
 
-        ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
+        if requests.Count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
         let! msg = ctx.Receive()
 
         try

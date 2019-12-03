@@ -49,7 +49,7 @@ module Config =
                     debug {
                         receive = off
                         unhandled = on
-                        lifecycle = on
+                        lifecycle = off
                     }
                 }
             }" level)

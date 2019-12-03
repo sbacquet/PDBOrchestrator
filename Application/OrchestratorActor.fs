@@ -71,11 +71,14 @@ type CompletedRequestData =
 | OracleInstance of string
 | SchemaLogon of string * string
 
+type RequestResult =
+| CompletedOk of string * CompletedRequestData list
+| CompletedWithError of string
+
 type RequestStatus = 
 | NotFound
 | Pending
-| CompletedOk of string * CompletedRequestData list
-| CompletedWithError of string
+| Done of RequestResult * System.TimeSpan
 
 let completedOk dataList message = CompletedOk (message, dataList)
 
@@ -97,7 +100,7 @@ type private State = {
     PreviousOrchestrator : Orchestrator
     Collaborators : Collaborators
     PendingRequests :PendingUserRequestMap<Command>
-    CompletedRequests : CompletedUserRequestMap<RequestStatus>
+    CompletedRequests : CompletedUserRequestMap<RequestResult>
     ReadOnly : bool
     Repository : IOrchestratorRepository
 }
@@ -145,22 +148,31 @@ let describeAdminCommand = function
 let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) (ctx : Actor<_>) =
 
     let logRequest id command = ctx.Log.Value.Info("<< Command {0} : {1}", id, describeCommand command)
-    let logRequestResponse id command status = 
-        match status with
-        | CompletedOk _ -> ctx.Log.Value.Info(">> Command {0} ({1}) completed.", id, describeCommand command)
-        | CompletedWithError _ -> ctx.Log.Value.Info(">> Command {0} ({1}) completed with error.", id, describeCommand command)
-        | _ -> ()
+    let logRequestResponse id command completedRequest = 
+        match completedRequest.Status with
+        | CompletedOk _ -> 
+            ctx.Log.Value.Info(
+                ">> Command {0} completed in {1} s. ({2})", 
+                id, 
+                completedRequest.Duration.TotalSeconds, 
+                describeCommand command)
+        | CompletedWithError _ -> 
+            ctx.Log.Value.Info(
+                ">> Command {0} completed with error in {1} s. ({2})", 
+                id, 
+                completedRequest.Duration.TotalSeconds, 
+                describeCommand command)
     let requestDone state = completeUserRequest logRequestResponse state.PendingRequests state.CompletedRequests
 
     let rec loop state = 
         actor {
-            if (state.PreviousOrchestrator <> state.Orchestrator) then
+            if state.PreviousOrchestrator <> state.Orchestrator then
                 ctx.Log.Value.Debug("Persisted modified orchestrator")
                 return! loop { state with Repository = state.Repository.Put state.Orchestrator; PreviousOrchestrator = state.Orchestrator }
             else
 
-            ctx.Log.Value.Debug("Number of pending requests : {0}", state.PendingRequests.Count)
-            ctx.Log.Value.Debug("Number of completed requests : {0}", state.CompletedRequests.Count)
+            if state.PendingRequests.Count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", state.PendingRequests.Count)
+            if state.CompletedRequests.Count > 0 then ctx.Log.Value.Debug("Number of completed requests : {0}", state.CompletedRequests.Count)
 
             let! (msg:obj) = ctx.Receive()
 
@@ -206,7 +218,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
         let pendingChangeCommandAcceptable user = UserRights.isAdmin (UserRights.normalUser user)
         actor {
             // Check if command is compatible with maintenance mode
-            if (state.ReadOnly && pendingChangeCommandFilter (not << pendingChangeCommandAcceptable) command) then
+            if state.ReadOnly && pendingChangeCommandFilter (not << pendingChangeCommandAcceptable) command then
                 sender <! RequestValidation.Invalid [ "the command cannot be run in maintenance mode" ]
                 return! loop state
             else
@@ -315,7 +327,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         sender <! (requestId, NotFound)
                         return! loop state
                     | Some request ->
-                        sender <! (requestId, request.Status)
+                        sender <! (requestId, Done (request.Status, request.Duration))
                         ctx.Log.Value.Debug("Request {requestId} completed => removed from the list", requestId)
                         return! loop { state with CompletedRequests = state.CompletedRequests |> Map.remove requestId }
 
