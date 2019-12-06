@@ -42,8 +42,8 @@ let ``Migration intcdb3`` () =
         "intcdb3" 
         |> migrate 
             "fr1psl013820.misys.global.ad" 
-            "sys" "syspwd8" 
-            "system" "syspwd8" 
+            "sys" "Bright!20" 
+            "system" "Shaft!20" 
             "oracle" "m15y5db" 
             "ssh-ed25519 256 OmV8VsyS4023mhMbBDh04Pn8eK/aF9SBbPmAJgK4uu0=" 
             "ssh-ed25519 256 cf:5b:2a:53:72:ff:2a:f8:c1:e3:47:83:fb:b7:ef:80"
