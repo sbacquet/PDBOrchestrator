@@ -1,7 +1,6 @@
 {
   "primaryInstance": "intcdb3",
   "oracleInstanceNames": [
-    "intcdb",
     "intcdb2",
     "intcdb3"
   ],
