@@ -3,7 +3,7 @@
   "schemas": [
     {
       "user": "COMMO",
-      "password": "PZqF1pulR2ZVyor7HBFKjg==",
+      "password": "QGq6b9TiKzFsOy8hAZjkFg==",
       "type": "Invest"
     }
   ],
@@ -79,8 +79,14 @@
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-09-02T22:00:00.0000000Z",
       "comment": "Import new dump file."
+    },
+    {
+      "number": 17,
+      "createdBy": "mgiordano",
+      "creationDate": "2019-12-05T23:00:00.0000000Z",
+      "comment": "cleanup database, removed all position without price"
     }
   ],
   "_version": 1,
-  "_iv": "xM7CHLoXjbKatjrWuiI3qw=="
+  "_iv": "ijWgfrkf3c+Eht0tWBWtFA=="
 }
