@@ -1,0 +1,68 @@
+{
+  "name": "STROMBOLI_721",
+  "schemas": [
+    {
+      "user": "STROMBOLI_721",
+      "password": "rIRMWfaUF5bNlmc0PFvRKS5arRVcG0RwAqSpXlutGkc=",
+      "type": "Invest"
+    },
+    {
+      "user": "STROMBOLISRM_721",
+      "password": "rIRMWfaUF5bNlmc0PFvRKcnARuaxfK18W/uHusIH/jxML94yk6xpQoQawPuSQMAh",
+      "type": "SRM"
+    }
+  ],
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-04-11T12:34:54.0000000Z",
+      "comment": "Imported schemas STROMBOLI_721, STROMBOLISRM_721 from dump //fr1pswbld10.misys.global.ad/TestData/DatabaseDumps/STROMBOLI_721.dmp",
+      "deleted": true
+    },
+    {
+      "number": 3,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-23T13:20:45.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 7,
+      "createdBy": "fhereil",
+      "creationDate": "2017-11-06T16:51:53.0000000Z",
+      "comment": "Remove user profiles from fund_users"
+    },
+    {
+      "number": 12,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-28T13:35:58.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    },
+    {
+      "number": 14,
+      "createdBy": "fhereil",
+      "creationDate": "2018-05-15T09:44:54.0000000Z",
+      "comment": "Setup TCA"
+    },
+    {
+      "number": 16,
+      "createdBy": "fhereil",
+      "creationDate": "2018-08-27T15:21:01.0000000Z",
+      "comment": "Remove instruments with no type. Remove orphan records from fund_users."
+    },
+    {
+      "number": 18,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?"
+    },
+    {
+      "number": 19,
+      "createdBy": "fhereil",
+      "creationDate": "2019-08-06T12:20:07.0000000Z",
+      "comment": "Migrate Compliance Limits"
+    }
+  ],
+  "_version": 1,
+  "_iv": "bgq7dm8ggsgCRWmOk1/2Pg=="
+}

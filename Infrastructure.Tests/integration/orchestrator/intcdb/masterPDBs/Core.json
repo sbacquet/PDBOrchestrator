@@ -1,0 +1,64 @@
+{
+  "name": "CORE",
+  "schemas": [
+    {
+      "user": "core_720",
+      "password": "dBVnB9BdupGklEUzvE7ejw==",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-02-21T13:46:31.0000000Z",
+      "comment": "First version",
+      "deleted": true
+    },
+    {
+      "number": 7,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-23T14:10:08.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 9,
+      "createdBy": "tashamza",
+      "creationDate": "2017-12-15T15:33:54.0000000Z",
+      "comment": "update database and delete a duplicated folio (empty) and add a position for FOAaccounting Pocoto test"
+    },
+    {
+      "number": 10,
+      "createdBy": "llarrieu",
+      "creationDate": "2018-01-05T09:48:53.0000000Z",
+      "comment": "upgrade db &  create user columns for C-ROSS roadmap"
+    },
+    {
+      "number": 14,
+      "createdBy": "tbarrevi",
+      "creationDate": "2018-04-03T15:39:03.0000000Z",
+      "comment": "SIMPLE-7320 : add test case for taxlot WAP import"
+    },
+    {
+      "number": 16,
+      "createdBy": "tbarrevi",
+      "creationDate": "2018-04-13T14:03:58.0000000Z",
+      "comment": "Update test cases for exporting taxlots"
+    },
+    {
+      "number": 17,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-07-09T08:49:18.0000000Z",
+      "comment": "grant MANAGE SCHEDULER to public"
+    },
+    {
+      "number": 18,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?"
+    }
+  ],
+  "_version": 1,
+  "_iv": "Mjhyil73IvG3M4pmX0XZbQ=="
+}

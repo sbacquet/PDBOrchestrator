@@ -1,0 +1,26 @@
+{
+  "name": "LOCKED_FO",
+  "schemas": [
+    {
+      "user": "fusioninvest",
+      "password": "t3UpV4GUG6m/BGhjsVGveg==",
+      "type": "Invest"
+    }
+  ],
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2019-06-13T16:26:33.0000000Z",
+      "comment": "Imported schemas LOCKED_FO from dump //sophis/Dumps/locked_fo_20190607.dmp"
+    },
+    {
+      "number": 2,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-09-26T12:58:14.0000000Z",
+      "comment": "Import new dump file."
+    }
+  ],
+  "_version": 1,
+  "_iv": "ScImbLqXFVkOGGE5PTDkhA=="
+}

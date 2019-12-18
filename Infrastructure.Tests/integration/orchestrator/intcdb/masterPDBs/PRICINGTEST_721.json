@@ -1,0 +1,117 @@
+{
+  "name": "PRICINGTEST_721",
+  "schemas": [
+    {
+      "user": "PRICINGTEST_721",
+      "password": "IvH8oINT9yT5U8XVEnFqpw==",
+      "type": "Invest"
+    }
+  ],
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-23T16:56:11.0000000Z",
+      "comment": "Imported schemas PRICINGTEST_721 from dump //fr1pswbld10.misys.global.ad/TestData/DatabaseDumps/PRICINGTEST_721.DMP",
+      "deleted": true
+    },
+    {
+      "number": 9,
+      "createdBy": "smarele",
+      "creationDate": "2017-12-12T14:06:03.0000000Z",
+      "comment": "tests update"
+    },
+    {
+      "number": 27,
+      "createdBy": "jesmolic",
+      "creationDate": "2018-03-29T11:17:15.0000000Z",
+      "comment": "remove a position that makes the inflation tests crash ."
+    },
+    {
+      "number": 39,
+      "createdBy": "ibibirig",
+      "creationDate": "2018-06-21T06:33:27.0000000Z",
+      "comment": "Add Inflation Vega column to TCA columns set"
+    },
+    {
+      "number": 47,
+      "createdBy": "arivoira",
+      "creationDate": "2018-09-03T11:38:56.0000000Z",
+      "comment": "Introducing Actuarial nominal curve to be appplied to the linker so that it prices at 100"
+    },
+    {
+      "number": 51,
+      "createdBy": "rprofean",
+      "creationDate": "2018-11-14T08:59:11.0000000Z",
+      "comment": "added several instruments for scenario test."
+    },
+    {
+      "number": 53,
+      "createdBy": "thkhayat",
+      "creationDate": "2019-01-11T16:34:19.0000000Z",
+      "comment": "Change index composition validation date of EUR Index"
+    },
+    {
+      "number": 59,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?",
+      "deleted": true
+    },
+    {
+      "number": 60,
+      "createdBy": "smarele",
+      "creationDate": "2019-03-28T09:33:18.0000000Z",
+      "comment": "Copy from CDS_TEST the case with the FX Deals with discount curves overridden",
+      "deleted": true
+    },
+    {
+      "number": 61,
+      "createdBy": "smarele",
+      "creationDate": "2019-04-03T09:49:54.0000000Z",
+      "comment": "Set the maximum number of servers to 1 for the user Test"
+    },
+    {
+      "number": 62,
+      "createdBy": "yuzhang1",
+      "creationDate": "2019-07-23T09:09:41.0000000Z",
+      "comment": "?",
+      "deleted": true
+    },
+    {
+      "number": 63,
+      "createdBy": "yuzhang1",
+      "creationDate": "2019-07-23T10:03:30.0000000Z",
+      "comment": "Update test base",
+      "deleted": true
+    },
+    {
+      "number": 64,
+      "createdBy": "yuzhang1",
+      "creationDate": "2019-08-13T15:31:45.0000000Z",
+      "comment": "Update database, add Street and Money Market yield test cases",
+      "deleted": true
+    },
+    {
+      "number": 65,
+      "createdBy": "arivoira",
+      "creationDate": "2019-08-29T12:29:37.0000000Z",
+      "comment": "adding simple equity options to test maturity strike scenario",
+      "deleted": true
+    },
+    {
+      "number": 66,
+      "createdBy": "yuzhang1",
+      "creationDate": "2019-08-29T15:10:39.0000000Z",
+      "comment": "SIMPLE-11133, update database and add auto test instruments"
+    },
+    {
+      "number": 67,
+      "createdBy": "yuzhang1",
+      "creationDate": "2019-09-18T17:39:57.0000000Z",
+      "comment": "SIMPLE-11222 add instruments for jgb simple yield case"
+    }
+  ],
+  "_version": 1,
+  "_iv": "Nf8PmnFeSt3cOq/zd40nTw=="
+}

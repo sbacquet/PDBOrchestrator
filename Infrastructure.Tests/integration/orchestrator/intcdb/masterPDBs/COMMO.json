@@ -1,0 +1,92 @@
+{
+  "name": "COMMO",
+  "schemas": [
+    {
+      "user": "COMMO",
+      "password": "fmcZ58iyzgTrgA9YjtTn2A==",
+      "type": "Invest"
+    }
+  ],
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-12-04T12:03:46.0000000Z",
+      "comment": "Imported schemas LOCKED_COMMO721 from dump //fr1pswbld10.misys.global.ad/TestData/DatabaseDumps/locked_commo721.dmp",
+      "deleted": true
+    },
+    {
+      "number": 2,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-28T13:06:00.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    },
+    {
+      "number": 3,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2018-09-20T08:36:51.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 9,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-01T11:12:32.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 10,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-03T13:49:37.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 11,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-16T07:44:32.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 12,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-16T17:09:54.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 13,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-05-24T07:39:25.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 14,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-06-19T12:36:16.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 15,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-07-24T08:28:49.0000000Z",
+      "comment": "Import new dump file.",
+      "deleted": true
+    },
+    {
+      "number": 16,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-09-03T12:18:21.0000000Z",
+      "comment": "Import new dump file."
+    },
+    {
+      "number": 17,
+      "createdBy": "mgiordano",
+      "creationDate": "2019-12-06T22:00:41.0000000Z",
+      "comment": "cleanup database, removed all position without price"
+    }
+  ],
+  "_version": 1,
+  "_iv": "ciMqoY+dEKM53EYmTezHIQ=="
+}

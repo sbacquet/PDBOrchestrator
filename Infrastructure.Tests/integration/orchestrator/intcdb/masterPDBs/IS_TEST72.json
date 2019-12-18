@@ -1,0 +1,45 @@
+{
+  "name": "IS_TEST72",
+  "schemas": [
+    {
+      "user": "IS_TEST72",
+      "password": "moqwtATak73HShodGvD3RPCFlNoUGq1yRF/xXOTDRqA=",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 6,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-23T13:16:28.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 7,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-28T12:53:41.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    },
+    {
+      "number": 8,
+      "createdBy": "xdelecroix",
+      "creationDate": "2018-05-14T12:00:26.0000000Z",
+      "comment": "Remove trigger folio_deletion_forbidden."
+    },
+    {
+      "number": 10,
+      "createdBy": "dcristac",
+      "creationDate": "2018-10-02T10:08:49.0000000Z",
+      "comment": "Updated record in OracleScript to avoid updating tables where Audit_Version column is missing."
+    },
+    {
+      "number": 11,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?"
+    }
+  ],
+  "_version": 1,
+  "_iv": "4D97LPmNh3SM0daygux1dg=="
+}

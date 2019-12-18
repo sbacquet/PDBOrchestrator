@@ -1,0 +1,30 @@
+{
+  "name": "CI_DEV_SQLMIG",
+  "schemas": [
+    {
+      "user": "CI_DEV_SQLMIG",
+      "password": "st9DlR+AF+YeQoO2Srbokwiziu5GqVKUCXK81zRyTAg=",
+      "type": "Invest"
+    }
+  ],
+  "properties": {
+    "NotUpdatable": "true"
+  },
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 3,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-23T14:21:08.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 4,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?"
+    }
+  ],
+  "_version": 1,
+  "_iv": "yHWHsITmra8IpWbWP4C2lw=="
+}

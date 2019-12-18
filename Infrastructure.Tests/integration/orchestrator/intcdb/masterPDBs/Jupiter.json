@@ -1,0 +1,40 @@
+{
+  "name": "JUPITER",
+  "schemas": [
+    {
+      "user": "jupiter72_dev",
+      "password": "qBKfO/oG7brKlQmQGfpCRQ==",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-02-21T13:48:29.0000000Z",
+      "comment": "First version",
+      "deleted": true
+    },
+    {
+      "number": 7,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-23T13:07:53.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 8,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-28T12:42:12.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    },
+    {
+      "number": 9,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?"
+    }
+  ],
+  "_version": 1,
+  "_iv": "QcydsvflWWiDmq/gS83Ctg=="
+}

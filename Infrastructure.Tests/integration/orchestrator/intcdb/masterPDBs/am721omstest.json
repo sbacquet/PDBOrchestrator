@@ -1,0 +1,40 @@
+{
+  "name": "AM721OMSTEST",
+  "schemas": [
+    {
+      "user": "am721omstest",
+      "password": "O8nuVunZkJ2OgzKlxh+l+A==",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-02-23T20:48:34.0000000Z",
+      "comment": "First version",
+      "deleted": true
+    },
+    {
+      "number": 7,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-23T13:11:32.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 8,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-28T12:44:01.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    },
+    {
+      "number": 9,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-29T22:00:00.0000000Z",
+      "comment": "?"
+    }
+  ],
+  "_version": 1,
+  "_iv": "g+5U5Vsc3p2UoL0JylStEA=="
+}

@@ -1,0 +1,27 @@
+{
+  "name": "OFI7210_FLA",
+  "schemas": [
+    {
+      "user": "OFI7210_FLA",
+      "password": "TnGp20XGBZa9pPu2RIxinQ==",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 7,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-23T15:57:19.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 8,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-28T12:59:51.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    }
+  ],
+  "_version": 1,
+  "_iv": "49+SdouSwvrbHbZdAUSfyw=="
+}

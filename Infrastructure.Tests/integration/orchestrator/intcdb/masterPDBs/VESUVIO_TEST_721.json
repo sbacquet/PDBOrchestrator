@@ -1,0 +1,21 @@
+{
+  "name": "VESUVIO_TEST_721",
+  "schemas": [
+    {
+      "user": "vesuvio_test_721",
+      "password": "0zn6IyA7nS32DoU9qWwm7LIhp5G7rQdmZp5SQhBYuYMh0aEQgLSQANH48icOoKlR",
+      "type": "Invest"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 8,
+      "createdBy": "akallala",
+      "creationDate": "2017-07-13T10:06:59.0000000Z",
+      "comment": "SIMPLE-5019"
+    }
+  ],
+  "_version": 1,
+  "_iv": "zGXx/W8XEukmqBRSHtSPRA=="
+}

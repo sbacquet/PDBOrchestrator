@@ -1,0 +1,92 @@
+{
+  "name": "VALUECORE",
+  "schemas": [
+    {
+      "user": "valuecore_720",
+      "password": "1G1oa8SM6oN39cX7LOPa4Q==",
+      "type": "Invest"
+    },
+    {
+      "user": "valuecoresrm_720",
+      "password": "1G1oa8SM6oN39cX7LOPa4Q==",
+      "type": "SRM"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 1,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-02-21T13:55:29.0000000Z",
+      "comment": "First version",
+      "deleted": true
+    },
+    {
+      "number": 7,
+      "createdBy": "rpierry",
+      "creationDate": "2017-04-21T14:58:58.0000000Z",
+      "comment": "Password Migration",
+      "deleted": true
+    },
+    {
+      "number": 9,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-23T13:22:01.0000000Z",
+      "comment": "Password expiry set to UNLIMITED"
+    },
+    {
+      "number": 10,
+      "createdBy": "dcristac",
+      "creationDate": "2017-12-07T13:13:08.0000000Z",
+      "comment": "Added reporting module PA test setup.",
+      "deleted": true
+    },
+    {
+      "number": 13,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-28T13:17:29.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    },
+    {
+      "number": 14,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-04-05T09:38:57.0000000Z",
+      "comment": "Added group by view \"fund_allotment\"",
+      "deleted": true
+    },
+    {
+      "number": 16,
+      "createdBy": "tbarrevi",
+      "creationDate": "2018-04-06T13:25:12.0000000Z",
+      "comment": "Add tests for EOD",
+      "deleted": true
+    },
+    {
+      "number": 17,
+      "createdBy": "tbarrevi",
+      "creationDate": "2018-04-09T13:28:21.0000000Z",
+      "comment": "Add management fees for EOD system tests",
+      "deleted": true
+    },
+    {
+      "number": 20,
+      "createdBy": "tbarrevi",
+      "creationDate": "2018-04-12T14:05:35.0000000Z",
+      "comment": "supplement for the EOD tests cases"
+    },
+    {
+      "number": 22,
+      "createdBy": "mgiordano",
+      "creationDate": "2018-08-01T08:44:52.0000000Z",
+      "comment": "added manually views to value schema tables for tca context definitions + granted in value schema"
+    },
+    {
+      "number": 23,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?"
+    }
+  ],
+  "_version": 1,
+  "_iv": "4oGMdwRUy16Bi6IHSrMfEw=="
+}

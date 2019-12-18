@@ -1,0 +1,99 @@
+{
+  "name": "PTF_TEST_721_2",
+  "schemas": [
+    {
+      "user": "PTF_TEST_721_2",
+      "password": "pIwXl9bUw4+xP/uiaNNJXSVFMfSRFuDR4Cz46dnFwnE=",
+      "type": "Invest"
+    },
+    {
+      "user": "AF",
+      "password": "WRHVicPdOR+E26Rjq7doXA==",
+      "type": "SRM"
+    }
+  ],
+  "editionDisabled": true,
+  "versions": [
+    {
+      "number": 16,
+      "createdBy": "sbacquet",
+      "creationDate": "2017-08-23T13:29:12.0000000Z",
+      "comment": "Password expiry set to UNLIMITED",
+      "properties": {
+        "IgnoreSMRSchema": "true"
+      }
+    },
+    {
+      "number": 22,
+      "createdBy": "mgiordano",
+      "creationDate": "2017-11-01T21:20:23.0000000Z",
+      "comment": "wrong setup unintentionally saved => calculation server mode = off, calc server test are failing",
+      "properties": {
+        "IgnoreSMRSchema": "true"
+      }
+    },
+    {
+      "number": 23,
+      "createdBy": "mgiordano",
+      "creationDate": "2017-11-28T16:53:10.0000000Z",
+      "comment": "?",
+      "properties": {
+        "IgnoreSMRSchema": "true"
+      }
+    },
+    {
+      "number": 31,
+      "createdBy": "oroussel",
+      "creationDate": "2018-04-09T15:17:41.0000000Z",
+      "comment": "cleaning in My Portfolios : remove some thousands of position on fixed bonds and shares",
+      "properties": {
+        "IgnoreSMRSchema": "true"
+      }
+    },
+    {
+      "number": 33,
+      "createdBy": "oroussel",
+      "creationDate": "2018-04-17T15:58:12.0000000Z",
+      "comment": "for inflation coherency test, add password to user UserLocal",
+      "properties": {
+        "IgnoreSMRSchema": "true"
+      }
+    },
+    {
+      "number": 35,
+      "createdBy": "smarchal",
+      "creationDate": "2018-10-12T10:10:47.0000000Z",
+      "comment": "Fix bonds with new quotation conventions",
+      "properties": {
+        "IgnoreSMRSchema": "true"
+      }
+    },
+    {
+      "number": 38,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?",
+      "deleted": true,
+      "properties": {
+        "IgnoreSMRSchema": "true"
+      }
+    },
+    {
+      "number": 39,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?",
+      "properties": {
+        "IgnoreSMRSchema": "true"
+      }
+    },
+    {
+      "number": 40,
+      "createdBy": "sbacquet",
+      "creationDate": "2019-05-05T14:39:30.0000000Z",
+      "comment": "Added Analytics Factory schema (AF/pass) from FE PDB"
+    }
+  ],
+  "_version": 1,
+  "_iv": "kfg5Coc5LAGtYy6kvVFnLQ=="
+}

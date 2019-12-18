@@ -1,0 +1,26 @@
+{
+  "name": "PRICING_SECOND",
+  "schemas": [
+    {
+      "user": "LOCKED_PRICING721",
+      "password": "bnGcqc1enX3TrRAsM2FtSQ==",
+      "type": "Invest"
+    }
+  ],
+  "versions": [
+    {
+      "number": 2,
+      "createdBy": "vlpatuna",
+      "creationDate": "2018-03-28T13:31:08.0000000Z",
+      "comment": "Grant SCHEDULER_ADMIN role to public"
+    },
+    {
+      "number": 3,
+      "createdBy": "jenkins.sophis",
+      "creationDate": "2019-04-28T22:00:00.0000000Z",
+      "comment": "?"
+    }
+  ],
+  "_version": 1,
+  "_iv": "tEBpYtGGUywEe85Mq1XSrg=="
+}
