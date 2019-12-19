@@ -55,7 +55,7 @@ let validateVeryLongTimeout (config:IConfigurationRoot) =
 let validateNumberOfOracleShortTaskExecutors (config:IConfigurationRoot) =
     let configEntry = "NumberOfOracleShortTaskExecutors"
     try
-        let number = config.GetValue(configEntry, 5)
+        let number = config.GetValue(configEntry, 10)
         if (number > 0)
         then number |> Valid
         else Invalid [ sprintf "config entry %s must be > 0" configEntry ]

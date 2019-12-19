@@ -13,7 +13,7 @@
   "masterPDBManifestsPath": "/u01/app/oraadm/oradata/MasterDBs",
   "masterPDBDestPath": "/u01/app/oraadm/oradata/MasterDBs",
   "snapshotSourcePDBDestPath": "",
-  "workingCopyDestPath": "/raid0/oracle/oradata",
+  "workingCopyDestPath": "/raid0/oracle/oradata/WorkingCopies",
   "oracleDirectoryForDumps": "DP_DIR",
   "oracleDirectoryPathForDumps": "/u01/app/intcdb_dumps",
   "masterPDBs": [
