@@ -17,6 +17,7 @@ type WithRequestId<'T1, 'T2> = RequestId * 'T1 * 'T2
 type WithRequestId<'T1, 'T2, 'T3> = RequestId * 'T1 * 'T2 * 'T3
 type WithRequestId<'T1, 'T2, 'T3, 'T4> = RequestId * 'T1 * 'T2 * 'T3 * 'T4
 type WithRequestId<'T1, 'T2, 'T3, 'T4, 'T5> = RequestId * 'T1 * 'T2 * 'T3 * 'T4 * 'T5
+type WithRequestId<'T1, 'T2, 'T3, 'T4, 'T5, 'T6> = RequestId * 'T1 * 'T2 * 'T3 * 'T4 * 'T5 * 'T6
 
 type WithOptionalRequestId<'T> = RequestId option * 'T
 type WithOptionalRequestId<'T1, 'T2> = RequestId option * 'T1 * 'T2

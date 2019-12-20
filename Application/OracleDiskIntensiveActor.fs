@@ -8,6 +8,7 @@ open Application.Parameters
 
 type Command =
 | ImportPDB of WithOptionalRequestId<string, string, string>
+| ClonePDB of WithOptionalRequestId<string, string, string> // responds with OraclePDBResultWithReqId
 
 let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
@@ -27,6 +28,17 @@ let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : 
             | Some reqId -> ctx.Sender() <! (reqId, result)
             | None -> ctx.Sender() <! result
             return! loop ()
+
+        | ClonePDB (requestId, from, dest, name) -> 
+            stopWatch.Restart()
+            let! result = oracleAPI.ClonePDB from dest name
+            stopWatch.Stop()
+            result |> Result.map (fun clone -> ctx.Log.Value.Info("Clone {PDB} created in {0} s", clone, stopWatch.Elapsed.TotalSeconds)) |> ignore
+            match requestId with
+            | Some reqId -> ctx.Sender() <! (reqId, result)
+            | None -> ctx.Sender() <! result
+            return! loop ()
+
     }
     loop ()
 

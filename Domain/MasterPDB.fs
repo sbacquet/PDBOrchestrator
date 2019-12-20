@@ -107,4 +107,3 @@ let unlock masterPDB =
 
 let isLockedForEdition masterPDB = masterPDB.EditionState.IsSome
 
-let manifestFile (name:string) = sprintf "%s_V%03d.XML" (name.ToUpper())

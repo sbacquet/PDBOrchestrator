@@ -41,7 +41,7 @@ let openConnF (f:string -> IDbConnection) host port service user password sysdba
     let connectionString = 
         let sysdbaString = if (sysdba) then "DBA Privilege=SYSDBA" else ""
         sprintf 
-            @"Data Source=(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=%s)(PORT=%d)))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=%s)));User Id=%s;Password=%s;%s"
+            @"Data Source=(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=%s)(PORT=%d)))(CONNECT_DATA=(SERVER=DEDICATED)(SERVICE_NAME=%s)));User Id=%s;Password=%s;Connection Timeout=60;%s"
             host port service user password sysdbaString
 
     let conn = f connectionString
@@ -471,6 +471,28 @@ let snapshotPDBCompensable (logger:ILogger) connAsDBA manifest dest =
 let snapshotAndOpenPDB (logger:ILogger) connAsDBA manifest dest =
     [
         snapshotPDBCompensable logger connAsDBA manifest dest
+        openPDBCompensable logger connAsDBA true
+    ] |> composeAsync logger
+
+let clonePDB (logger:ILogger) connAsDBA from dest name =
+    logger.LogDebug("Cloning PDB {source} to {dest}", from, name)
+    sprintf 
+        @"
+BEGIN
+    execute immediate 'CREATE PLUGGABLE DATABASE %s FROM %s PARALLEL 1 NOLOGGING CREATE_FILE_DEST=''%s''';
+END;
+"
+        name from dest
+    |> execAsync name connAsDBA
+
+let clonePDBCompensable (logger:ILogger) connAsDBA manifest dest = 
+    compensableAsync 
+        (clonePDB logger connAsDBA manifest dest) 
+        (deletePDB logger connAsDBA true)
+
+let cloneAndOpenPDB (logger:ILogger) connAsDBA manifest dest =
+    [
+        clonePDBCompensable logger connAsDBA manifest dest
         openPDBCompensable logger connAsDBA true
     ] |> composeAsync logger
 

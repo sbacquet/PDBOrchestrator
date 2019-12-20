@@ -13,6 +13,8 @@ type OnInstance<'T> = WithUser<string, 'T>
 type OnInstance<'T1, 'T2> = WithUser<string, 'T1, 'T2>
 type OnInstance<'T1, 'T2, 'T3> = WithUser<string, 'T1, 'T2, 'T3>
 type OnInstance<'T1, 'T2, 'T3, 'T4> = WithUser<string, 'T1, 'T2, 'T3, 'T4>
+type OnInstance<'T1, 'T2, 'T3, 'T4, 'T5> = WithUser<string, 'T1, 'T2, 'T3, 'T4, 'T5>
+type OnInstance<'T1, 'T2, 'T3, 'T4, 'T5, 'T6> = WithUser<string, 'T1, 'T2, 'T3, 'T4, 'T5, 'T6>
 
 type RequestValidation = Validation<RequestId, string>
 
@@ -24,7 +26,7 @@ type Command =
 | PrepareMasterPDBForModification of WithUser<string, int> // responds with RequestValidation
 | CommitMasterPDB of WithUser<string, string> // responds with RequestValidation
 | RollbackMasterPDB of WithUser<string> // responds with RequestValidation
-| CreateWorkingCopy of OnInstance<string, int, string, bool> // responds with RequestValidation
+| CreateWorkingCopy of OnInstance<string, int, string, bool, bool, bool> // responds with RequestValidation
 | DeleteWorkingCopy of OnInstance<string, int, string> // responds with RequestValidation
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
 | GetDumpTransferInfo of string // responds with Result<Application.OracleInstanceActor.DumpTransferInfo,string>
@@ -120,8 +122,8 @@ let describeCommand = function
     sprintf "commit modifications done in master PDB \"%s\"" pdb
 | RollbackMasterPDB (user, pdb) ->
     sprintf "roll back modifications done in \"%s\"" pdb
-| CreateWorkingCopy (user, instance, pdb, version, name, force) ->
-    sprintf "create a working copy named \"%s\" of master PDB \"%s\" version %d on instance \"%s\"" name pdb version instance
+| CreateWorkingCopy (user, instance, pdb, version, name, snapshot, durable, force) ->
+    sprintf "create a %s working copy (%s) named \"%s\" of master PDB \"%s\" version %d on instance \"%s\"" (if durable then "durable" else "temporary") (if snapshot then "snapshot" else "clone") name pdb version instance
 | DeleteWorkingCopy (user, instance, pdb, version, name) ->
     sprintf "delete a working copy named \"%s\" of master PDB \"%s\" version %d on instance \"%s\"" name pdb version instance
 | GetRequest requestId ->
@@ -285,28 +287,28 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
 
-            | CreateWorkingCopy (user, instanceName, masterPDBName, versionNumber, snapshotName, force) ->
+            | CreateWorkingCopy (user, instanceName, masterPDBName, versionNumber, wcName, snapshot, durable, force) ->
                 let instanceName = getInstanceName instanceName
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
                     let instance = state.Collaborators.OracleInstanceActors.[instanceName]
                     let requestId = newRequestId()
                     let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
-                    retype instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName, force)
+                    retype instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, masterPDBName, versionNumber, wcName, snapshot, durable, force)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
                 | None ->
                     sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
                     return! loop state
 
-            | DeleteWorkingCopy (user, instanceName, masterPDBName, versionNumber, snapshotName) ->
+            | DeleteWorkingCopy (user, instanceName, masterPDBName, versionNumber, wcName) ->
                 let instanceName = getInstanceName instanceName
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
                     let instance = state.Collaborators.OracleInstanceActors.[instanceName]
                     let requestId = newRequestId()
                     let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
-                    retype instance <! Application.OracleInstanceActor.DeleteWorkingCopy (requestId, masterPDBName, versionNumber, snapshotName)
+                    retype instance <! Application.OracleInstanceActor.DeleteWorkingCopy (requestId, masterPDBName, versionNumber, wcName)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
                 | None ->

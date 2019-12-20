@@ -20,7 +20,7 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
 
     interface IOracleAPI with
         member __.NewPDBFromDump timeout name dumpPath schemas targetSchemas =
-            let manifest = Domain.MasterPDB.manifestFile name 1 |> getManifestPath
+            let manifest = Domain.MasterPDBVersion.manifestFile name 1 |> getManifestPath
             createManifestFromDump 
                 logger 
                 connAsDBA connAsDBAIn 
@@ -51,8 +51,12 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
             importAndOpen logger connAsDBA (getManifestPath manifest) dest name
             |> toOraclePDBResultAsync
 
-        member __.SnapshotPDB from name = 
-            snapshotAndOpenPDB logger connAsDBA from instance.WorkingCopyDestPath name
+        member __.SnapshotPDB from dest name = 
+            snapshotAndOpenPDB logger connAsDBA from dest name
+            |> toOraclePDBResultAsync
+
+        member __.ClonePDB from dest name = 
+            cloneAndOpenPDB logger connAsDBA from dest name
             |> toOraclePDBResultAsync
 
         member __.PDBHasSnapshots name = 

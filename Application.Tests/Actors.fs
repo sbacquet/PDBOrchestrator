@@ -143,8 +143,13 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
             this.ExistingPDBs <- this.ExistingPDBs.Add name
             return Ok name 
         }
-        member this.SnapshotPDB _ name = async { 
+        member this.SnapshotPDB _ name _ = async { 
             this.Logger.LogDebug("Snapshoting PDB {PDB}...", name)
+            do! Async.Sleep 100
+            return Ok name 
+        }
+        member this.ClonePDB _ name _ = async { 
+            this.Logger.LogDebug("Cloning PDB {PDB}...", name)
             do! Async.Sleep 100
             return Ok name 
         }
@@ -413,20 +418,43 @@ let ``API edits and commits master PDB`` () = test <| fun tck ->
     | Error error -> failwith error
 
 [<Fact>]
-let ``MasterPDB creates a working copy`` () = test <| fun tck ->
+let ``MasterPDB creates a clone working copy`` () = test <| fun tck ->
     let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
     let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
-    let (_, result):WithRequestId<MasterPDBActor.CreateWorkingCopyResult> = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", false) |> run
+    let (_, result):WithRequestId<MasterPDBActor.CreateWorkingCopyResult> = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", false, false, false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
 
 [<Fact>]
-let ``OracleInstance creates a working copy`` () = test <| fun tck ->
+let ``MasterPDB creates a snapshot working copy`` () = test <| fun tck ->
+    let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
+    let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
+    let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
+    let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
+    
+    let (_, result):WithRequestId<MasterPDBActor.CreateWorkingCopyResult> = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", true, false, false) |> run
+    result |> Result.mapError (fun error -> failwith error) |> ignore
+
+[<Fact>]
+let ``OracleInstance creates a snapshot working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server1"
 
-    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test1", 1, "workingcopy", false) |> run
+    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test1", 1, "workingcopy", true, false, false) |> run
+    result |> Result.mapError (fun error -> failwith error) |> ignore
+    result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
+        Assert.Equal("test1", masterPDBName)
+        Assert.Equal(1, versionNumber)
+        Assert.Equal("workingcopy", wcName)
+        Assert.Equal("server1.com/workingcopy", service)
+        Assert.Equal("server1", instance)) |> ignore
+
+[<Fact>]
+let ``OracleInstance creates a clone working copy`` () = test <| fun tck ->
+    let oracleActor = spawnOracleInstanceActor tck "server1"
+
+    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test1", 1, "workingcopy", false, false, false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
     result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
         Assert.Equal("test1", masterPDBName)
@@ -439,7 +467,7 @@ let ``OracleInstance creates a working copy`` () = test <| fun tck ->
 let ``OracleInstance (non snapshot capable) creates a working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server2"
 
-    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test2", 1, "workingcopy", false) |> run
+    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test2", 1, "workingcopy", true, false, false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
     result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
         Assert.Equal("test2", masterPDBName)
@@ -449,29 +477,48 @@ let ``OracleInstance (non snapshot capable) creates a working copy`` () = test <
         Assert.Equal("server2", instance)) |> ignore
 
 [<Fact>]
-let ``API creates a working copy`` () = test <| fun tck ->
+let ``API creates a snapshot working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
-    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" false |> runQuick
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true false false |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
     Assert.True(data |> List.contains (PDBName "workingcopy"))
     Assert.True(data |> List.contains (PDBService "server1.com/workingcopy"))
     Assert.True(data |> List.contains (OracleInstance "server1"))
 
 [<Fact>]
-let ``API fails to create a working copy`` () = test <| fun tck ->
+let ``API creates a clone working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
-    let request = API.createWorkingCopy ctx "me" "server1" "test1" 10 "workingcopy" false |> runQuick
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" false false false |> runQuick
+    let data = request |> throwIfRequestNotCompletedOk ctx
+    Assert.True(data |> List.contains (PDBName "workingcopy"))
+    Assert.True(data |> List.contains (PDBService "server1.com/workingcopy"))
+    Assert.True(data |> List.contains (OracleInstance "server1"))
+
+[<Fact>]
+let ``API fails to create a snapshot working copy`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 10 "workingcopy" true false false |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx
+
+[<Fact>]
+let ``API fails to create a clone working copy`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 10 "workingcopy" false false false |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx
 
 [<Fact>]
 let ``API gets no pending changes`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
-    API.createWorkingCopy ctx "me" "server1" "test1" 1 "snap1" false |> runQuick |> ignore
+    API.createWorkingCopy ctx "me" "server1" "test1" 1 "snap1" true false false |> runQuick |> ignore
     let pendingChangesMaybe = API.getPendingChanges ctx |> runQuick
     match pendingChangesMaybe with
     | Ok pendingChanges -> Assert.True(pendingChanges.IsNone)
@@ -493,7 +540,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "locked"; "locked_EDITION" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
     // Enqueue a read-only request
-    API.createWorkingCopy ctx "me" "server1" "test1" 1 "snap1" false |> runQuick |> ignore
+    API.createWorkingCopy ctx "me" "server1" "test1" 1 "snap1" true false false |> runQuick |> ignore
     // Enqueue a change request
     API.prepareMasterPDBForModification ctx "me" "test2" 1 |> runQuick |> ignore
     // At that point, the requests above should still be pending (100 ms long)

@@ -25,3 +25,5 @@ let consPDBVersion version deleted createdBy (creationDate:DateTime) comment pro
 
 let newPDBVersion createdBy comment = 
     consPDBVersion 1 false createdBy System.DateTime.Now comment Map.empty
+
+let manifestFile (name:string) = sprintf "%s_V%03d.XML" (name.ToUpper())

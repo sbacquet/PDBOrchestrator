@@ -78,7 +78,7 @@ let ``Create a real working copy`` () =
         stopWatch.Stop()
         Log.Logger.Debug("Time to import : {time}", stopWatch.Elapsed.TotalSeconds)
         stopWatch.Restart()
-        let! _ = oracleAPI.SnapshotPDB "source" "snapshot"
+        let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot"
         stopWatch.Stop()
         Log.Logger.Debug("Time to snapshot : {time}", stopWatch.Elapsed.TotalSeconds)
         let! hasSnapshots = oracleAPI.PDBHasSnapshots "source"
@@ -106,7 +106,7 @@ let ``Create a real working copy`` () =
 let ``Get snapshots older than 15 seconds`` () =
     let commands1 = asyncResult {
         let! _ = oracleAPI.ImportPDB "test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
-        let! _ = oracleAPI.SnapshotPDB "source" "snapshot"
+        let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot"
         let! snapshots = oracleAPI.PDBSnapshots "source"
         let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot!") else Ok "# snapshots is 1, good"
         let seconds = 15
@@ -141,7 +141,7 @@ let ``Delete snapshots older than 15 seconds`` () =
     let seconds = 15
     let res = asyncValidation {
         let! _ = oracleAPI.ImportPDB "test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
-        let! _ = oracleAPI.SnapshotPDB "source" "snapshot"
+        let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot"
         let! snapshots = oracleAPI.PDBSnapshots "source"
         let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot!") else Ok "# snapshots is 1, good"
         Async.Sleep(1000*(seconds+5)) |> Async.RunSynchronously

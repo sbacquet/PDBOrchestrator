@@ -13,7 +13,7 @@ open Domain.OracleInstance
 open Application.Common
 
 type Command =
-| CreateWorkingCopy of WithRequestId<string, string, bool> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopy of WithRequestId<string, bool, bool, bool> // responds with OraclePDBResultWithReqId
 | DeleteWorkingCopy of WithRequestId<string> // responds with OraclePDBResultWithReqId
 | CollectGarbage // no response
 | HaraKiri // no response
@@ -46,7 +46,7 @@ let private masterPDBVersionActorBody
         let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
 
         match command with
-        | CreateWorkingCopy (requestId, sourceManifest, workingCopyName, force) -> 
+        | CreateWorkingCopy (requestId, workingCopyName, snapshot, durable, force) -> 
             let! result = asyncResult {
                 let! wcExists = pdbExists workingCopyName
                 if wcExists && (not force) then 
@@ -56,7 +56,9 @@ let private masterPDBVersionActorBody
                     let! _ = 
                         if wcExists then deletePDB workingCopyName // force creation
                         else AsyncResult.retn ""
-                    if (instance.SnapshotCapable) then
+                    let sourceManifest = Domain.MasterPDBVersion.manifestFile masterPDBName masterPDBVersion.Number
+                    let destPath = sprintf "%s/%s" instance.WorkingCopyDestPath (if durable then "durable" else "temporary")
+                    if (instance.SnapshotCapable && snapshot) then
                         let! snapshotSourceExists = pdbExists snapshotSourceName
                         let! _ = 
                             if (not snapshotSourceExists) then
@@ -64,9 +66,9 @@ let private masterPDBVersionActorBody
                             else
                                 ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
                                 AsyncResult.retn ""
-                        return! oracleLongTaskExecutor <? OracleLongTaskExecutor.SnapshotPDB (None, snapshotSourceName, workingCopyName)
+                        return! oracleLongTaskExecutor <? OracleLongTaskExecutor.SnapshotPDB (None, snapshotSourceName, destPath, workingCopyName)
                     else
-                        return! oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, sourceManifest, instance.WorkingCopyDestPath, workingCopyName)
+                        return! oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, sourceManifest, destPath, workingCopyName)
             }
             sender <! (requestId, result)
             return! loop ()

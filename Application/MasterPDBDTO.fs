@@ -75,7 +75,7 @@ let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) =
         (masterPDB.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type }))
         (masterPDB |> Domain.MasterPDB.getLatestAvailableVersionNumber)
         (masterPDB.Versions 
-         |> Map.map (fun _ version -> version |> toMasterPDBVersionDTO (Domain.MasterPDB.manifestFile masterPDB.Name version.Number))
+         |> Map.map (fun _ version -> version |> toMasterPDBVersionDTO (Domain.MasterPDBVersion.manifestFile masterPDB.Name version.Number))
          |> Map.toList |> List.map snd)
         (masterPDB.EditionState |> toEditionInfoDTO)
         masterPDB.EditionDisabled

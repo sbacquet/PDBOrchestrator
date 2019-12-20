@@ -17,7 +17,7 @@ type CreatePDBFromDumpParams = {
 type Command =
 | CreatePDBFromDump of WithOptionalRequestId<CreatePDBFromDumpParams> // responds with OraclePDBResultWithReqId
 | ClosePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
-| SnapshotPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
+| SnapshotPDB of WithOptionalRequestId<string, string, string> // responds with OraclePDBResultWithReqId
 | ExportPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
 | DeletePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
 | DeletePDBOlderThan of WithOptionalRequestId<string, System.TimeSpan> // response with WithRequestId<Validation<bool,exn>>
@@ -52,9 +52,9 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             | None -> ctx.Sender() <! result
             return! loop ()
 
-        | SnapshotPDB (requestId, from, name) -> 
+        | SnapshotPDB (requestId, from, dest, name) -> 
             stopWatch.Restart()
-            let! result = oracleAPI.SnapshotPDB from name
+            let! result = oracleAPI.SnapshotPDB from dest name
             stopWatch.Stop()
             result |> Result.map (fun snap -> ctx.Log.Value.Info("Snapshot {snapshot} created in {0} s", snap, stopWatch.Elapsed.TotalSeconds)) |> ignore
             match requestId with

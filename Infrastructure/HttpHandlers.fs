@@ -121,8 +121,16 @@ let createWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, na
         if not parsedOk then 
             return! RequestErrors.badRequest (text "When provided, the \"force\" query parameter must be \"true\" or \"false\".") next ctx
         else
-            let! requestValidation = API.createWorkingCopy apiCtx user.Name instance masterPDB version name force
-            return! returnRequest apiCtx.Endpoint requestValidation next ctx
+            let parsedOk, clone = ctx.TryGetQueryStringValue "clone" |> Option.defaultValue bool.FalseString |> bool.TryParse
+            if not parsedOk then 
+                return! RequestErrors.badRequest (text "When provided, the \"clone\" query parameter must be \"true\" or \"false\".") next ctx
+            else
+                let parsedOk, durable = ctx.TryGetQueryStringValue "durable" |> Option.defaultValue bool.FalseString |> bool.TryParse
+                if not parsedOk then 
+                    return! RequestErrors.badRequest (text "When provided, the \"durable\" query parameter must be \"true\" or \"false\".") next ctx
+                else
+                    let! requestValidation = API.createWorkingCopy apiCtx user.Name instance masterPDB version name (not clone) durable force
+                    return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
 let deleteWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, name:string) =

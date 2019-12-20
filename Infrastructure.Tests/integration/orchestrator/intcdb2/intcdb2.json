@@ -11,8 +11,8 @@
   "serverHostkeyMD5": "XzXMpTwI1A8IMt+KCn6nLeriYSLsdw7uvRm8UZ0ajq56Tmwd+KwkwElnQtjR0sz0nj7AlfFmaTRFPL910MLceYLebAJXfcNLm/JDtc0Okpy2lWI8dOQqVgQEQWDJzqsYKnI4datv9klSlc9YQDGnx++l+cbSO3n+63d3023E9WM=",
   "masterPDBManifestsPath": "/u01/app/oracle/oradata/MasterDBs",
   "masterPDBDestPath": "/u01/app/oracle/oradata/MasterDBs",
-  "snapshotSourcePDBDestPath": "/u01/app/oracle/oradata/SB_PDBs/snaphot_sources",
-  "workingCopyDestPath": "/u01/app/oracle/oradata/SB_PDBs/snapshots",
+  "snapshotSourcePDBDestPath": "/u01/app/oracle/oradata/SnapshotSources",
+  "workingCopyDestPath": "/u01/app/oracle/oradata/WorkingCopies",
   "oracleDirectoryForDumps": "DP_DIR",
   "oracleDirectoryPathForDumps": "/u01/app/intcdb_dumps",
   "masterPDBs": [

@@ -98,7 +98,7 @@ type Command =
 | CommitMasterPDB of WithRequestId<string, string, string> // responds with WithRequestId<MasterPDBActor.EditionCommitted>
 | RollbackMasterPDB of WithRequestId<string, string> // responds with WithRequestId<MasterPDBActor.EditionRolledBack>
 | DeleteWorkingCopy of WithRequestId<string, int, string> // responds with OraclePDBResultWithReqId
-| CreateWorkingCopy of WithRequestId<string, int, string, bool> // responds with WithRequest<CreateWorkingCopyResult>
+| CreateWorkingCopy of WithRequestId<string, int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | CollectGarbage // no response
 | GetDumpTransferInfo // responds with DumpTransferInfo
 
@@ -332,7 +332,7 @@ let private oracleInstanceActorBody
                     retype masterPDBActor <! MasterPDBActor.Rollback (requestId, user)
                     return! loop { state with Requests = newRequests }
 
-            | CreateWorkingCopy (requestId, masterPDBName, versionNumber, wcName, force) ->
+            | CreateWorkingCopy (requestId, masterPDBName, versionNumber, wcName, snapshot, durable, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
                 match instance |> containsMasterPDB masterPDBName with
                 | None ->
@@ -341,7 +341,7 @@ let private oracleInstanceActorBody
                 | Some masterPDBName ->
                     let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
                     let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                    retype masterPDBActor <! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, force)
+                    retype masterPDBActor <! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, snapshot, durable, force)
                     return! loop { state with Requests = newRequests }
 
             | DeleteWorkingCopy (requestId, masterPDBName, versionNumber, wcName) ->
