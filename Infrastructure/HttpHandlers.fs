@@ -133,9 +133,29 @@ let createWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, na
                     return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
+let createWorkingCopyOfEdition apiCtx (masterPDB:string, name:string) =
+    withUser (fun user next ctx -> task {
+        let parsedOk, force = ctx.TryGetQueryStringValue "force" |> Option.defaultValue bool.FalseString |> bool.TryParse
+        if not parsedOk then 
+            return! RequestErrors.badRequest (text "When provided, the \"force\" query parameter must be \"true\" or \"false\".") next ctx
+        else
+            let parsedOk, durable = ctx.TryGetQueryStringValue "durable" |> Option.defaultValue bool.FalseString |> bool.TryParse
+            if not parsedOk then 
+                return! RequestErrors.badRequest (text "When provided, the \"durable\" query parameter must be \"true\" or \"false\".") next ctx
+            else
+                let! requestValidation = API.createWorkingCopyOfEdition apiCtx user.Name masterPDB name durable force
+                return! returnRequest apiCtx.Endpoint requestValidation next ctx
+    })
+
 let deleteWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, name:string) =
     withUser (fun user next ctx -> task {
         let! requestValidation = API.deleteWorkingCopy apiCtx user.Name instance masterPDB version name
+        return! returnRequest apiCtx.Endpoint requestValidation next ctx
+    })
+
+let deleteWorkingCopyOfEdition apiCtx (masterPDB:string, name:string) =
+    withUser (fun user next ctx -> task {
+        let! requestValidation = API.deleteWorkingCopyOfEdition apiCtx user.Name masterPDB name
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 

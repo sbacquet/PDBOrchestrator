@@ -34,8 +34,14 @@ let getRequestStatus (ctx:APIContext) requestId : Async<WithRequestId<RequestSta
 let createWorkingCopy (ctx:APIContext) user instance masterPDBName versionNumber wcName snapshot durable force : Async<RequestValidation> =
     ctx.Orchestrator <? CreateWorkingCopy (user, instance, masterPDBName, versionNumber, wcName, snapshot, durable, force)
 
+let createWorkingCopyOfEdition (ctx:APIContext) user masterPDBName wcName durable force : Async<RequestValidation> =
+    ctx.Orchestrator <? CreateWorkingCopyOfEdition (user, masterPDBName, wcName, durable, force)
+
 let deleteWorkingCopy (ctx:APIContext) user instance masterPDBName versionNumber snapshotName : Async<RequestValidation> =
     ctx.Orchestrator <? DeleteWorkingCopy (user, instance, masterPDBName, versionNumber, snapshotName)
+
+let deleteWorkingCopyOfEdition (ctx:APIContext) user masterPDBName wcName : Async<RequestValidation> =
+    ctx.Orchestrator <? DeleteWorkingCopyOfEdition (user, masterPDBName, wcName)
 
 let createMasterPDB (ctx:APIContext) (pars:OracleInstanceActor.CreateMasterPDBParams) : Async<RequestValidation> =
     ctx.Orchestrator <? OrchestratorActor.CreateMasterPDB (pars.User, pars)

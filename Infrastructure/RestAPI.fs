@@ -30,6 +30,8 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             route "/garbage-collection" >=> HttpHandlers.collectGarbage apiCtx
         ]
         PUT >=> choose [
+            // Create working copy of edition
+            routef "/instances/primary/master-pdbs/%s/edition/working-copies/%s" (HttpHandlers.createWorkingCopyOfEdition apiCtx)
             // Prepare for edition
             routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.prepareMasterPDBForModification apiCtx)
             // Create working copy
@@ -41,6 +43,8 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             route "/instances/primary" >=> HttpHandlers.switchPrimaryOracleInstanceWith apiCtx
         ]
         DELETE >=> choose [
+            // Delete working copy of edition
+            routef "/instances/primary/master-pdbs/%s/edition/working-copies/%s" (HttpHandlers.deleteWorkingCopyOfEdition apiCtx)
             // Rollback edition
             routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
             // Delete working copy

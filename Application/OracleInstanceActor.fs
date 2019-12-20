@@ -97,8 +97,10 @@ type Command =
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
 | CommitMasterPDB of WithRequestId<string, string, string> // responds with WithRequestId<MasterPDBActor.EditionCommitted>
 | RollbackMasterPDB of WithRequestId<string, string> // responds with WithRequestId<MasterPDBActor.EditionRolledBack>
-| DeleteWorkingCopy of WithRequestId<string, int, string> // responds with OraclePDBResultWithReqId
 | CreateWorkingCopy of WithRequestId<string, int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
+| DeleteWorkingCopy of WithRequestId<string, int, string> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopyOfEdition of WithRequestId<string, string, bool, bool> // responds with RequestValidation
+| DeleteWorkingCopyOfEdition of WithRequestId<string, string> // responds with RequestValidation
 | CollectGarbage // no response
 | GetDumpTransferInfo // responds with DumpTransferInfo
 
@@ -353,6 +355,29 @@ let private oracleInstanceActorBody
                 | Some masterPDBName ->
                     let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
                     retype masterPDBActor <<! MasterPDBActor.DeleteWorkingCopy (requestId, wcName, versionNumber)
+                    return! loop state
+
+            | CreateWorkingCopyOfEdition (requestId, masterPDBName, wcName, durable, force) ->
+                let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
+                match instance |> containsMasterPDB masterPDBName with
+                | None ->
+                    sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
+                    return! loop state
+                | Some masterPDBName ->
+                    let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
+                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                    retype masterPDBActor <! MasterPDBActor.CreateWorkingCopyOfEdition (requestId, wcName, durable, force)
+                    return! loop { state with Requests = newRequests }
+
+            | DeleteWorkingCopyOfEdition (requestId, masterPDBName, wcName) ->
+                let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
+                match instance |> containsMasterPDB masterPDBName with
+                | None ->
+                    sender <! (requestId, sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name |> exn |> Error)
+                    return! loop state
+                | Some masterPDBName ->
+                    let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
+                    retype masterPDBActor <<! MasterPDBActor.DeleteWorkingCopyOfEdition (requestId, wcName)
                     return! loop state
 
             | CollectGarbage ->

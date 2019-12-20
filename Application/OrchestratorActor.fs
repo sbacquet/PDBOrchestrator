@@ -28,6 +28,8 @@ type Command =
 | RollbackMasterPDB of WithUser<string> // responds with RequestValidation
 | CreateWorkingCopy of OnInstance<string, int, string, bool, bool, bool> // responds with RequestValidation
 | DeleteWorkingCopy of OnInstance<string, int, string> // responds with RequestValidation
+| CreateWorkingCopyOfEdition of WithUser<string, string, bool, bool> // responds with RequestValidation
+| DeleteWorkingCopyOfEdition of WithUser<string, string> // responds with RequestValidation
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
 | GetDumpTransferInfo of string // responds with Result<Application.OracleInstanceActor.DumpTransferInfo,string>
 
@@ -52,7 +54,9 @@ let private pendingChangeCommandFilter mapper = function
 | CreateMasterPDB (user, _)
 | PrepareMasterPDBForModification (user, _, _)
 | CommitMasterPDB (user, _, _)
-| RollbackMasterPDB (user, _) ->
+| RollbackMasterPDB (user, _)
+| CreateWorkingCopyOfEdition (user, _, _, _, _)
+| DeleteWorkingCopyOfEdition (user, _, _) ->
     mapper user
 
 type PendingChanges = {
@@ -126,6 +130,10 @@ let describeCommand = function
     sprintf "create a %s working copy (%s) named \"%s\" of master PDB \"%s\" version %d on instance \"%s\"" (if durable then "durable" else "temporary") (if snapshot then "snapshot" else "clone") name pdb version instance
 | DeleteWorkingCopy (user, instance, pdb, version, name) ->
     sprintf "delete a working copy named \"%s\" of master PDB \"%s\" version %d on instance \"%s\"" name pdb version instance
+| CreateWorkingCopyOfEdition (user, masterPDB, wcName, durable, force) ->
+    sprintf "create a %s working copy (clone) named \"%s\" of master PDB \"%s\" edition" (if durable then "durable" else "temporary") wcName masterPDB
+| DeleteWorkingCopyOfEdition (user, masterPDB, wcName) ->
+    sprintf "delete a working copy named \"%s\" of master PDB \"%s\" edition" wcName masterPDB
 | GetRequest requestId ->
     sprintf "get request from id %O" requestId
 | GetDumpTransferInfo instance ->
@@ -309,6 +317,34 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     let requestId = newRequestId()
                     let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
                     retype instance <! Application.OracleInstanceActor.DeleteWorkingCopy (requestId, masterPDBName, versionNumber, wcName)
+                    sender <! Valid requestId
+                    return! loop { state with PendingRequests = newPendingRequests }
+                | None ->
+                    sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
+                    return! loop state
+
+            | CreateWorkingCopyOfEdition (user, masterPDBName, wcName, durable, force) ->
+                let instanceName = getInstanceName "primary"
+                match state.Orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
+                    let instance = state.Collaborators.OracleInstanceActors.[instanceName]
+                    let requestId = newRequestId()
+                    let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
+                    retype instance <! Application.OracleInstanceActor.CreateWorkingCopyOfEdition (requestId, masterPDBName, wcName, durable, force)
+                    sender <! Valid requestId
+                    return! loop { state with PendingRequests = newPendingRequests }
+                | None ->
+                    sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
+                    return! loop state
+
+            | DeleteWorkingCopyOfEdition (user, masterPDBName, wcName) ->
+                let instanceName = getInstanceName "primary"
+                match state.Orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
+                    let instance = state.Collaborators.OracleInstanceActors.[instanceName]
+                    let requestId = newRequestId()
+                    let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
+                    retype instance <! Application.OracleInstanceActor.DeleteWorkingCopyOfEdition (requestId, masterPDBName, wcName)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
                 | None ->

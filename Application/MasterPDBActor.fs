@@ -10,6 +10,7 @@ open Domain.MasterPDBVersion
 open Application.Parameters
 open Application.Common
 open Domain.Common.Exceptional
+open Domain.Common
 
 type Command =
 | GetState // responds with StateResult
@@ -20,6 +21,8 @@ type Command =
 | Rollback of WithRequestId<string> // responds with WithRequestId<EditionRolledBack>
 | CreateWorkingCopy of WithRequestId<int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | DeleteWorkingCopy of WithRequestId<string, int> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopyOfEdition of WithRequestId<string, bool, bool> // WithRequest<CreateWorkingCopyResult>
+| DeleteWorkingCopyOfEdition of WithRequestId<string> // responds with OraclePDBResultWithReqId
 | CollectGarbage // no response
 
 type PrepareForModificationResult = 
@@ -37,6 +40,7 @@ type CreateWorkingCopyResult = Result<string * int * string, string>
 
 type private Collaborators = {
     MasterPDBVersionActors: Map<int, IActorRef<MasterPDBVersionActor.Command>>
+    MasterPDBEditionActor: IActorRef<MasterPDBEditionActor.Command> option
     OracleShortTaskExecutor: IActorRef<OracleShortTaskExecutor.Command>
     OracleLongTaskExecutor: IActorRef<OracleLongTaskExecutor.Command>
     OracleDiskIntensiveTaskExecutor : IActorRef<OracleDiskIntensiveActor.Command>
@@ -59,6 +63,22 @@ let private getOrSpawnVersionActor parameters instance (masterPDBName:string) (v
         
         { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Add(version.Number, versionActor) }, 
         versionActor
+
+let private getOrSpawnEditionActor parameters instance (editionPDBName:string) collaborators ctx =
+    match collaborators.MasterPDBEditionActor with
+    | Some editionActor -> collaborators, editionActor
+    | None -> 
+        let editionActor = 
+            ctx |> MasterPDBEditionActor.spawn 
+                parameters
+                instance
+                collaborators.OracleShortTaskExecutor
+                collaborators.OracleLongTaskExecutor
+                collaborators.OracleDiskIntensiveTaskExecutor
+                editionPDBName
+        
+        { collaborators with MasterPDBEditionActor = Some editionActor }, 
+        editionActor
 
 type private State = {
     MasterPDB: MasterPDB
@@ -216,6 +236,23 @@ let private masterPDBActorBody
                     versionActor <! MasterPDBVersionActor.CreateWorkingCopy (requestId, name, snapshot, durable, force)
                     return! loop { state with Requests = newRequests; Collaborators = newCollabs }
 
+            | CreateWorkingCopyOfEdition (requestId, workingCopyName, durable, force) ->
+                let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
+                let lockInfoMaybe = masterPDB.EditionState
+                match lockInfoMaybe with
+                | None -> 
+                    sender <! (requestId, Error (sprintf "the master PDB %s is not being edited" masterPDB.Name))
+                    return! loop state
+                | Some _ ->
+                    if (state.EditionOperationInProgress) then
+                        sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
+                        return! loop state
+                    else
+                        let newRequests = requests |> registerRequest requestId command (ctx.Sender())
+                        let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators ctx
+                        editionActor <! MasterPDBEditionActor.CreateWorkingCopy (requestId, workingCopyName, durable, force)
+                        return! loop { state with Requests = newRequests; Collaborators = newCollabs }
+
             | CollectGarbage ->
                 let! sourceVersionPDBsMaybe = getPDBNamesLike (sprintf "%s_V%%_%%" masterPDB.Name)
                 match sourceVersionPDBsMaybe with
@@ -254,6 +291,11 @@ let private masterPDBActorBody
                     let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators ctx
                     versionActor <<! MasterPDBVersionActor.DeleteWorkingCopy (requestId, pdb)
                     return! loop { state with Collaborators = newCollabs }
+
+            | DeleteWorkingCopyOfEdition (requestId, pdb) ->
+                let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators ctx
+                editionActor <<! MasterPDBEditionActor.DeleteWorkingCopy (requestId, pdb)
+                return! loop { state with Collaborators = newCollabs }
 
         | :? MasterPDBVersionActor.CommandToParent as commandToParent->
             match commandToParent with
@@ -334,6 +376,15 @@ let private masterPDBActorBody
                         sender <! (requestId, Error error.Message)
                     return! loop { state with Requests = newRequests }
 
+                | CreateWorkingCopyOfEdition (_, name, _, _) ->
+                    let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
+                    match result with
+                    | Ok _ ->
+                        sender <! (requestId, Ok (masterPDB.Name, 0, name))
+                    | Error error ->
+                        sender <! (requestId, Error error.Message)
+                    return! loop { state with Requests = newRequests }
+
                 | _ -> 
                     ctx.Log.Value.Error("Unknown message received")
                     return! loop state
@@ -347,6 +398,7 @@ let private masterPDBActorBody
 
     let collaborators = { 
         MasterPDBVersionActors = Map.empty
+        MasterPDBEditionActor = None
         OracleShortTaskExecutor = oracleShortTaskExecutor
         OracleLongTaskExecutor = oracleLongTaskExecutor
         OracleDiskIntensiveTaskExecutor = oracleDiskIntensiveTaskExecutor 
