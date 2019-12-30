@@ -16,7 +16,7 @@ let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersionDTO) ->
     Encode.required Encode.string "createdBy" x.CreatedBy >>
     Encode.required Encode.dateTime "creationDate" x.CreationDate >>
     Encode.required Encode.string "comment" x.Comment >>
-    Encode.required Encode.bool "deleted" x.Deleted >>
+    Encode.ifNotEqual false Encode.bool "deleted" x.Deleted >>
     Encode.required Encode.string "manifest" x.Manifest >>
     Encode.ifNotEqual Map.empty (Encode.mapWith Encode.string) "properties" x.Properties
 )
