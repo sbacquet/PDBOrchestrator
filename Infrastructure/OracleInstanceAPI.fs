@@ -68,11 +68,13 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
             |> toOraclePDBResultAsync
 
         member __.PDBSnapshots name =
-            pdbSnapshots connAsDBA name
+            name
+            |> pdbSnapshots connAsDBA None None
             |> toOraclePDBResultAsync
 
-        member __.DeletePDBWithSnapshots (olderThan:System.TimeSpan option) name =
-            deletePDBWithSnapshots logger connAsDBA olderThan name
+        member __.DeletePDBSnapshots (folder:string option) (olderThan:System.TimeSpan option) (deleteSource:bool) sourceName =
+            sourceName
+            |> deletePDBSnapshots logger connAsDBA folder olderThan deleteSource
             |> toOraclePDBValidationAsync
 
         member __.GetPDBNamesLike like = 

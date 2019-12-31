@@ -22,6 +22,10 @@ Serilog.Log.Logger <-
 let loggerFactory = (new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory)
 let logger = loggerFactory.CreateLogger("tests")
 
+let [<Literal>]cPDBFolder = "/u01/app/oracle/oradata/SB_PDBs"
+let [<Literal>]cWCFolder = "/u01/app/oracle/oradata/SB_PDBs/WorkingCopies"
+let [<Literal>]cTempWCFolder = "/u01/app/oracle/oradata/SB_PDBs/WorkingCopies/temporary"
+
 let instance = 
     Domain.OracleInstance.consOracleInstance
         []
@@ -29,10 +33,10 @@ let instance =
         "sys" "syspwd8"
         "system" "syspwd8"
         "oracle" "m15y5db" "ssh-ed25519 256 CcNFefba5mM1EW9RGjJrbxBmyyeVGIMHOCamkpgQJa8=" "not used"
-        "/u01/app/oracle/oradata/SB_PDBs"
-        "/u01/app/oracle/oradata/SB_PDBs"
-        "/u01/app/oracle/oradata/SB_PDBs"
-        "/u01/app/oracle/oradata/SB_PDBs"
+        cPDBFolder
+        cPDBFolder
+        cWCFolder
+        cPDBFolder
         "DP_DIR" "/u01/app/intcdb_dumps"
         true
 let oracleAPI : IOracleAPI = new OracleInstanceAPI (loggerFactory, instance) :> IOracleAPI
@@ -56,7 +60,7 @@ let ``Import and delete PDB`` () =
         let! _ = if r.IsSome then Error (exn "PDB toto already exists") else Ok "good"
         let! r = getPDBOnServerLike conn "toto%" |> mapAsyncError
         let! _ = if List.length r <> 0 then Error (exn "PDB toto% already exists") else Ok "good"
-        let! _ = oracleAPI.ImportPDB "test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "toto"
+        let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder "toto"
         let! r = getPDBOnServer conn "toto" |> mapAsyncError
         let! _ = if r.IsNone then Error (exn "No PDB toto ??") else Ok "good"
         let! r = getPDBOnServerLike conn "toto%" |> mapAsyncError
@@ -74,11 +78,11 @@ let ``Import and delete PDB`` () =
 let ``Create a real working copy`` () =
     let commands1 = asyncResult {
         let stopWatch = System.Diagnostics.Stopwatch.StartNew()
-        let! _ = oracleAPI.ImportPDB "test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
+        let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder "source"
         stopWatch.Stop()
         Log.Logger.Debug("Time to import : {time}", stopWatch.Elapsed.TotalSeconds)
         stopWatch.Restart()
-        let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot"
+        let! _ = oracleAPI.SnapshotPDB "source" cPDBFolder "snapshot"
         stopWatch.Stop()
         Log.Logger.Debug("Time to snapshot : {time}", stopWatch.Elapsed.TotalSeconds)
         let! hasSnapshots = oracleAPI.PDBHasSnapshots "source"
@@ -105,16 +109,16 @@ let ``Create a real working copy`` () =
 [<Fact>]
 let ``Get snapshots older than 15 seconds`` () =
     let commands1 = asyncResult {
-        let! _ = oracleAPI.ImportPDB "test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
-        let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot"
+        let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder "source"
+        let! _ = oracleAPI.SnapshotPDB "source" cTempWCFolder "snapshot"
         let! snapshots = oracleAPI.PDBSnapshots "source"
         let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot!") else Ok "# snapshots is 1, good"
         let seconds = 15
         let createdBefore = TimeSpan.FromSeconds((float)seconds)
-        let! snapshots = "source" |> pdbSnapshotsOlderThan conn (Some createdBefore) |> mapAsyncError
+        let! snapshots = "source" |> pdbSnapshots conn (Some cTempWCFolder) (Some createdBefore) |> mapAsyncError
         let! _ = if snapshots.Length <> 0 then Error (exn "Got a snapshot before 15 sec!") else Ok "# snapshots is 0, good"
         Async.Sleep(1000*(seconds+5)) |> Async.RunSynchronously
-        let! snapshots = "source" |> pdbSnapshotsOlderThan conn (Some createdBefore) |> mapAsyncError
+        let! snapshots = "source" |> pdbSnapshots conn (Some cTempWCFolder) (Some createdBefore) |> mapAsyncError
         let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot after 20 sec!") else Ok "# snapshots is 1, good"
         return "Everything fine!"
     }    
@@ -140,12 +144,12 @@ let ``Get snapshots older than 15 seconds`` () =
 let ``Delete snapshots older than 15 seconds`` () =
     let seconds = 15
     let res = asyncValidation {
-        let! _ = oracleAPI.ImportPDB "test1.xml" "/u01/app/oracle/oradata/SB_PDBs" "source"
-        let! _ = oracleAPI.SnapshotPDB "source" "/u01/app/oracle/oradata/SB_PDBs" "snapshot"
+        let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder "source"
+        let! _ = oracleAPI.SnapshotPDB "source" cTempWCFolder "snapshot"
         let! snapshots = oracleAPI.PDBSnapshots "source"
         let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot!") else Ok "# snapshots is 1, good"
         Async.Sleep(1000*(seconds+5)) |> Async.RunSynchronously
-        let! deleted = "source" |> oracleAPI.DeletePDBWithSnapshots (Some (TimeSpan.FromSeconds((float)seconds)))
+        let! deleted = "source" |> oracleAPI.DeletePDBSnapshots (Some cTempWCFolder) (Some (TimeSpan.FromSeconds((float)seconds))) true
         let! _ = if deleted then Ok "deleted properly" else Error (exn "Source not deleted ??!!")
         let! stillExists = oracleAPI.PDBExists "snapshot"
         let! _ = if stillExists then Error (exn "Snapshot not deleted ??!!") else Ok "Snapshot deleted"
@@ -157,7 +161,7 @@ let ``Delete snapshots older than 15 seconds`` () =
     }
     let tasks = [
         res
-        oracleAPI.DeletePDB "source" |> Async.map (fun _ -> Validation.Valid "source") // delete source PDB in case the test failed
+        "source" |> oracleAPI.DeletePDBSnapshots None None true |> Async.map (fun _ -> Validation.Valid "source") // delete source PDB in case the test failed
     ]
 
     tasks 
@@ -192,7 +196,7 @@ let ``Get wrong Oracle directory`` () =
 let ``Create and delete PDB`` () =
     let logger = loggerFactory.CreateLogger()
     let tasks = [
-        Infrastructure.Oracle.createAndGrantPDB logger conn connIn false "dbadmin" "pass" "/u01/app/oracle/oradata/SB_PDBs" "testsb" |> AsyncValidation.ofAsyncResult
+        Infrastructure.Oracle.createAndGrantPDB logger conn connIn false "dbadmin" "pass" cPDBFolder "testsb" |> AsyncValidation.ofAsyncResult
         Infrastructure.Oracle.deletePDB logger conn false "testsb" |> AsyncValidation.ofAsyncResult
     ]
     let res = tasks |> AsyncValidation.sequenceS |> Async.RunSynchronously

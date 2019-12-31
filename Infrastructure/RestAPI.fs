@@ -25,9 +25,6 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.commitMasterPDB apiCtx)
             // New PDB
             route "/instances/primary/master-pdbs" >=> HttpHandlers.createNewPDB apiCtx
-
-            // Routes for admins
-            route "/garbage-collection" >=> HttpHandlers.collectGarbage apiCtx
         ]
         PUT >=> choose [
             // Create working copy of edition
@@ -49,6 +46,8 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
             // Delete working copy
             routef "/instances/%s/master-pdbs/%s/%i/working-copies/%s" (HttpHandlers.deleteWorkingCopy apiCtx)
+            // Collect garbage
+            route "/garbage" >=> HttpHandlers.collectGarbage apiCtx
         ]
         PATCH >=> choose [
             // Declare the given instance synchronized with primary

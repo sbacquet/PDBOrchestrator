@@ -594,52 +594,42 @@ let PDBExistsOnServer connAsDBA (name:string) = async {
         return Error ex
 }
 
-let isSnapshotOfClause (pdb:string) = sprintf "SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where upper(name)='%s')" (pdb.ToUpper())
-
-let pdbSnapshots connAsDBA (name:string) = async {
+let pdbFiltered filter connAsDBA (name:string) = async {
+    let filterClause = filter |> Option.map (fun filter -> sprintf " where (%s)" filter) |> Option.defaultValue ""
     try
         use! result = 
             Sql.asyncExecReader
                 connAsDBA
-                (sprintf @"select name from v$pdbs where %s" (isSnapshotOfClause name))
+                (sprintf @"select name from v$pdbs%s" filterClause)
                 []
         return result |> Sql.map (fun d -> (string)d?name.Value) |> List.ofSeq |> Ok
     with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
         return Error ex
 }
 
-let olderThanClause (olderThan:System.TimeSpan) prefix = 
+let isSnapshotOfClause (pdb:string) = sprintf "SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where upper(name)='%s')" (pdb.ToUpper())
+
+let isInFolderClause (folder:string) = sprintf "con_id in (select con_id from cdb_data_files where file_name like '%s/%%')" folder
+
+let olderThanClause prefix (olderThan:System.TimeSpan) = 
     let prefix = prefix |> Option.defaultValue "v$pdbs"
     sprintf "%s.creation_time <= SYSDATE - %s" prefix (olderThan.TotalDays.ToString("F15", CultureInfo.InvariantCulture.NumberFormat))
 
-let pdbsFilteredOlderThan connAsDBA filter (olderThan:System.TimeSpan) = async {
-    let where = filter |> Option.map (fun f -> sprintf " and (%s)" f) |> Option.defaultValue ""
-    try
-        use! result = 
-            Sql.asyncExecReader
-                connAsDBA
-                (sprintf 
-                    @"select name from v$pdbs where %s%s" 
-                    (olderThanClause olderThan None)
-                    where
-                )
-                []
-        return result |> Sql.map (fun d -> (string)d?name.Value) |> List.ofSeq |> Ok
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
-        return Error ex
-}
+let joinClauses clauses = 
+    let s = clauses |> Seq.choose id |> Seq.map (sprintf "(%s)") |> String.concat " and "
+    if (String.IsNullOrEmpty s) then None else Some s
 
-let pdbsOlderThan connAsDBA = pdbsFilteredOlderThan connAsDBA None
-
-let pdbSnapshotsOlderThan connAsDBA (olderThan:System.TimeSpan option) (name:string) = 
-    match olderThan with
-    | Some olderThan ->
-        pdbsFilteredOlderThan connAsDBA (isSnapshotOfClause name |> Some) olderThan
-    | None ->
-        pdbSnapshots connAsDBA name
+let pdbSnapshots connAsDBA (folder:string option) (olderThan:System.TimeSpan option) (name:string) = 
+    let filter =
+        [ 
+            isSnapshotOfClause name |> Some
+            folder |> Option.map isInFolderClause
+            olderThan |> Option.map (olderThanClause None)
+        ] |> joinClauses
+    pdbFiltered filter connAsDBA name
 
 let getOldPDBsHavingFilesFolderStartWith connAsDBA olderThan folder = 
-    getPDBsHavingFilesFolderStartWith connAsDBA folder (Some (olderThanClause olderThan (Some "p")))
+    getPDBsHavingFilesFolderStartWith connAsDBA folder (Some (olderThanClause (Some "p") olderThan))
 
 let pdbHasSnapshots connAsDBA (name:string) = async {
     try
@@ -664,36 +654,30 @@ let deleteSourcePDB (logger:ILogger) connAsDBA (name:string) = async {
     | Error error -> return Error (upcast error)
 }
 
-let deletePDBWithSnapshots (logger:ILogger) connAsDBA (olderThan:System.TimeSpan option) (name:string) = asyncValidation {
-    logger.LogDebug("Deleting PDB {pdb} and dependant snapshots...", name, olderThan)
-    let! snapshots = pdbSnapshotsOlderThan connAsDBA olderThan name
+let deletePDBSnapshots (logger:ILogger) connAsDBA (folder:string option) (olderThan:System.TimeSpan option) (deleteSource:bool) (sourceName:string) = asyncValidation {
+    logger.LogDebug("Deleting PDB {pdb} and snapshot copies...", sourceName, olderThan)
+    let! snapshots = pdbSnapshots connAsDBA folder olderThan sourceName
     let deleteSnapshot (snapshot:string) = asyncValidation {
         do! () // mandatory for the next line (log) to be in the same async block
-        logger.LogDebug("Deleting PDB snapshot {pdb}...", snapshot)
+        logger.LogDebug("Deleting PDB snapshot copy {pdb}...", snapshot)
         let! result = 
             snapshot
             |> deletePDB logger connAsDBA true
             |> AsyncValidation.ofAsyncResult
-        logger.LogDebug("Deleted PDB snapshot {pdb}.", snapshot)
+        logger.LogDebug("Deleted PDB snapshot copy {pdb}.", snapshot)
         return result
     }
     let! _ = snapshots |> AsyncValidation.traverseS deleteSnapshot
-    let! hasSnapshots = pdbHasSnapshots connAsDBA name
+    let! hasSnapshots = pdbHasSnapshots connAsDBA sourceName
     if not hasSnapshots then
-        let! _ = deletePDB logger connAsDBA true name
-        logger.LogDebug("Deleted PDB {pdb} and all dependant snapshots.", name)
-        return true
+        if deleteSource then
+            let! _ = deletePDB logger connAsDBA true sourceName
+            logger.LogDebug("Deleted PDB {pdb} and all snapshot copies.", sourceName)
+            return true
+        else
+            logger.LogDebug("Deleted all snapshot copies of PDB {pdb}.", sourceName)
+            return false
     else
-        logger.LogDebug("Deleted some snapshots dependant of {pdb}.", name)
+        logger.LogDebug("Deleted some snapshot copies of {pdb}.", sourceName)
         return false
 }
-
-let getWorkingCopiesOlderThan connAsDBA (olderThan:System.TimeSpan) workingCopyFolder =
-    let filter = sprintf "%s and folder like '%s/%%'" (olderThanClause olderThan (Some "p")) workingCopyFolder |> Some
-    getPDBsWithFilesFolder connAsDBA filter |> AsyncResult.map (List.map fst)
-
-let deleteWorkingCopiesOlderThan (logger:ILogger) connAsDBA (olderThan:System.TimeSpan) workingCopyFolder = asyncValidation {
-    let! oldWorkingCopies = getWorkingCopiesOlderThan connAsDBA olderThan workingCopyFolder |> toOraclePDBResultAsync |> AsyncValidation.ofAsyncResult
-    return! oldWorkingCopies |> AsyncValidation.traverseS (deleteSourcePDB logger connAsDBA >> AsyncValidation.ofAsyncResult)
-}
-

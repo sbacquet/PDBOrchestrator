@@ -7,12 +7,17 @@ open Application.Oracle
 open Application.Parameters
 open Domain.Common
 open Domain.Common.Exceptional
+open Domain.Common.Validation
 open Domain.OracleInstance
 open Application.Common
 
 type Command =
 | CreateWorkingCopy of WithRequestId<string, bool, bool> // responds with OraclePDBResultWithReqId
 | DeleteWorkingCopy of WithRequestId<string> // responds with OraclePDBResultWithReqId
+| HaraKiri // no response
+
+type CommandToParent =
+| KillEdition
 
 let private masterPDBEditionActorBody 
     (parameters:Parameters)
@@ -43,7 +48,7 @@ let private masterPDBEditionActorBody
                     let! _ = 
                         if wcExists then deletePDB workingCopyName // force creation
                         else AsyncResult.retn ""
-                    let destPath = sprintf "%s/%s" instance.WorkingCopyDestPath (if durable then "durable" else "temporary")
+                    let destPath = getWorkingCopyPath instance durable
                     return! oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ClonePDB (None, editionPDBName, destPath, workingCopyName)
             }
             sender <! (requestId, result)
@@ -66,6 +71,10 @@ let private masterPDBEditionActorBody
             sender <! (requestId, result)
             return! loop ()
 
+        | HaraKiri ->
+            ctx.Log.Value.Info("Actor for {pdb} is stopping...", editionPDBName)
+            retype ctx.Self <! Akka.Actor.PoisonPill.Instance
+            return! loop ()
     }
 
     loop ()

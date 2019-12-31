@@ -159,7 +159,7 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
         member this.PDBExists name = async { 
             return Ok (this.ExistingPDBs |> Set.contains name)
         }
-        member this.DeletePDBWithSnapshots _ name = async { 
+        member this.DeletePDBSnapshots _ _ _ name = async { 
             if not (this.ExistingPDBs |> Set.contains name) then
                 return Invalid [ sprintf "%s does not exist" name |> exn ]
             else

@@ -35,7 +35,7 @@ module Result =
                     | null -> () 
                     | disp -> disp.Dispose())
 
-    let apply f x = f |> Result.bind (fun g -> x |> Result.map (fun y -> g y))
+    let apply f x = f |> Result.bind (fun g -> x |> Result.map g)
 
     let rec traverse f list =
         let (<*>) = apply
@@ -104,7 +104,7 @@ module Validation =
         | Ok r -> Valid r
         | Error error -> Invalid [ error ]
 
-    let toResult validation concatErrors = 
+    let toResult concatErrors validation = 
         match validation with
         | Valid r -> Ok r
         | Invalid errors -> Error (concatErrors errors)
@@ -134,17 +134,15 @@ module Async =
         let cons head tail = head :: tail
         let folder head tail = retn cons <*> (f head) <*> tail
         List.foldBack folder list (retn []) 
-
-    let sequenceS list = traverseS id list
 #else
     let traverseS f list =
         list 
         |> List.map f 
         |> Async.Sequential
         |> map Array.toList 
-
-    let sequenceS (list:List<Async<_>>)  = list |> Async.Sequential |> map Array.toList
 #endif
+
+    let sequenceS list = traverseS id list
 
     // Parallel traverse/sequence
     let traverseP f list =
@@ -244,7 +242,7 @@ module AsyncValidation =
 
     let ofAsyncResult x = Async.map ofResult x
 
-    let toAsyncResult x = Async.map toResult x
+    let toAsyncResult concatErrors x = Async.map (toResult concatErrors) x
 
     // Monadic traverse
     let traverseM f list =

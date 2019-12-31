@@ -11,6 +11,7 @@ open Domain.Common.Exceptional
 open Domain.Common.Validation
 open Domain.OracleInstance
 open Application.Common
+open Application
 
 type Command =
 | CreateWorkingCopy of WithRequestId<string, bool, bool, bool> // responds with OraclePDBResultWithReqId
@@ -36,7 +37,7 @@ let private masterPDBVersionActorBody
     let snapshotSourceName = getSnapshotSourceName masterPDBName masterPDBVersion parameters.ServerInstanceName
     let pdbExists pdb : Async<Exceptional<bool>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
     let deletePDB pdb : Async<Exceptional<string>> = oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
-    let deletePDBOlderThan delay pdb : Async<Validation<bool, exn>> = oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDBOlderThan (None, pdb, delay)
+    let deletePDBOlderThan folder delay pdb : Async<Validation<bool, exn>> = oracleLongTaskExecutor <? OracleLongTaskExecutor.DeleteOldPDBSnapshots (None, pdb, folder, delay, true)
     let getPDBNamesLike like : Async<Exceptional<string list>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBNamesLike like
     let getPDBFilesFolder pdb : Async<Exceptional.Exceptional<string option>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
 
@@ -57,7 +58,7 @@ let private masterPDBVersionActorBody
                         if wcExists then deletePDB workingCopyName // force creation
                         else AsyncResult.retn ""
                     let sourceManifest = Domain.MasterPDBVersion.manifestFile masterPDBName masterPDBVersion.Number
-                    let destPath = sprintf "%s/%s" instance.WorkingCopyDestPath (if durable then "durable" else "temporary")
+                    let destPath = getWorkingCopyPath instance durable
                     if (instance.SnapshotCapable && snapshot) then
                         let! snapshotSourceExists = pdbExists snapshotSourceName
                         let! _ = 
@@ -91,23 +92,23 @@ let private masterPDBVersionActorBody
             return! loop ()
 
         | CollectGarbage ->
-            ctx.Log.Value.Info("Collecting garbage of PDB {pdb} version {pdbversion}", masterPDBName, masterPDBVersion.Number)
+            ctx.Log.Value.Info("Collecting garbage of PDB {pdb} version {pdbversion}...", masterPDBName, masterPDBVersion.Number)
             if instance.SnapshotCapable then
                 let like = getSnapshotSourceName masterPDBName masterPDBVersion "%"
                 let! _ = asyncValidation {
                     let! thisVersionSourcePDBs = getPDBNamesLike like
-                    let! isSourceDeletedList = thisVersionSourcePDBs |> AsyncValidation.traverseS (deletePDBOlderThan parameters.GarbageCollectionDelay)
+                    let! isSourceDeletedList = thisVersionSourcePDBs |> AsyncValidation.traverseS (deletePDBOlderThan (getWorkingCopyPath instance false) parameters.GarbageCollectionDelay)
                     let sourceAndIsDeleted = List.zip thisVersionSourcePDBs isSourceDeletedList
                     let isDeleted = sourceAndIsDeleted |> List.exists (fun (pdb, deleted) -> deleted && pdb.ToUpper() = snapshotSourceName.ToUpper())
                     if isDeleted then retype (ctx.Parent()) <! KillVersion masterPDBVersion.Number
                 }
-                ctx.Log.Value.Info("Collected garbage of PDB {pdb} version {pdbversion}", masterPDBName, masterPDBVersion.Number)
+                ctx.Log.Value.Info("Collected garbage of PDB {pdb} version {pdbversion}.", masterPDBName, masterPDBVersion.Number)
                 return! loop ()
             else
                 return! loop ()
 
         | HaraKiri ->
-            ctx.Log.Value.Info("Actor for version {pdbversion} of {pdb} is stopped", masterPDBVersion.Number, masterPDBName)
+            ctx.Log.Value.Info("Actor for version {pdbversion} of {pdb} is stopping...", masterPDBVersion.Number, masterPDBName)
             retype ctx.Self <! Akka.Actor.PoisonPill.Instance
             return! loop ()
     }

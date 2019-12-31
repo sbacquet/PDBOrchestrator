@@ -20,8 +20,8 @@ type Command =
 | SnapshotPDB of WithOptionalRequestId<string, string, string> // responds with OraclePDBResultWithReqId
 | ExportPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
 | DeletePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
-| DeletePDBOlderThan of WithOptionalRequestId<string, System.TimeSpan> // response with WithRequestId<Validation<bool,exn>>
-| GarbageWorkingCopies of Domain.OracleInstance.OracleInstance // no response
+| DeleteOldPDBSnapshots of WithOptionalRequestId<string, string, System.TimeSpan, bool> // response with WithRequestId<Validation<bool,exn>>
+| DeleteOldPDBsInFolder of string // no response
 
 let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
@@ -70,7 +70,7 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             return! loop ()
 
         | DeletePDB (requestId, name) -> 
-            let! validation = name |> oracleAPI.DeletePDBWithSnapshots None
+            let! validation = name |> oracleAPI.DeletePDBSnapshots None None true
             let result = 
                 match validation with
                 | Validation.Valid _ -> Ok name
@@ -80,21 +80,20 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             | None -> ctx.Sender() <! result
             return! loop ()
 
-        | DeletePDBOlderThan (requestId, name, delay) -> 
-            let! validation = name |> oracleAPI.DeletePDBWithSnapshots (Some delay)
+        | DeleteOldPDBSnapshots (requestId, sourceName, folder, delay, deleteSource) ->
+            let! validation = sourceName |> oracleAPI.DeletePDBSnapshots (Some folder) (Some delay) deleteSource
             match requestId with
             | Some reqId -> ctx.Sender() <! (reqId, validation)
             | None -> ctx.Sender() <! validation
             return! loop ()
 
-        | GarbageWorkingCopies instance ->
+        | DeleteOldPDBsInFolder folder ->
             // Warning : here we are deleting working copies that could currently be accessed by version actors
             let! deleteResult = 
-                oracleAPI.GetOldPDBsFromFolder parameters.GarbageCollectionDelay instance.WorkingCopyDestPath
+                oracleAPI.GetOldPDBsFromFolder parameters.GarbageCollectionDelay folder
                 |> AsyncValidation.ofAsyncResult
                 |> AsyncValidation.bind (AsyncValidation.traverseS (oracleAPI.DeletePDB >> AsyncValidation.ofAsyncResult))
             deleteResult |> Validation.mapErrors (fun errors -> let message = System.String.Join("; ", errors |> List.map (fun ex -> ex.Message)) in ctx.Log.Value.Warning(message); List.empty) |> ignore
-            ctx.Log.Value.Info("Garbage collection of instance {instance} done.", instance.Name)
             return! loop ()
     }
     loop ()

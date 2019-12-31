@@ -2,7 +2,6 @@
 
 open Akkling
 open Application.Oracle
-open Application.OracleLongTaskExecutor
 open Application.PendingRequest
 open Domain
 open Domain.OracleInstance
@@ -285,7 +284,7 @@ let private oracleInstanceActorBody
                 let validation = Validation.validateCreateMasterPDBParams parameters instance
                 match validation with
                 | Valid _ -> 
-                    let parameters2 = {
+                    let (parameters2:OracleLongTaskExecutor.CreatePDBFromDumpParams) = {
                         Name = parameters.Name
                         DumpPath = parameters.Dump
                         Schemas = parameters.Schemas
@@ -381,12 +380,12 @@ let private oracleInstanceActorBody
                     return! loop state
 
             | CollectGarbage ->
+                ctx.Log.Value.Info("Garbage collection of instance {instance} requested.", instance.Name)
                 if instance.SnapshotCapable then
                     collaborators.MasterPDBActors |> Map.iter (fun _ pdbActor -> retype pdbActor <! MasterPDBActor.CollectGarbage)
-                    ctx.Log.Value.Info("Garbage collection of instance {instance} requested", instance.Name)
                     return! loop state
                 else
-                    collaborators.OracleLongTaskExecutor <! GarbageWorkingCopies instance
+                    collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.DeleteOldPDBsInFolder (getWorkingCopyPath instance false)
                     return! loop state
 
             | GetDumpTransferInfo ->

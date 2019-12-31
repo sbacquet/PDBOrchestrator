@@ -254,10 +254,10 @@ let private masterPDBActorBody
                         return! loop { state with Requests = newRequests; Collaborators = newCollabs }
 
             | CollectGarbage ->
+                ctx.Log.Value.Info("Garbage collection of PDB {pdb} requested", masterPDB.Name)
                 let! sourceVersionPDBsMaybe = getPDBNamesLike (sprintf "%s_V%%_%%" masterPDB.Name)
                 match sourceVersionPDBsMaybe with
                 | Ok sourceVersionPDBs -> 
-                    ctx.Log.Value.Info("Garbage collection of PDB {pdb} requested", masterPDB.Name)
                     let regex = System.Text.RegularExpressions.Regex((sprintf "^%s_V([\\d]+)_.+$" masterPDB.Name))
                     let garbageVersion collabs sourceVersionPDB = 
                         let ok, version = System.Int32.TryParse(regex.Replace(sourceVersionPDB, "$1"))
@@ -274,7 +274,7 @@ let private masterPDBActorBody
                         else
                             ctx.Log.Value.Error("PDB {0} has not a valid PDB version name", sourceVersionPDB)
                             collabs
-                    let newCollabs = sourceVersionPDBs |> List.fold garbageVersion collaborators
+                    let newCollabs = sourceVersionPDBs |> List.fold garbageVersion state.Collaborators
                     return! loop { state with Collaborators = newCollabs }
                 | Error error ->
                     ctx.Log.Value.Error("Unexpected error while garbaging {pdb} : {0}", masterPDB.Name, error)
@@ -308,6 +308,19 @@ let private masterPDBActorBody
                     return! loop { state with Collaborators = newCollabs }
                 | None -> 
                     ctx.Log.Value.Error("cannot find actor for PDB {pdb} version {pdbversion}", masterPDB.Name, version)
+                    return! loop state
+
+        | :? MasterPDBEditionActor.CommandToParent as commandToParent->
+            match commandToParent with
+            | MasterPDBEditionActor.KillEdition ->
+                let versionActorMaybe = collaborators.MasterPDBEditionActor
+                match versionActorMaybe with
+                | Some versionActor -> 
+                    versionActor <! MasterPDBEditionActor.HaraKiri
+                    let newCollabs = { collaborators with MasterPDBEditionActor = None }
+                    return! loop { state with Collaborators = newCollabs }
+                | None -> 
+                    ctx.Log.Value.Error("cannot find edition actor for PDB {pdb}", masterPDB.Name)
                     return! loop state
 
         | :? OraclePDBResultWithReqId as requestResponse ->
