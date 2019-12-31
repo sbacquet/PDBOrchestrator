@@ -11,6 +11,7 @@ open Application.Parameters
 open Application.Common
 open Domain.Common.Exceptional
 open Domain.Common
+open Domain.MasterPDBWorkingCopy
 
 type Command =
 | GetState // responds with StateResult
@@ -255,30 +256,19 @@ let private masterPDBActorBody
 
             | CollectGarbage ->
                 ctx.Log.Value.Info("Garbage collection of PDB {pdb} requested", masterPDB.Name)
-                let! sourceVersionPDBsMaybe = getPDBNamesLike (sprintf "%s_V%%_%%" masterPDB.Name)
-                match sourceVersionPDBsMaybe with
-                | Ok sourceVersionPDBs -> 
-                    let regex = System.Text.RegularExpressions.Regex((sprintf "^%s_V([\\d]+)_.+$" masterPDB.Name))
-                    let garbageVersion collabs sourceVersionPDB = 
-                        let ok, version = System.Int32.TryParse(regex.Replace(sourceVersionPDB, "$1"))
-                        if ok then 
-                            let versionPDBMaybe = masterPDB.Versions |> Map.tryFind version
-                            match versionPDBMaybe with
-                            | Some versionPDB -> 
-                                let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name versionPDB collabs ctx
-                                versionActor <! MasterPDBVersionActor.CollectGarbage
-                                newCollabs
-                            | None -> 
-                                ctx.Log.Value.Error("Cannot garbage PDB {0} because it does not correspond to a PDB version of {pdb}", sourceVersionPDB, masterPDB.Name)
-                                collabs
-                        else
-                            ctx.Log.Value.Error("PDB {0} has not a valid PDB version name", sourceVersionPDB)
-                            collabs
-                    let newCollabs = sourceVersionPDBs |> List.fold garbageVersion state.Collaborators
-                    return! loop { state with Collaborators = newCollabs }
-                | Error error ->
-                    ctx.Log.Value.Error("Unexpected error while garbaging {pdb} : {0}", masterPDB.Name, error)
-                    return! loop state
+                let oldWCs = masterPDB.WorkingCopies |> List.choose (fun wc -> 
+                    match wc.Lifetime with 
+                    | Temporary expiry -> if (expiry <= System.DateTime.Now) then Some wc else None 
+                    | _ -> None
+                )
+                oldWCs 
+                |> List.choose (fun wc -> match wc.Source with | SpecificVersion version -> Some (wc.Name, version) | _ -> None)
+                |> List.iter (fun (pdb, version) -> retype ctx.Self <! DeleteWorkingCopy (newRequestId(), pdb, version))
+                oldWCs 
+                |> List.choose (fun wc -> match wc.Source with | Edition -> Some wc.Name | _ -> None)
+                |> List.iter (fun pdb -> retype ctx.Self <! DeleteWorkingCopyOfEdition (newRequestId(), pdb))
+                // TODO: call versionActor <! MasterPDBVersionActor.CollectGarbage
+                return! loop state
 
             | DeleteWorkingCopy (requestId, pdb, version) ->
                 let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
@@ -287,15 +277,26 @@ let private masterPDBActorBody
                 | None -> 
                     sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" version masterPDB.Name |> exn))
                     return! loop state
-                | Some version -> 
-                    let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators ctx
-                    versionActor <<! MasterPDBVersionActor.DeleteWorkingCopy (requestId, pdb)
-                    return! loop { state with Collaborators = newCollabs }
+                | Some pdbVersion -> 
+                    if masterPDB |> isVersionCopiedAs version pdb then
+                        let newRequests = requests |> registerRequest requestId command (ctx.Sender())
+                        let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name pdbVersion collaborators ctx
+                        versionActor <! MasterPDBVersionActor.DeleteWorkingCopy (requestId, pdb)
+                        return! loop { state with Requests = newRequests; Collaborators = newCollabs }
+                    else
+                        sender <! (requestId, Error (sprintf "version %d of master PDB %s has not been copied as %s" version masterPDB.Name pdb |> exn))
+                        return! loop state
 
             | DeleteWorkingCopyOfEdition (requestId, pdb) ->
-                let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators ctx
-                editionActor <<! MasterPDBEditionActor.DeleteWorkingCopy (requestId, pdb)
-                return! loop { state with Collaborators = newCollabs }
+                let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
+                if masterPDB |> isEditionCopiedAs pdb then
+                    let newRequests = requests |> registerRequest requestId command (ctx.Sender())
+                    let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators ctx
+                    editionActor <! MasterPDBEditionActor.DeleteWorkingCopy (requestId, pdb)
+                    return! loop { state with Requests = newRequests; Collaborators = newCollabs }
+                else
+                    sender <! (requestId, Error (sprintf "edition of master PDB %s has not been copied as %s" masterPDB.Name pdb |> exn))
+                    return! loop state
 
         | :? MasterPDBVersionActor.CommandToParent as commandToParent->
             match commandToParent with
@@ -380,23 +381,65 @@ let private masterPDBActorBody
                         sender <! (requestId, Error (sprintf "cannot rollback %s : %s" masterPDB.Name error.Message))
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
 
-                | CreateWorkingCopy (_, versionNumber, name, _, _, _) ->
+                | CreateWorkingCopy (_, versionNumber, name, snapshot, durable, _) ->
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
                         sender <! (requestId, Ok (masterPDB.Name, versionNumber, name))
+                        let wc = 
+                            if durable then 
+                                newDurableWorkingCopy "userTODO" (SpecificVersion versionNumber) name // TODO
+                            else    
+                                newTempWorkingCopy parameters.GarbageCollectionDelay "userTODO" (SpecificVersion versionNumber) name // TODO
+                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = wc :: state.MasterPDB.WorkingCopies } }
                     | Error error ->
                         sender <! (requestId, Error error.Message)
-                    return! loop { state with Requests = newRequests }
+                        return! loop { state with Requests = newRequests }
 
-                | CreateWorkingCopyOfEdition (_, name, _, _) ->
+                | CreateWorkingCopyOfEdition (_, name, durable, _) ->
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
                         sender <! (requestId, Ok (masterPDB.Name, 0, name))
+                        let wc = 
+                            if durable then 
+                                newDurableWorkingCopy "userTODO" Edition name // TODO
+                            else    
+                                newTempWorkingCopy parameters.GarbageCollectionDelay "userTODO" Edition name // TODO
+                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = wc :: state.MasterPDB.WorkingCopies } }
                     | Error error ->
                         sender <! (requestId, Error error.Message)
-                    return! loop { state with Requests = newRequests }
+                        return! loop { state with Requests = newRequests }
+
+                | DeleteWorkingCopy (_, pdb, version) ->
+                    if request.Requester <> ctx.Self then retype request.Requester <! requestResponse else ()
+                    match result with
+                    | Ok _ ->
+                        let chooser (wc:MasterPDBWorkingCopy) = 
+                            if wc.Name = pdb then
+                                match wc.Source with
+                                | SpecificVersion v -> if v = version then None else Some wc
+                                | _ -> Some wc
+                            else
+                                Some wc
+                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = state.MasterPDB.WorkingCopies |> List.choose chooser } }
+                    | Error _ ->
+                        return! loop { state with Requests = newRequests }
+
+                | DeleteWorkingCopyOfEdition (_, pdb) ->
+                    if request.Requester <> ctx.Self then retype request.Requester <! requestResponse else ()
+                    match result with
+                    | Ok _ ->
+                        let chooser (wc:MasterPDBWorkingCopy) = 
+                            if wc.Name = pdb then
+                                match wc.Source with
+                                | Edition -> None
+                                | _ -> Some wc
+                            else
+                                Some wc
+                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = state.MasterPDB.WorkingCopies |> List.choose chooser } }
+                    | Error _ ->
+                        return! loop { state with Requests = newRequests }
 
                 | _ -> 
                     ctx.Log.Value.Error("Unknown message received")

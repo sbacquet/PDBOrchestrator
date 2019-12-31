@@ -3,6 +3,8 @@
 open System
 open Xunit
 open Domain.MasterPDB
+open Domain.MasterPDBVersion
+open Domain.MasterPDBWorkingCopy
 open Domain.OracleInstance
 open Domain.Orchestrator
 open Infrastructure
@@ -12,7 +14,9 @@ open Application.OracleInstanceActor
 [<Fact>]
 let ``Serialize and deserialize master PDB`` () =
     let password = "toto"
-    let pdb = newMasterPDB "test1" [ consSchema "toto" password "Invest" ] "me" "comment1"
+    let props = [ "key", "value" ] |> Map.ofList
+    let wc = [ newTempWorkingCopy (System.TimeSpan.FromHours(12.)) "me" (SpecificVersion 13) "wc" ]
+    let pdb = consMasterPDB "test1" [ consSchema "toto" password "Invest" ] [ newPDBVersion "me" "comment" ] (newEditionInfo "me" |> Some) false props wc
     let json = pdb |> MasterPDBJson.masterPDBtoJson
     let pdb' = json |> MasterPDBJson.jsonToMasterPDB
     match pdb' with

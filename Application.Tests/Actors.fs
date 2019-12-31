@@ -17,6 +17,7 @@ open Application.DTO.OracleInstance
 open Application.OrchestratorActor
 open Domain.Common.Validation
 open Application.Common
+open Domain.MasterPDBWorkingCopy
 
 let parameters : Application.Parameters.Parameters = {
     ServerInstanceName = "A"
@@ -197,7 +198,7 @@ type FakeMasterPDBRepo(pdb: MasterPDB) =
 
 let masterPDBMap1 =
     [ 
-        "test1", (newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1")
+        "test1", { newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1" with WorkingCopies = [ newDurableWorkingCopy "me" (SpecificVersion 1) "test1wc" ] }
         "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "new comment2")
     ] |> Map.ofList
 
@@ -529,7 +530,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
     let getMasterPDBRepo (instance:OracleInstance) name = 
         match instance.Name with
         | "server1" -> 
-            let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newEditionInfo "lockman" |> Some) false Map.empty
+            let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newEditionInfo "lockman" |> Some) false Map.empty List.empty
             match name with
             | "test1" | "test2" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
             | "locked" -> FakeMasterPDBRepo lockedMasterPDB :> IMasterPDBRepository
@@ -555,12 +556,12 @@ let ``API gets pending changes`` () = test <| fun tck ->
 
 [<Fact>]
 let ``API deletes a working copy`` () = test <| fun tck ->
-    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "oldPDB" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
-    let request = API.deleteWorkingCopy ctx "me" "server1" "test1" 1 "oldPDB" |> runQuick
+    let request = API.deleteWorkingCopy ctx "me" "server1" "test1" 1 "test1wc" |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
-    Assert.True(data |> List.contains (PDBName "oldPDB"))
+    Assert.True(data |> List.contains (PDBName "test1wc"))
 
 [<Fact>]
 let ``API fails to delete a working copy`` () = test <| fun tck ->

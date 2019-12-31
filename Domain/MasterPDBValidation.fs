@@ -3,6 +3,7 @@
 open Domain.Common.Validation
 open Domain.Validation.MasterPDBVersion
 open Domain.MasterPDB
+open Domain.MasterPDBWorkingCopy
 
 let validateName name : Validation<string, string> =
     if System.String.IsNullOrEmpty(name) then
@@ -53,7 +54,13 @@ let validateProperties pdb properties =
     else
         Invalid [ sprintf "PDB %s has an empty property key" pdb ]
 
-let consValidMasterPDB name schemas versions lockState editionDisabled properties =
+let validateWorkingCopy (workingCopy:MasterPDBWorkingCopy) =
+    Valid workingCopy // TODO
+
+let validateWorkingCopies (workingCopies:MasterPDBWorkingCopy list) =
+    workingCopies |> traverse validateWorkingCopy
+    
+let consValidMasterPDB name schemas versions lockState editionDisabled properties workingCopies =
     retn
         consMasterPDB <*> 
         validateName name <*> 
@@ -61,4 +68,5 @@ let consValidMasterPDB name schemas versions lockState editionDisabled propertie
         validateVersions name versions <*>
         validateLock name lockState <*>
         Valid editionDisabled <*>
-        validateProperties name properties
+        validateProperties name properties <*>
+        validateWorkingCopies workingCopies

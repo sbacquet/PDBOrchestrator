@@ -65,7 +65,7 @@ let rowToValidMasterPDB getVersions (row:MasterPDBRow) =
     let versions = getVersions row.Name |> Option.defaultValue []
     let properties = Map.empty
     let properties = if row.Updatable = 0 then properties |> Map.add "NotUpdatable" "true" else properties
-    consValidMasterPDB row.Name schemas versions lock editionDisabled properties
+    consValidMasterPDB row.Name schemas versions lock editionDisabled properties List.empty
 
 let rowToValidMasterPDBVersion (row:MasterPDBVersionRow) =
     consValidPDBVersion 

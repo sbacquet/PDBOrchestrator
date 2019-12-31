@@ -1,6 +1,7 @@
 ﻿module Domain.MasterPDB
 
 open Domain.MasterPDBVersion
+open Domain.MasterPDBWorkingCopy
 
 type Schema = {
     User: string
@@ -31,9 +32,10 @@ type MasterPDB = {
     EditionState : EditionInfo option
     EditionDisabled: bool
     Properties: Map<string, string>
+    WorkingCopies: MasterPDBWorkingCopy list
 }
 
-let consMasterPDB name schemas versions (editionState:EditionInfo option) editionDisabled properties = 
+let consMasterPDB name schemas versions (editionState:EditionInfo option) editionDisabled properties workingCopies = 
     { 
         Name = name
         Schemas = schemas 
@@ -41,6 +43,7 @@ let consMasterPDB name schemas versions (editionState:EditionInfo option) editio
         EditionState = editionState |> Option.map (fun editionState -> { editionState with Date = editionState.Date.ToUniversalTime() })
         EditionDisabled = editionDisabled
         Properties = properties
+        WorkingCopies = workingCopies
     }
 
 let newMasterPDB name schemas createdBy comment =
@@ -51,6 +54,7 @@ let newMasterPDB name schemas createdBy comment =
         EditionState = None 
         EditionDisabled = false
         Properties = Map.empty
+        WorkingCopies = List.empty
     }
 
 let isVersionDeleted version masterPDB =
@@ -107,3 +111,8 @@ let unlock masterPDB =
 
 let isLockedForEdition masterPDB = masterPDB.EditionState.IsSome
 
+let isVersionCopiedAs version name (masterPDB:MasterPDB) =
+    masterPDB.WorkingCopies |> List.exists (fun wc -> wc.Name = name && (match wc.Source with | SpecificVersion v -> version = v | _ -> false))
+
+let isEditionCopiedAs name (masterPDB:MasterPDB) =
+    masterPDB.WorkingCopies |> List.exists (fun wc -> wc.Name = name && (match wc.Source with | Edition -> true | _ -> false))

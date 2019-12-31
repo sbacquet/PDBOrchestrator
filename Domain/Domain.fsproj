@@ -5,6 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Common.fs" />
+    <Compile Include="MasterPDBWorkingCopy.fs" />
     <Compile Include="MasterPDBVersion.fs" />
     <Compile Include="MasterPDBVersionValidation.fs" />
     <Compile Include="MasterPDB.fs" />

@@ -2,6 +2,7 @@
 
 open System
 open Domain
+open Domain.MasterPDBWorkingCopy
 
 type SchemaDTO = {
     User: string
@@ -17,9 +18,10 @@ type MasterPDBVersionDTO = {
     Deleted : bool
     Manifest : string
     Properties: Map<string, string>
+    WorkingCopyCount: int
 }
 
-let consMasterPDBVersionDTO version createdBy (creationDate:DateTime) comment deleted manifest properties = {
+let consMasterPDBVersionDTO version createdBy (creationDate:DateTime) comment deleted manifest properties wcCount = {
     Number = version
     CreatedBy = createdBy
     CreationDate = creationDate.ToUniversalTime()
@@ -27,9 +29,10 @@ let consMasterPDBVersionDTO version createdBy (creationDate:DateTime) comment de
     Deleted = deleted
     Manifest = manifest
     Properties = properties
+    WorkingCopyCount = wcCount
 }
 
-let toMasterPDBVersionDTO manifest (version:Domain.MasterPDBVersion.MasterPDBVersion) =
+let toMasterPDBVersionDTO manifest wcCount (version:Domain.MasterPDBVersion.MasterPDBVersion) =
     consMasterPDBVersionDTO 
         version.Number 
         version.CreatedBy 
@@ -38,6 +41,7 @@ let toMasterPDBVersionDTO manifest (version:Domain.MasterPDBVersion.MasterPDBVer
         version.Deleted 
         manifest 
         version.Properties
+        wcCount
 
 type EditionInfoDTO = {
     Editor: string
@@ -57,9 +61,10 @@ type MasterPDBDTO = {
     EditionState: EditionInfoDTO option
     EditionDisabled: bool
     Properties: Map<string, string>
+    WorkingCopyCount: int
 }
 
-let consMasterPDBDTO name schemas latestVersion versions editionState editionDisabled properties = {
+let consMasterPDBDTO name schemas latestVersion versions editionState editionDisabled properties wcCount = {
     Name = name
     Schemas = schemas
     LatestVersion = latestVersion
@@ -67,6 +72,7 @@ let consMasterPDBDTO name schemas latestVersion versions editionState editionDis
     EditionState = editionState |> Option.map (fun editionState -> { editionState with Date = editionState.Date.ToUniversalTime() })
     EditionDisabled = editionDisabled
     Properties = properties
+    WorkingCopyCount = wcCount
 }
 
 let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) =
@@ -75,11 +81,12 @@ let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) =
         (masterPDB.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type }))
         (masterPDB |> Domain.MasterPDB.getLatestAvailableVersionNumber)
         (masterPDB.Versions 
-         |> Map.map (fun _ version -> version |> toMasterPDBVersionDTO (Domain.MasterPDBVersion.manifestFile masterPDB.Name version.Number))
+         |> Map.map (fun _ version -> version |> toMasterPDBVersionDTO (Domain.MasterPDBVersion.manifestFile masterPDB.Name version.Number) (masterPDB.WorkingCopies |> List.filter (fun wc -> match wc.Source with | SpecificVersion v -> v = version.Number | _ -> false) |> List.length))
          |> Map.toList |> List.map snd)
         (masterPDB.EditionState |> toEditionInfoDTO)
         masterPDB.EditionDisabled
         masterPDB.Properties
+        masterPDB.WorkingCopies.Length
 
 let fromDTO (dto:MasterPDBDTO) : Domain.MasterPDB.MasterPDB = 
     MasterPDB.consMasterPDB
@@ -96,5 +103,6 @@ let fromDTO (dto:MasterPDBDTO) : Domain.MasterPDB.MasterPDB =
         (dto. EditionState |> Option.map (fun lock -> { Editor = lock.Editor; Date = lock.Date }))
         dto.EditionDisabled
         dto.Properties
+        List.Empty
 
 
