@@ -440,8 +440,8 @@ let importAndOpen (logger:ILogger) connAsDBA manifest dest =
         openPDBCompensable logger connAsDBA true
     ] |> composeAsync logger
 
-let snapshotPDB (logger:ILogger) connAsDBA from dest name =
-    logger.LogDebug("Snapshoting PDB {pdb} to {snapshot}", from, name)
+let snapshotPDB (logger:ILogger) connAsDBA sourcePDB destFolder name =
+    logger.LogDebug("Snapshoting PDB {sourcePDB} to {snapshotCopy}", sourcePDB, name)
     sprintf 
         @"
 BEGIN
@@ -460,29 +460,29 @@ BEGIN
 	END;
 END;
 "
-        from name from dest name
+        sourcePDB name sourcePDB destFolder name
     |> execAsync name connAsDBA
 
-let snapshotPDBCompensable (logger:ILogger) connAsDBA manifest dest = 
+let snapshotPDBCompensable (logger:ILogger) connAsDBA sourcePDB destFolder = 
     compensableAsync 
-        (snapshotPDB logger connAsDBA manifest dest) 
+        (snapshotPDB logger connAsDBA sourcePDB destFolder) 
         (deletePDB logger connAsDBA true)
 
-let snapshotAndOpenPDB (logger:ILogger) connAsDBA manifest dest =
+let snapshotAndOpenPDB (logger:ILogger) connAsDBA sourcePDB destFolder =
     [
-        snapshotPDBCompensable logger connAsDBA manifest dest
+        snapshotPDBCompensable logger connAsDBA sourcePDB destFolder
         openPDBCompensable logger connAsDBA true
     ] |> composeAsync logger
 
-let clonePDB (logger:ILogger) connAsDBA from dest name =
-    logger.LogDebug("Cloning PDB {source} to {dest}", from, name)
+let clonePDB (logger:ILogger) connAsDBA sourcePDB destFolder name =
+    logger.LogDebug("Cloning PDB {sourcePDB} to {destPDB}", sourcePDB, name)
     sprintf 
         @"
 BEGIN
     execute immediate 'CREATE PLUGGABLE DATABASE %s FROM %s PARALLEL 1 NOLOGGING CREATE_FILE_DEST=''%s''';
 END;
 "
-        name from dest
+        name sourcePDB destFolder
     |> execAsync name connAsDBA
 
 let clonePDBCompensable (logger:ILogger) connAsDBA manifest dest = 

@@ -47,16 +47,16 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
             closeAndExportPDB logger connAsDBA (getManifestPath manifest) name
             |> toOraclePDBResultAsync
 
-        member __.ImportPDB manifest dest name = 
-            importAndOpen logger connAsDBA (getManifestPath manifest) dest name
+        member __.ImportPDB manifest destFolder name = 
+            importAndOpen logger connAsDBA (getManifestPath manifest) destFolder name
             |> toOraclePDBResultAsync
 
-        member __.SnapshotPDB from dest name = 
-            snapshotAndOpenPDB logger connAsDBA from dest name
+        member __.SnapshotPDB sourcePDB destFolder name = 
+            snapshotAndOpenPDB logger connAsDBA sourcePDB destFolder name
             |> toOraclePDBResultAsync
 
-        member __.ClonePDB from dest name = 
-            cloneAndOpenPDB logger connAsDBA from dest name
+        member __.ClonePDB sourcePDB destFolder name = 
+            cloneAndOpenPDB logger connAsDBA sourcePDB destFolder name
             |> toOraclePDBResultAsync
 
         member __.PDBHasSnapshots name = 

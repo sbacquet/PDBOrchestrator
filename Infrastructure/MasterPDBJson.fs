@@ -170,7 +170,7 @@ let encodeMasterPDB (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:MasterP
     Encode.ifNotEqual Map.empty (Encode.mapWith Encode.string) "properties" x.Properties >>
     Encode.ifNotEqual false Encode.bool "editionDisabled" x.EditionDisabled >>
     Encode.optional encodeLockInfo "edition" x.EditionState >>
-    Encode.ifNotEqual List.empty (Encode.listWith encodeWorkingCopy) "workingCopies" x.WorkingCopies >>
+    Encode.ifNotEqual List.empty (Encode.listWith encodeWorkingCopy) "workingCopies" (x.WorkingCopies |> Map.toList |> List.map snd) >>
     Encode.required (Encode.listWith encodeMasterPDBVersion) "versions" (x.Versions |> Map.toList |> List.map snd) >>
     Encode.required Encode.int "_version" cCurrentJsonVersion >>
     Encode.required Encode.bytes "_iv" algo.IV

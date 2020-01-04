@@ -41,7 +41,6 @@ type CreateWorkingCopyResult = Result<string * int * string, string>
 
 type private Collaborators = {
     MasterPDBVersionActors: Map<int, IActorRef<MasterPDBVersionActor.Command>>
-    MasterPDBEditionActor: IActorRef<MasterPDBEditionActor.Command> option
     OracleShortTaskExecutor: IActorRef<OracleShortTaskExecutor.Command>
     OracleLongTaskExecutor: IActorRef<OracleLongTaskExecutor.Command>
     OracleDiskIntensiveTaskExecutor : IActorRef<OracleDiskIntensiveActor.Command>
@@ -65,22 +64,6 @@ let private getOrSpawnVersionActor parameters instance (masterPDBName:string) (v
         { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Add(version.Number, versionActor) }, 
         versionActor
 
-let private getOrSpawnEditionActor parameters instance (editionPDBName:string) collaborators ctx =
-    match collaborators.MasterPDBEditionActor with
-    | Some editionActor -> collaborators, editionActor
-    | None -> 
-        let editionActor = 
-            ctx |> MasterPDBEditionActor.spawn 
-                parameters
-                instance
-                collaborators.OracleShortTaskExecutor
-                collaborators.OracleLongTaskExecutor
-                collaborators.OracleDiskIntensiveTaskExecutor
-                editionPDBName
-        
-        { collaborators with MasterPDBEditionActor = Some editionActor }, 
-        editionActor
-
 type private State = {
     MasterPDB: MasterPDB
     PreviousMasterPDB: MasterPDB
@@ -101,9 +84,6 @@ let private masterPDBActorBody
 
     let initialMasterPDB = initialRepository.Get()
     let editionPDBName = sprintf "%s_EDITION" initialMasterPDB.Name
-    let pdbExists pdb : Async<Exceptional<bool>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
-    let deletePDB pdb : Async<Exceptional<string>> = oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
-    let getPDBNamesLike like : Async<Exceptional<string list>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBNamesLike like
 
     let rec loop state = actor {
 
@@ -126,13 +106,15 @@ let private masterPDBActorBody
             match event with
             | LifecycleEvent.PreStart ->
                 ctx.Log.Value.Info("Checking integrity of {pdb}...", masterPDB.Name)
+                let pdbExists pdb : Async<Exceptional<bool>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
                 let! editionPDBExists = pdbExists editionPDBName
                 match editionPDBExists, masterPDB.EditionState.IsSome with
                 | Ok true, false ->
                     ctx.Log.Value.Warning("Master PDB {pdb} is not locked whereas its edition PDB exists on server => deleting the PDB...", masterPDB.Name)
-                    let _ = 
-                        deletePDB editionPDBName
-                        |> runWithin parameters.LongTimeout id (fun () -> sprintf "Could not delete edition PDB %s : timeout exceeded" editionPDBName |> exn |> Error)
+                    let deletePDB pdb : Exceptional<string> = 
+                        oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
+                        |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
+                    deletePDB editionPDBName |> ignore
                     return! loop state
                 | Ok false, true ->
                     ctx.Log.Value.Warning("Master PDB {pdb} is declared as locked whereas its edition PDB does not exist on server => unlocked it", masterPDB.Name)
@@ -250,53 +232,41 @@ let private masterPDBActorBody
                         return! loop state
                     else
                         let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                        let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators ctx
+                        let editionActor = MasterPDBEditionActor.spawn parameters instance oracleShortTaskExecutor oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor editionPDBName ctx
                         editionActor <! MasterPDBEditionActor.CreateWorkingCopy (requestId, workingCopyName, durable, force)
-                        return! loop { state with Requests = newRequests; Collaborators = newCollabs }
+                        retype editionActor <! Akka.Actor.PoisonPill.Instance
+                        return! loop { state with Requests = newRequests }
 
             | CollectGarbage ->
                 ctx.Log.Value.Info("Garbage collection of PDB {pdb} requested", masterPDB.Name)
-                let oldWCs = masterPDB.WorkingCopies |> List.choose (fun wc -> 
-                    match wc.Lifetime with 
-                    | Temporary expiry -> if (expiry <= System.DateTime.Now) then Some wc else None 
-                    | _ -> None
-                )
-                oldWCs 
-                |> List.choose (fun wc -> match wc.Source with | SpecificVersion version -> Some (wc.Name, version) | _ -> None)
-                |> List.iter (fun (pdb, version) -> retype ctx.Self <! DeleteWorkingCopy (newRequestId(), pdb, version))
-                oldWCs 
-                |> List.choose (fun wc -> match wc.Source with | Edition -> Some wc.Name | _ -> None)
-                |> List.iter (fun pdb -> retype ctx.Self <! DeleteWorkingCopyOfEdition (newRequestId(), pdb))
-                // TODO: call versionActor <! MasterPDBVersionActor.CollectGarbage
-                return! loop state
+                let garbageCollector = MasterPDBGarbageCollector.spawn parameters oracleShortTaskExecutor oracleLongTaskExecutor masterPDB ctx
+                garbageCollector <! MasterPDBGarbageCollector.CollectGarbage
+                retype garbageCollector <! Akka.Actor.PoisonPill.Instance
+                return loop state
 
             | DeleteWorkingCopy (requestId, pdb, version) ->
                 let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
-                let versionMaybe = masterPDB.Versions |> Map.tryFind version
-                match versionMaybe with
-                | None -> 
-                    sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" version masterPDB.Name |> exn))
-                    return! loop state
-                | Some pdbVersion -> 
-                    if masterPDB |> isVersionCopiedAs version pdb then
-                        let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                        let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name pdbVersion collaborators ctx
-                        versionActor <! MasterPDBVersionActor.DeleteWorkingCopy (requestId, pdb)
-                        return! loop { state with Requests = newRequests; Collaborators = newCollabs }
-                    else
-                        sender <! (requestId, Error (sprintf "version %d of master PDB %s has not been copied as %s" version masterPDB.Name pdb |> exn))
-                        return! loop state
+                let workingCopy = masterPDB |> workingCopyOfVersion version pdb
+                match workingCopy with
+                | Some workingCopy ->
+                    let garbageCollector = MasterPDBGarbageCollector.spawn parameters oracleShortTaskExecutor oracleLongTaskExecutor masterPDB ctx
+                    garbageCollector <<! MasterPDBGarbageCollector.DeleteWorkingCopy (requestId, workingCopy)
+                    retype garbageCollector <! Akka.Actor.PoisonPill.Instance
+                | None ->
+                    sender <! (requestId, Error (sprintf "version %d of master PDB %s has not been copied as %s" version masterPDB.Name pdb |> exn))
+                return! loop state
 
             | DeleteWorkingCopyOfEdition (requestId, pdb) ->
                 let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
-                if masterPDB |> isEditionCopiedAs pdb then
-                    let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators ctx
-                    editionActor <! MasterPDBEditionActor.DeleteWorkingCopy (requestId, pdb)
-                    return! loop { state with Requests = newRequests; Collaborators = newCollabs }
-                else
+                let workingCopy = masterPDB |> workingCopyOfEdition pdb
+                match workingCopy with
+                | Some workingCopy ->
+                    let garbageCollector = MasterPDBGarbageCollector.spawn parameters oracleShortTaskExecutor oracleLongTaskExecutor masterPDB ctx
+                    garbageCollector <<! MasterPDBGarbageCollector.DeleteWorkingCopy (requestId, workingCopy)
+                    retype garbageCollector <! Akka.Actor.PoisonPill.Instance
+                | None ->
                     sender <! (requestId, Error (sprintf "edition of master PDB %s has not been copied as %s" masterPDB.Name pdb |> exn))
-                    return! loop state
+                return! loop state
 
         | :? MasterPDBVersionActor.CommandToParent as commandToParent->
             match commandToParent with
@@ -311,18 +281,37 @@ let private masterPDBActorBody
                     ctx.Log.Value.Error("cannot find actor for PDB {pdb} version {pdbversion}", masterPDB.Name, version)
                     return! loop state
 
-        | :? MasterPDBEditionActor.CommandToParent as commandToParent->
+        | :? MasterPDBGarbageCollector.CommandToParent as commandToParent ->
             match commandToParent with
-            | MasterPDBEditionActor.KillEdition ->
-                let versionActorMaybe = collaborators.MasterPDBEditionActor
-                match versionActorMaybe with
-                | Some versionActor -> 
-                    versionActor <! MasterPDBEditionActor.HaraKiri
-                    let newCollabs = { collaborators with MasterPDBEditionActor = None }
-                    return! loop { state with Collaborators = newCollabs }
-                | None -> 
-                    ctx.Log.Value.Error("cannot find edition actor for PDB {pdb}", masterPDB.Name)
-                    return! loop state
+            | MasterPDBGarbageCollector.CollectVersionsGarbage sourceVersionPDBs ->
+                // Get existing snapshot-source PDBs and try to delete them
+                let regex = System.Text.RegularExpressions.Regex((sprintf "^%s_V([\\d]+)_.+$" masterPDB.Name))
+                let garbageVersion collabs sourceVersionPDB = 
+                    let ok, version = System.Int32.TryParse(regex.Replace(sourceVersionPDB, "$1"))
+                    if ok then 
+                        let versionPDBMaybe = masterPDB.Versions |> Map.tryFind version
+                        match versionPDBMaybe with
+                        | Some versionPDB -> 
+                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name versionPDB collabs ctx
+                            versionActor <! MasterPDBVersionActor.CollectGarbage
+                            newCollabs
+                        | None -> 
+                            ctx.Log.Value.Error("Cannot garbage PDB {0} because it does not correspond to a PDB version of {pdb}", sourceVersionPDB, masterPDB.Name)
+                            collabs
+                    else
+                        ctx.Log.Value.Error("PDB {0} has not a valid PDB version name", sourceVersionPDB)
+                        collabs
+                let newCollabs = sourceVersionPDBs |> List.fold garbageVersion state.Collaborators
+                return! loop { state with Collaborators = newCollabs }
+
+            | MasterPDBGarbageCollector.WorkingCopiesDeleted deletionResults ->
+                let deletedWorkingCopies, undeletedWorkingCopies = deletionResults |> List.partition (fun (_, errorMaybe) -> errorMaybe |> Option.isNone)
+                undeletedWorkingCopies |> List.iter (fun (wc, error) ->
+                    ctx.Log.Value.Warning("Cannot delete working copy {workingCopy} : {error}", wc.Name, error.Value.Message)
+                )
+                let deletedWorkingCopies = deletedWorkingCopies |> List.map (fun (wc, _) -> wc.Name) |> Set.ofList
+                return! loop { state with MasterPDB = { state.MasterPDB with WorkingCopies = state.MasterPDB.WorkingCopies |> Map.filter (fun name _ -> not (deletedWorkingCopies |> Set.contains name)) } }
+                
 
         | :? OraclePDBResultWithReqId as requestResponse ->
 
@@ -391,7 +380,7 @@ let private masterPDBActorBody
                                 newDurableWorkingCopy "userTODO" (SpecificVersion versionNumber) name // TODO
                             else    
                                 newTempWorkingCopy parameters.GarbageCollectionDelay "userTODO" (SpecificVersion versionNumber) name // TODO
-                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = wc :: state.MasterPDB.WorkingCopies } }
+                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = state.MasterPDB.WorkingCopies |> Map.add name wc } }
                     | Error error ->
                         sender <! (requestId, Error error.Message)
                         return! loop { state with Requests = newRequests }
@@ -406,39 +395,9 @@ let private masterPDBActorBody
                                 newDurableWorkingCopy "userTODO" Edition name // TODO
                             else    
                                 newTempWorkingCopy parameters.GarbageCollectionDelay "userTODO" Edition name // TODO
-                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = wc :: state.MasterPDB.WorkingCopies } }
+                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = state.MasterPDB.WorkingCopies |> Map.add name wc } }
                     | Error error ->
                         sender <! (requestId, Error error.Message)
-                        return! loop { state with Requests = newRequests }
-
-                | DeleteWorkingCopy (_, pdb, version) ->
-                    if request.Requester <> ctx.Self then retype request.Requester <! requestResponse else ()
-                    match result with
-                    | Ok _ ->
-                        let chooser (wc:MasterPDBWorkingCopy) = 
-                            if wc.Name = pdb then
-                                match wc.Source with
-                                | SpecificVersion v -> if v = version then None else Some wc
-                                | _ -> Some wc
-                            else
-                                Some wc
-                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = state.MasterPDB.WorkingCopies |> List.choose chooser } }
-                    | Error _ ->
-                        return! loop { state with Requests = newRequests }
-
-                | DeleteWorkingCopyOfEdition (_, pdb) ->
-                    if request.Requester <> ctx.Self then retype request.Requester <! requestResponse else ()
-                    match result with
-                    | Ok _ ->
-                        let chooser (wc:MasterPDBWorkingCopy) = 
-                            if wc.Name = pdb then
-                                match wc.Source with
-                                | Edition -> None
-                                | _ -> Some wc
-                            else
-                                Some wc
-                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = state.MasterPDB.WorkingCopies |> List.choose chooser } }
-                    | Error _ ->
                         return! loop { state with Requests = newRequests }
 
                 | _ -> 
@@ -454,7 +413,6 @@ let private masterPDBActorBody
 
     let collaborators = { 
         MasterPDBVersionActors = Map.empty
-        MasterPDBEditionActor = None
         OracleShortTaskExecutor = oracleShortTaskExecutor
         OracleLongTaskExecutor = oracleLongTaskExecutor
         OracleDiskIntensiveTaskExecutor = oracleDiskIntensiveTaskExecutor 

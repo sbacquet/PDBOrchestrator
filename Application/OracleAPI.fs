@@ -28,11 +28,11 @@ type IOracleAPI =
 
     abstract member ExportPDB : manifest:string -> name:string -> Async<OraclePDBResult>
 
-    abstract member ImportPDB : manifest:string -> dest:string -> name:string -> Async<OraclePDBResult>
+    abstract member ImportPDB : manifest:string -> destFolder:string -> name:string -> Async<OraclePDBResult>
 
-    abstract member SnapshotPDB : from:string -> dest:string -> name:string -> Async<OraclePDBResult>
+    abstract member SnapshotPDB : sourcePDB:string -> destFolder:string -> name:string -> Async<OraclePDBResult>
 
-    abstract member ClonePDB : from:string -> dest:string -> name:string -> Async<OraclePDBResult>
+    abstract member ClonePDB : sourcePDB:string -> destFolder:string -> name:string -> Async<OraclePDBResult>
 
     abstract member PDBHasSnapshots : name:string -> Async<Exceptional<bool>>
 

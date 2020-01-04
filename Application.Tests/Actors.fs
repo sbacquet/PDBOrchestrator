@@ -128,11 +128,11 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
             return Ok name 
         }
         member this.DeletePDB name = async { 
-            if not (existingPDBs |> Set.contains name) then
+            if not (this.ExistingPDBs |> Set.contains name) then
                 return sprintf "%s does not exist" name |> exn |> Error
             else
                 this.Logger.LogDebug("Deleting PDB {PDB}...", name)
-                do! Async.Sleep 100
+                this.ExistingPDBs <- this.ExistingPDBs |> Set.remove name
                 return Ok name 
         }
         member this.ExportPDB _ name = async { 
@@ -144,14 +144,14 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
             this.ExistingPDBs <- this.ExistingPDBs.Add name
             return Ok name 
         }
-        member this.SnapshotPDB _ name _ = async { 
-            this.Logger.LogDebug("Snapshoting PDB {PDB}...", name)
-            do! Async.Sleep 100
+        member this.SnapshotPDB sourcePDB _ name = async { 
+            this.Logger.LogDebug("Snapshoting PDB {sourcePDB} to {snapshotCopy}...", sourcePDB, name)
+            this.ExistingPDBs <- this.ExistingPDBs.Add name
             return Ok name 
         }
-        member this.ClonePDB _ name _ = async { 
-            this.Logger.LogDebug("Cloning PDB {PDB}...", name)
-            do! Async.Sleep 100
+        member this.ClonePDB sourcePDB _ name = async { 
+            this.Logger.LogDebug("Cloning PDB {sourcePDB} to {destPDB}...", sourcePDB, name)
+            this.ExistingPDBs <- this.ExistingPDBs.Add name
             return Ok name 
         }
         member this.PDBHasSnapshots _ = async { 
@@ -198,7 +198,7 @@ type FakeMasterPDBRepo(pdb: MasterPDB) =
 
 let masterPDBMap1 =
     [ 
-        "test1", { newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1" with WorkingCopies = [ newDurableWorkingCopy "me" (SpecificVersion 1) "test1wc" ] }
+        "test1", { newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1" with WorkingCopies = [ "test1wc", newDurableWorkingCopy "me" (SpecificVersion 1) "test1wc" ] |> Map.ofList }
         "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "new comment2")
     ] |> Map.ofList
 
@@ -304,7 +304,8 @@ let throwIfRequestNotCompletedOk (ctx:API.APIContext) request =
         let status = requestId |> pollRequestStatus ctx
         match status with
         | Done (CompletedOk (_, data), _) -> data
-        | _ -> failwith "operation not completed successfully"
+        | Done (CompletedWithError error, _) -> failwithf "operation not completed successfully : %s" error
+        | _ -> failwith "operation not completed successfully (unknown reason)"
 
 let throwIfRequestNotCompletedWithError (ctx:API.APIContext) request =
     match request with

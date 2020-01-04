@@ -15,6 +15,7 @@
     <Compile Include="OracleDiskIntensiveActor.fs" />
     <Compile Include="MasterPDBVersionActor.fs" />
     <Compile Include="MasterPDBEditionActor.fs" />
+    <Compile Include="MasterPDBGarbageCollector.fs" />
     <Compile Include="MasterPDBDTO.fs" />
     <Compile Include="MasterPDBActor.fs" />
     <Compile Include="OracleInstanceDTO.fs" />

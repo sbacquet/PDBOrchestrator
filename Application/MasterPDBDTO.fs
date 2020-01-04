@@ -81,12 +81,12 @@ let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) =
         (masterPDB.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type }))
         (masterPDB |> Domain.MasterPDB.getLatestAvailableVersionNumber)
         (masterPDB.Versions 
-         |> Map.map (fun _ version -> version |> toMasterPDBVersionDTO (Domain.MasterPDBVersion.manifestFile masterPDB.Name version.Number) (masterPDB.WorkingCopies |> List.filter (fun wc -> match wc.Source with | SpecificVersion v -> v = version.Number | _ -> false) |> List.length))
+         |> Map.map (fun _ version -> version |> toMasterPDBVersionDTO (Domain.MasterPDBVersion.manifestFile masterPDB.Name version.Number) (masterPDB.WorkingCopies |> Map.filter (fun _ wc -> match wc.Source with | SpecificVersion v -> v = version.Number | _ -> false) |> Map.count))
          |> Map.toList |> List.map snd)
         (masterPDB.EditionState |> toEditionInfoDTO)
         masterPDB.EditionDisabled
         masterPDB.Properties
-        masterPDB.WorkingCopies.Length
+        (masterPDB.WorkingCopies |> Map.count)
 
 let fromDTO (dto:MasterPDBDTO) : Domain.MasterPDB.MasterPDB = 
     MasterPDB.consMasterPDB
@@ -103,6 +103,6 @@ let fromDTO (dto:MasterPDBDTO) : Domain.MasterPDB.MasterPDB =
         (dto. EditionState |> Option.map (fun lock -> { Editor = lock.Editor; Date = lock.Date }))
         dto.EditionDisabled
         dto.Properties
-        List.Empty
+        List.empty
 
 

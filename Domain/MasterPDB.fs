@@ -32,10 +32,10 @@ type MasterPDB = {
     EditionState : EditionInfo option
     EditionDisabled: bool
     Properties: Map<string, string>
-    WorkingCopies: MasterPDBWorkingCopy list
+    WorkingCopies: Map<string,MasterPDBWorkingCopy>
 }
 
-let consMasterPDB name schemas versions (editionState:EditionInfo option) editionDisabled properties workingCopies = 
+let consMasterPDB name schemas versions (editionState:EditionInfo option) editionDisabled properties (workingCopies:MasterPDBWorkingCopy list) = 
     { 
         Name = name
         Schemas = schemas 
@@ -43,7 +43,7 @@ let consMasterPDB name schemas versions (editionState:EditionInfo option) editio
         EditionState = editionState |> Option.map (fun editionState -> { editionState with Date = editionState.Date.ToUniversalTime() })
         EditionDisabled = editionDisabled
         Properties = properties
-        WorkingCopies = workingCopies
+        WorkingCopies = workingCopies |> List.map (fun wc -> (wc.Name, wc)) |> Map.ofList
     }
 
 let newMasterPDB name schemas createdBy comment =
@@ -54,7 +54,7 @@ let newMasterPDB name schemas createdBy comment =
         EditionState = None 
         EditionDisabled = false
         Properties = Map.empty
-        WorkingCopies = List.empty
+        WorkingCopies = Map.empty
     }
 
 let isVersionDeleted version masterPDB =
@@ -111,8 +111,20 @@ let unlock masterPDB =
 
 let isLockedForEdition masterPDB = masterPDB.EditionState.IsSome
 
-let isVersionCopiedAs version name (masterPDB:MasterPDB) =
-    masterPDB.WorkingCopies |> List.exists (fun wc -> wc.Name = name && (match wc.Source with | SpecificVersion v -> version = v | _ -> false))
+let workingCopyOfVersion version name (masterPDB:MasterPDB) =
+    masterPDB.WorkingCopies |> Map.tryPick (fun key wc -> 
+    match key, wc.Source with 
+    | n, SpecificVersion v when n = name && v = version -> Some wc
+    | _ -> None)
 
-let isEditionCopiedAs name (masterPDB:MasterPDB) =
-    masterPDB.WorkingCopies |> List.exists (fun wc -> wc.Name = name && (match wc.Source with | Edition -> true | _ -> false))
+let isVersionCopiedAs version name masterPDB =
+    workingCopyOfVersion version name masterPDB |> Option.isSome
+
+let workingCopyOfEdition name (masterPDB:MasterPDB) =
+    masterPDB.WorkingCopies |> Map.tryPick (fun key wc ->
+    match key, wc.Source with
+    | n, Edition when n = name -> Some wc
+    | _ -> None)
+
+let isEditionCopiedAs name masterPDB =
+    workingCopyOfEdition name masterPDB |> Option.isSome

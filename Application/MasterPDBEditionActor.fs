@@ -13,11 +13,6 @@ open Application.Common
 
 type Command =
 | CreateWorkingCopy of WithRequestId<string, bool, bool> // responds with OraclePDBResultWithReqId
-| DeleteWorkingCopy of WithRequestId<string> // responds with OraclePDBResultWithReqId
-| HaraKiri // no response
-
-type CommandToParent =
-| KillEdition
 
 let private masterPDBEditionActorBody 
     (parameters:Parameters)
@@ -28,9 +23,15 @@ let private masterPDBEditionActorBody
     (editionPDBName:string)
     (ctx : Actor<Command>) =
 
-    let pdbExists pdb : Async<Exceptional<bool>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
-    let deletePDB pdb : Async<Exceptional<string>> = oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
-    let getPDBFilesFolder pdb : Async<Exceptional.Exceptional<string option>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
+    let pdbExists pdb : Exceptional<bool> = 
+        oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
+        |> runWithin parameters.ShortTimeout id (fun () -> sprintf "cannot check if PDB %s exists: timeout exceeded" pdb |> exn |> Error)
+    let deletePDB pdb : OraclePDBResult = 
+        oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
+        |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
+    let cloneEditionPDB name : OraclePDBResult =
+        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ClonePDB (None, editionPDBName, instance.WorkingCopyDestPath, name)
+        |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot clone PDB %s to %s : timeout exceeded" editionPDBName name |> exn |> Error)
 
     let rec loop () = actor {
 
@@ -39,41 +40,18 @@ let private masterPDBEditionActorBody
 
         match command with
         | CreateWorkingCopy (requestId, workingCopyName, durable, force) -> 
-            let! result = asyncResult {
+            let result = result {
                 let! wcExists = pdbExists workingCopyName
                 if wcExists && (not force) then 
                     ctx.Log.Value.Info("Working copy {pdb} already exists, not enforcing creation.", workingCopyName)
-                    return! AsyncResult.retn workingCopyName
+                    return! Ok workingCopyName
                 else
                     let! _ = 
                         if wcExists then deletePDB workingCopyName // force creation
-                        else AsyncResult.retn ""
-                    let destPath = getWorkingCopyPath instance durable
-                    return! oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ClonePDB (None, editionPDBName, destPath, workingCopyName)
+                        else Ok ""
+                    return! cloneEditionPDB workingCopyName
             }
             sender <! (requestId, result)
-            return! loop ()
-
-        | DeleteWorkingCopy (requestId, pdb) ->
-            let! pdbFilesFolder = getPDBFilesFolder pdb
-            let result:OraclePDBResult =
-                match pdbFilesFolder with
-                | Ok (Some folder) ->
-                    if folder.StartsWith(instance.WorkingCopyDestPath) then
-                        deletePDB pdb
-                        |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
-                    else
-                        sprintf "PDB %s is not a working copy" pdb |> exn |> Error
-                | Ok None ->
-                    sprintf "cannot find any file folder for PDB %s" pdb |> exn |> Error
-                | Error error ->
-                    Error error
-            sender <! (requestId, result)
-            return! loop ()
-
-        | HaraKiri ->
-            ctx.Log.Value.Info("Actor for {pdb} is stopping...", editionPDBName)
-            retype ctx.Self <! Akka.Actor.PoisonPill.Instance
             return! loop ()
     }
 
