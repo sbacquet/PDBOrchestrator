@@ -12,6 +12,7 @@ open Application.Common
 open Application.Parameters
 open Domain.MasterPDB
 open Application.DTO
+open Domain.MasterPDBWorkingCopy
 
 type CreateMasterPDBParams = {
     Name: string
@@ -445,6 +446,39 @@ let private oracleInstanceActorBody
                         ctx.Log.Value.Error("PDB {pdb} failed to create with error : {error}", commandParameters.Name, error.Message)
                         requester <! (requestId, MasterPDBCreationFailure (commandParameters.Name, error.Message))
                         return! loop { state with Requests = newRequests }
+
+                | CreateWorkingCopy (requestId, masterPDBName, versionNumber, wcName, snapshot, durable, _) ->
+                    let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
+                    match result with
+                    | Ok _ ->
+                        let wcService = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port) wcName
+                        sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, wcService, instance.Name))
+                        let wc = 
+                            if durable then 
+                                newDurableWorkingCopy "userTODO" (SpecificVersion versionNumber) masterPDBName wcName // TODO
+                            else    
+                                newTempWorkingCopy parameters.GarbageCollectionDelay "userTODO" (SpecificVersion versionNumber) masterPDBName wcName // TODO
+                        return! loop { state with Requests = newRequests; Instance = state.Instance |> addWorkingCopy wc }
+                    | Error error ->
+                        sender <! (requestId, Error error.Message)
+                        return! loop { state with Requests = newRequests }
+
+                | CreateWorkingCopyOfEdition (requestId, masterPDBName, wcName, durable, _) ->
+                    let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
+                    match result with
+                    | Ok _ ->
+                        let wcService = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port) wcName
+                        sender <! (requestId, Ok (masterPDBName, 0, wcName, wcService, instance.Name))
+                        let wc = 
+                            if durable then 
+                                newDurableWorkingCopy "userTODO" Edition masterPDBName wcName // TODO
+                            else    
+                                newTempWorkingCopy parameters.GarbageCollectionDelay "userTODO" Edition masterPDBName wcName // TODO
+                        return! loop { state with Requests = newRequests; Instance = state.Instance |> addWorkingCopy wc }
+                    | Error error ->
+                        sender <! (requestId, Error error.Message)
+                        return! loop { state with Requests = newRequests }
+
                 | _ -> 
                     ctx.Log.Value.Error "critical error"
                     return! loop state
@@ -484,27 +518,6 @@ let private oracleInstanceActorBody
             | Some request -> 
                 retype request.Requester <! editionResponse
                 return! loop { state with Requests = newRequests }
-            | None -> 
-                ctx.Log.Value.Error("internal error : request {0} not found", requestId)
-                return! loop state
-
-        // Callback from Master PDB actor in response to Create working copy
-        | :? WithRequestId<MasterPDBActor.CreateWorkingCopyResult> as workingCopyResponse ->
-            let (requestId, result) = workingCopyResponse
-            let (requestMaybe, newRequests) = requests |> getAndUnregisterRequest requestId
-
-            match requestMaybe with
-            | Some request -> 
-                let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
-                match result with
-                | Ok (masterPDBName, versionNumber, wcName) ->
-                    let wcService = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port) wcName
-                    let result:CreateWorkingCopyResult = Ok (masterPDBName, versionNumber, wcName, wcService, instance.Name)
-                    sender <! (requestId, result)
-                    return! loop { state with Requests = newRequests }
-                | Error error ->
-                    sender <! (requestId, Error error)
-                    return! loop { state with Requests = newRequests }
             | None -> 
                 ctx.Log.Value.Error("internal error : request {0} not found", requestId)
                 return! loop state

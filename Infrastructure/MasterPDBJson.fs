@@ -75,7 +75,7 @@ let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersion) ->
     Encode.ifNotEqual Map.empty (Encode.mapWith Encode.string) "properties" x.Properties
 )
 
-let decodeWorkingCopy = jsonDecoder {
+let decodeWorkingCopy masterPDBName = jsonDecoder {
     let! name = Decode.required Decode.string "name"
     let! createdBy = Decode.required Decode.string "createdBy"
     let! creationDate = Decode.required Decode.dateTime "creationDate"
@@ -107,6 +107,7 @@ let decodeWorkingCopy = jsonDecoder {
                 lifetime
                 createdBy
                 source
+                masterPDBName
                 name
     | Error error, Ok _
     | Ok _, Error error ->
@@ -150,7 +151,7 @@ let decodeMasterPDB (algo:SymmetricAlgorithm) = jsonDecoder {
         let! lockState = Decode.optional decodeLockInfo "edition"
         let! editionDisabled = Decode.optional Decode.bool "editionDisabled"
         let! properties = Decode.optional (Decode.mapWith Decode.string) "properties"
-        let! workingCopies = Decode.optional (Decode.listWith decodeWorkingCopy) "workingCopies"
+        let! workingCopies = Decode.optional (Decode.listWith (decodeWorkingCopy name)) "workingCopies"
         return 
             consMasterPDB 
                 name 

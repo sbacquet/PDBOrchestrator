@@ -86,6 +86,7 @@ let runQuick cont = runWithinElseTimeoutException quickTimeout cont
 let instance1 = 
     consOracleInstance
         [ "test1"; "test2" ]
+        List.empty
         "server1" "server1.com" None
         "xxx" "xxx"
         "xxx" ""
@@ -100,6 +101,7 @@ let instance1 =
 let instance2 = 
     consOracleInstance
         [ "test2" ]
+        List.empty
         "server2" "server2.com" None
         "xxx" "xxx"
         "xxx" ""
@@ -198,7 +200,7 @@ type FakeMasterPDBRepo(pdb: MasterPDB) =
 
 let masterPDBMap1 =
     [ 
-        "test1", { newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1" with WorkingCopies = [ "test1wc", newDurableWorkingCopy "me" (SpecificVersion 1) "test1wc" ] |> Map.ofList }
+        "test1", { newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1" with WorkingCopies = [ "test1wc", newDurableWorkingCopy "me" (SpecificVersion 1) "test1" "test1wc" ] |> Map.ofList }
         "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "new comment2")
     ] |> Map.ofList
 
@@ -426,8 +428,8 @@ let ``MasterPDB creates a clone working copy`` () = test <| fun tck ->
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
     let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
-    let (_, result):WithRequestId<MasterPDBActor.CreateWorkingCopyResult> = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", false, false, false) |> run
-    result |> Result.mapError (fun error -> failwith error) |> ignore
+    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", false, false, false) |> run
+    result |> Result.mapError raise |> ignore
 
 [<Fact>]
 let ``MasterPDB creates a snapshot working copy`` () = test <| fun tck ->
@@ -436,8 +438,8 @@ let ``MasterPDB creates a snapshot working copy`` () = test <| fun tck ->
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
     let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
-    let (_, result):WithRequestId<MasterPDBActor.CreateWorkingCopyResult> = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", true, false, false) |> run
-    result |> Result.mapError (fun error -> failwith error) |> ignore
+    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", true, false, false) |> run
+    result |> Result.mapError raise |> ignore
 
 [<Fact>]
 let ``OracleInstance creates a snapshot working copy`` () = test <| fun tck ->
@@ -514,6 +516,33 @@ let ``API fails to create a clone working copy`` () = test <| fun tck ->
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
     let request = API.createWorkingCopy ctx "me" "server1" "test1" 10 "workingcopy" false false false |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx
+
+[<Fact>]
+let ``API creates a working copy of edition`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.prepareMasterPDBForModification ctx "me" "test1" 1 |> runQuick
+    let _ = request |> throwIfRequestNotCompletedOk ctx
+
+    let request = API.createWorkingCopyOfEdition ctx "me" "test1" "workingcopy" false false |> runQuick
+    let data = request |> throwIfRequestNotCompletedOk ctx
+    Assert.True(data |> List.contains (PDBName "workingcopy"))
+    Assert.True(data |> List.contains (PDBService "server1.com/workingcopy"))
+    Assert.True(data |> List.contains (OracleInstance "server1"))
+
+[<Fact>]
+let ``API fails to create a working copy of edition`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    // Test1 not being edited
+    let request = API.createWorkingCopyOfEdition ctx "me" "test1" "workingcopy" false false |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx
+
+    // PDB notexists does not exist
+    let request = API.createWorkingCopyOfEdition ctx "me" "notexists" "workingcopy" false false |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx
 
 [<Fact>]

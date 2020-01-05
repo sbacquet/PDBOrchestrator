@@ -14,6 +14,7 @@ let ``Save and load Oracle instance`` () =
     let instance1 =
         consOracleInstance
             [ "test1"; "test2" ]
+            List.empty
             instance1Name "fr1psl010716.misys.global.ad" None
             "sys" "pass"
             "userForImport" ""

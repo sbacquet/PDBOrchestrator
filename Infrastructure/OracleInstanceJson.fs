@@ -4,6 +4,7 @@ open Chiron
 open Chiron.Serialization.Json
 open Chiron.JsonTransformer
 open Domain.OracleInstance
+open Domain.MasterPDBWorkingCopy
 open System.Security.Cryptography
 
 let [<Literal>] private cCurrentJsonVersion = 1
@@ -22,6 +23,73 @@ let decryptPassword (algo:SymmetricAlgorithm) (encryptedPasswordJson:Json) =
         |> JsonFailureReason.OtherError 
         |> JsonFailure.SingleFailure 
         |> JFail
+
+let decodeWorkingCopy = jsonDecoder {
+    let! name = Decode.required Decode.string "name"
+    let! masterPDBName = Decode.required Decode.string "masterPDBName"
+    let! createdBy = Decode.required Decode.string "createdBy"
+    let! creationDate = Decode.required Decode.dateTime "creationDate"
+    let! sourceType = Decode.required Decode.string "sourceType"
+    let! sourceVersion = Decode.optional Decode.int "sourceVersion"
+    let (source:Result<Source,string>) = 
+        match sourceType with
+        | "SpecificVersion" -> 
+            match sourceVersion with
+            | Some version -> SpecificVersion version |> Ok
+            | None -> Error "sourceVersion is not specified"
+        | "Edition" -> Ok Edition
+        | _ -> Error "invalid sourceType"
+    let! lifetimeType = Decode.required Decode.string "lifetimeType"
+    let! lifetimeExpiry = Decode.optional Decode.dateTime "expiryDate"
+    let (lifetime:Result<Lifetime,string>) = 
+        match lifetimeType with
+        | "Temporary" -> 
+            match lifetimeExpiry with
+            | Some expiry -> expiry |> Temporary |> Ok
+            | None -> Error "expiryDate is not specified"
+        | "Durable" -> Ok Durable
+        | _ -> Error "invalid lifetimeType"
+    match source, lifetime with
+    | Ok source, Ok lifetime ->
+        return 
+            consWorkingCopy
+                creationDate
+                lifetime
+                createdBy
+                source
+                masterPDBName
+                name
+    | Error error, Ok _
+    | Ok _, Error error ->
+        return! JsonFailureReason.InvalidJson error |> JsonFailure.SingleFailure |> Decoder.alwaysFail
+    | Error error1, Error error2 ->
+        return! [ 
+            JsonFailureReason.InvalidJson error1 |> JsonFailure.SingleFailure
+            JsonFailureReason.InvalidJson error2 |> JsonFailure.SingleFailure
+        ] |> JsonFailure.MultipleFailures |> Decoder.alwaysFail
+}
+
+let encodeWorkingCopy = Encode.buildWith (fun (x:MasterPDBWorkingCopy) ->
+    Encode.required Encode.string "name" x.Name >>
+    Encode.required Encode.string "masterPDBName" x.MasterPDBName >>
+    Encode.required Encode.string "createdBy" x.CreatedBy >>
+    Encode.required Encode.dateTime "creationDate" x.CreationDate >>
+    (match x.Source with
+    | SpecificVersion version -> 
+        Encode.required Encode.string "sourceType" "SpecificVersion" >>
+        Encode.required Encode.int "sourceVersion" version
+    | Edition ->
+        Encode.required Encode.string "sourceType" "Edition"
+    ) >>
+    (match x.Lifetime with
+    | Temporary lifetime -> 
+        Encode.required Encode.string "lifetimeType" "Temporary" >>
+        Encode.required Encode.dateTime "expiryDate" lifetime
+    | Durable ->
+        Encode.required Encode.string "lifetimeType" "Durable"
+    )
+)
+
 
 let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
     let! version = Decode.required Decode.int "_version"
@@ -52,10 +120,12 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
         let! workingCopyDestPath = Decode.required Decode.string "workingCopyDestPath" 
         let! oracleDirectoryForDumps = Decode.required Decode.string "oracleDirectoryForDumps" 
         let! oracleDirectoryPathForDumps = Decode.required Decode.string "oracleDirectoryPathForDumps" 
-        let! masterPDBs = Decode.required Decode.stringList "masterPDBs" 
+        let! masterPDBs = Decode.required Decode.stringList "masterPDBs"
+        let! workingCopies = Decode.optional (Decode.listWith decodeWorkingCopy) "workingCopies"
         return 
             consOracleInstance 
-                masterPDBs 
+                masterPDBs
+                (workingCopies |> Option.defaultValue List.empty)
                 name 
                 server 
                 port 
@@ -92,6 +162,7 @@ let encodeOracleInstance (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:Or
     Encode.required Encode.string "oracleDirectoryForDumps" x.OracleDirectoryForDumps >>
     Encode.required Encode.string "oracleDirectoryPathForDumps" x.OracleDirectoryPathForDumps >>
     Encode.required Encode.stringList "masterPDBs" x.MasterPDBs >>
+    Encode.ifNotEqual List.empty (Encode.listWith encodeWorkingCopy) "workingCopies" (x.WorkingCopies |> Map.toList |> List.map snd) >>
     Encode.required Encode.int "_version" cCurrentJsonVersion >>
     Encode.required Encode.bytes "_iv" algo.IV
 )

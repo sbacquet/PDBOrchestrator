@@ -207,35 +207,33 @@ let private masterPDBActorBody
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
             
             | CreateWorkingCopy (requestId, versionNumber, name, snapshot, durable, force) ->
-                let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
+                let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
                 let versionMaybe = masterPDB.Versions |> Map.tryFind versionNumber
                 match versionMaybe with
                 | None -> 
-                    sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name))
+                    sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name |> exn))
                     return! loop state
                 | Some version -> 
                     let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators ctx
-                    let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                    versionActor <! MasterPDBVersionActor.CreateWorkingCopy (requestId, name, snapshot, durable, force)
-                    return! loop { state with Requests = newRequests; Collaborators = newCollabs }
+                    versionActor <<! MasterPDBVersionActor.CreateWorkingCopy (requestId, name, snapshot, durable, force)
+                    return! loop { state with Collaborators = newCollabs }
 
             | CreateWorkingCopyOfEdition (requestId, workingCopyName, durable, force) ->
-                let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
+                let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
                 let lockInfoMaybe = masterPDB.EditionState
                 match lockInfoMaybe with
                 | None -> 
-                    sender <! (requestId, Error (sprintf "the master PDB %s is not being edited" masterPDB.Name))
+                    sender <! (requestId, Error (sprintf "the master PDB %s is not being edited" masterPDB.Name |> exn))
                     return! loop state
                 | Some _ ->
                     if (state.EditionOperationInProgress) then
-                        sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
+                        sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name |> exn))
                         return! loop state
                     else
-                        let newRequests = requests |> registerRequest requestId command (ctx.Sender())
                         let editionActor = MasterPDBEditionActor.spawn parameters instance oracleShortTaskExecutor oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor editionPDBName ctx
-                        editionActor <! MasterPDBEditionActor.CreateWorkingCopy (requestId, workingCopyName, durable, force)
+                        editionActor <<! MasterPDBEditionActor.CreateWorkingCopy (requestId, workingCopyName, durable, force)
                         retype editionActor <! Akka.Actor.PoisonPill.Instance
-                        return! loop { state with Requests = newRequests }
+                        return! loop state
 
             | CollectGarbage ->
                 ctx.Log.Value.Info("Garbage collection of PDB {pdb} requested", masterPDB.Name)
@@ -369,36 +367,6 @@ let private masterPDBActorBody
                     | Error error ->
                         sender <! (requestId, Error (sprintf "cannot rollback %s : %s" masterPDB.Name error.Message))
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = false }
-
-                | CreateWorkingCopy (_, versionNumber, name, snapshot, durable, _) ->
-                    let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
-                    match result with
-                    | Ok _ ->
-                        sender <! (requestId, Ok (masterPDB.Name, versionNumber, name))
-                        let wc = 
-                            if durable then 
-                                newDurableWorkingCopy "userTODO" (SpecificVersion versionNumber) name // TODO
-                            else    
-                                newTempWorkingCopy parameters.GarbageCollectionDelay "userTODO" (SpecificVersion versionNumber) name // TODO
-                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = state.MasterPDB.WorkingCopies |> Map.add name wc } }
-                    | Error error ->
-                        sender <! (requestId, Error error.Message)
-                        return! loop { state with Requests = newRequests }
-
-                | CreateWorkingCopyOfEdition (_, name, durable, _) ->
-                    let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
-                    match result with
-                    | Ok _ ->
-                        sender <! (requestId, Ok (masterPDB.Name, 0, name))
-                        let wc = 
-                            if durable then 
-                                newDurableWorkingCopy "userTODO" Edition name // TODO
-                            else    
-                                newTempWorkingCopy parameters.GarbageCollectionDelay "userTODO" Edition name // TODO
-                        return! loop { state with Requests = newRequests; MasterPDB = { state.MasterPDB with WorkingCopies = state.MasterPDB.WorkingCopies |> Map.add name wc } }
-                    | Error error ->
-                        sender <! (requestId, Error error.Message)
-                        return! loop { state with Requests = newRequests }
 
                 | _ -> 
                     ctx.Log.Value.Error("Unknown message received")

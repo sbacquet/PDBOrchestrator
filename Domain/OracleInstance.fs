@@ -1,6 +1,7 @@
 ﻿module Domain.OracleInstance
 
 open Domain.Common
+open Domain.MasterPDBWorkingCopy
 
 type OracleInstance = {
     Name: string
@@ -22,10 +23,12 @@ type OracleInstance = {
     OracleDirectoryPathForDumps: string
     MasterPDBs: string list
     SnapshotCapable: bool
+    WorkingCopies: Map<string,MasterPDBWorkingCopy>
 }
 
 let consOracleInstance 
     masterPDBs 
+    (workingCopies:MasterPDBWorkingCopy list)
     name 
     server port 
     dbaUser dbaPassword 
@@ -33,7 +36,8 @@ let consOracleInstance
     userForFileTransfer userForFileTransferPassword serverHostkeySHA256 serverHostkeyMD5
     mPath mdPath wcPath ssdPath 
     directory directoryPath
-    snapshotCapable = 
+    snapshotCapable
+    =
     { 
         Name = name
         Server = server
@@ -54,9 +58,10 @@ let consOracleInstance
         OracleDirectoryPathForDumps = directoryPath
         MasterPDBs = masterPDBs 
         SnapshotCapable = snapshotCapable
+        WorkingCopies = workingCopies |> List.map (fun wc -> (wc.Name, wc)) |> Map.ofList
     }
 
-let newOracleInstance = consOracleInstance []
+let newOracleInstance = consOracleInstance List.empty List.empty
 
 let masterPDBAlreadyExists pdb oracleInstance = oracleInstance.MasterPDBs |> List.tryFind (fun name -> name = pdb) |> Option.isSome
 
@@ -72,3 +77,12 @@ let containsMasterPDB (pdb:string) instance =
 let getWorkingCopySubFolderName durable = if durable then "durable" else "temporary"
 
 let getWorkingCopyPath instance durable = sprintf "%s/%s" instance.WorkingCopyDestPath (getWorkingCopySubFolderName durable)
+
+let getWorkingCopy name (instance:OracleInstance) =
+    instance.WorkingCopies |> Map.tryFind name
+
+let addWorkingCopy (wc:MasterPDBWorkingCopy) (instance:OracleInstance) =
+    { instance with WorkingCopies = instance.WorkingCopies |> Map.add wc.Name wc }
+
+let removeWorkingCopy name (instance:OracleInstance) =
+    { instance with WorkingCopies = instance.WorkingCopies |> Map.remove name }

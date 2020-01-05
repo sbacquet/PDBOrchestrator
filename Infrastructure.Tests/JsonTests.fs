@@ -15,7 +15,7 @@ open Application.OracleInstanceActor
 let ``Serialize and deserialize master PDB`` () =
     let password = "toto"
     let props = [ "key", "value" ] |> Map.ofList
-    let wc = [ newTempWorkingCopy (System.TimeSpan.FromHours(12.)) "me" (SpecificVersion 13) "wc" ]
+    let wc = [ newTempWorkingCopy (System.TimeSpan.FromHours(12.)) "me" (SpecificVersion 13) "test1" "wc" ]
     let pdb = consMasterPDB "test1" [ consSchema "toto" password "Invest" ] [ newPDBVersion "me" "comment" ] (newEditionInfo "me" |> Some) false props wc
     let json = pdb |> MasterPDBJson.masterPDBtoJson
     let pdb' = json |> MasterPDBJson.jsonToMasterPDB
@@ -26,9 +26,11 @@ let ``Serialize and deserialize master PDB`` () =
 [<Fact>]
 let ``Serialize and deserialize Oracle instance`` () =
     let instance1Name = "test1"
+    let wc = [ newTempWorkingCopy (System.TimeSpan.FromHours(12.)) "me" (SpecificVersion 13) "test1" "wc" ]
     let instance1 =
         consOracleInstance
             [ "test1"; "test2" ]
+            wc
             instance1Name "fr1psl010716.misys.global.ad" None
             "sys" "pass"
             "userForImport" "pass2"

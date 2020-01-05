@@ -28,7 +28,8 @@ let [<Literal>]cTempWCFolder = "/u01/app/oracle/oradata/SB_PDBs/WorkingCopies/te
 
 let instance = 
     Domain.OracleInstance.consOracleInstance
-        []
+        List.empty
+        List.empty
         "intcdb2" "fr1psl010716.misys.global.ad" None
         "sys" "syspwd8"
         "system" "syspwd8"
