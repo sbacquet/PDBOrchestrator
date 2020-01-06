@@ -35,7 +35,7 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             routef "/instances/%s/master-pdbs/%s/%i/working-copies/%s" (HttpHandlers.createWorkingCopy apiCtx)
 
             // Routes for admins
-            route "/mode/maintenance" >=> HttpHandlers.enterReadOnlyMode apiCtx
+            route "/mode/maintenance" >=> HttpHandlers.enterMaintenanceMode apiCtx
             route "/mode/normal" >=> HttpHandlers.enterNormalMode apiCtx
             route "/instances/primary" >=> HttpHandlers.switchPrimaryOracleInstanceWith apiCtx
         ]

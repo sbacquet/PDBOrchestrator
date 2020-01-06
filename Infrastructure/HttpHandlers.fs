@@ -179,8 +179,8 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
             return! json (pendingChanges |> serializeWith encodePendingChanges JsonFormattingOptions.Pretty) next ctx
 }
 
-let enterReadOnlyMode apiCtx next (ctx:HttpContext) = task {
-    let! switched = API.enterReadOnlyMode apiCtx
+let enterMaintenanceMode apiCtx next (ctx:HttpContext) = task {
+    let! switched = API.enterMaintenanceMode apiCtx
     if switched then
         return! text "The system is now in maintenance mode." next ctx
     else
@@ -196,7 +196,7 @@ let enterNormalMode apiCtx next (ctx:HttpContext) = task {
 }
 
 let getMode apiCtx next (ctx:HttpContext) = task {
-    let! readOnly = API.isReadOnlyMode apiCtx
+    let! readOnly = API.isMaintenanceMode apiCtx
     return! json (if readOnly then @"""maintenance""" else @"""normal""") next ctx
 }
 

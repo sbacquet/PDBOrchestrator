@@ -34,9 +34,9 @@ type Command =
 
 type AdminCommand =
 | GetPendingChanges // responds with Result<PendingChanges option,string> = Result<pending changes if any, error>
-| EnterReadOnlyMode // responds with bool = mode changes
+| EnterMaintenanceMode // responds with bool = mode changes
 | EnterNormalMode // responds with bool = mode changed
-| IsReadOnlyMode // responds with bool = is mode read-only
+| IsMaintenanceMode // responds with bool = is maintenance mode
 | CollectGarbage // no response
 | Synchronize of string // responds with OracleInstanceActor.StateSet
 | SetPrimaryOracleInstance of string // responds with Result<string, string*string> = Result<new instance, (error, current instance)>
@@ -105,7 +105,7 @@ type private State = {
     Collaborators : Collaborators
     PendingRequests :PendingUserRequestMap<Command>
     CompletedRequests : CompletedUserRequestMap<RequestResult>
-    ReadOnly : bool
+    InMaintenanceMode : bool
     Repository : IOrchestratorRepository
 }
 
@@ -138,11 +138,11 @@ let describeCommand = function
 let describeAdminCommand = function
 | GetPendingChanges ->
     "get pending changes"
-| EnterReadOnlyMode ->
+| EnterMaintenanceMode ->
     "set maintenance mode"
 | EnterNormalMode ->
     "set normal mode"
-| IsReadOnlyMode ->
+| IsMaintenanceMode ->
     "is maintenance mode ?"
 | CollectGarbage ->
     "collect garbage"
@@ -224,7 +224,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
         let pendingChangeCommandAcceptable user = UserRights.isAdmin (UserRights.normalUser user)
         actor {
             // Check if command is compatible with maintenance mode
-            if state.ReadOnly && pendingChangeCommandFilter (not << pendingChangeCommandAcceptable) command then
+            if state.InMaintenanceMode && pendingChangeCommandFilter (not << pendingChangeCommandAcceptable) command then
                 sender <! RequestValidation.Invalid [ "the command cannot be run in maintenance mode" ]
                 return! loop state
             else
@@ -397,18 +397,18 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 ctx.Sender() <! result
                 return! loop state
 
-            | EnterReadOnlyMode ->
-                if (state.ReadOnly) then
+            | EnterMaintenanceMode ->
+                if (state.InMaintenanceMode) then
                     ctx.Sender() <! false
                     ctx.Log.Value.Warning("The server is already in maintenance mode.")
                     return! loop state
                 else
                     ctx.Sender() <! true
                     ctx.Log.Value.Warning("The server is now in maintenance mode.")
-                    return! loop { state with ReadOnly = true }
+                    return! loop { state with InMaintenanceMode = true }
 
-            | IsReadOnlyMode ->
-                ctx.Sender() <! state.ReadOnly
+            | IsMaintenanceMode ->
+                ctx.Sender() <! state.InMaintenanceMode
                 return! loop state
 
             | CollectGarbage ->
@@ -417,18 +417,18 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 return! loop state
 
             | EnterNormalMode ->
-                if (state.ReadOnly) then
+                if (state.InMaintenanceMode) then
                     ctx.Sender() <! true
                     ctx.Log.Value.Info("The server is now in normal mode.")
                     return! 
-                        loop { state with ReadOnly = false }
+                        loop { state with InMaintenanceMode = false }
                 else
                     ctx.Log.Value.Info("The server is already in normal mode.")
                     ctx.Sender() <! false
                     return! loop state
 
             | Synchronize targetInstance ->
-                if not state.ReadOnly then
+                if not state.InMaintenanceMode then
                     ctx.Sender() <! stateError "the server must be in maintenance mode"
                 else
                     match state.Orchestrator |> containsOracleInstance targetInstance with
@@ -450,7 +450,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 
             | SetPrimaryOracleInstance newPrimary ->
                 let sender = ctx.Sender().Retype<Result<string,string*string>>()
-                if not state.ReadOnly then
+                if not state.InMaintenanceMode then
                     sender <! Error ("the server must be in maintenance mode", state.Orchestrator.PrimaryInstance)
                     return! loop state
                 elif (state.Orchestrator.PrimaryInstance = newPrimary) then
@@ -620,7 +620,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
         Collaborators = collaborators
         PendingRequests = Map.empty
         CompletedRequests = Map.empty
-        ReadOnly = false 
+        InMaintenanceMode = false 
         Repository = repository
     }
 
