@@ -1,4 +1,4 @@
-﻿module Application.MasterPDBGarbageCollector
+﻿module Application.OracleInstanceGarbageCollector
 
 open Akkling
 open Akka.Actor
@@ -13,14 +13,14 @@ type Command =
 | DeleteWorkingCopy of WithRequestId<MasterPDBWorkingCopy> // responds with OraclePDBResultWithReqId
 
 type CommandToParent =
-| CollectVersionsGarbage of string list
+| CollectVersionsGarbage of (string * int list)
 | WorkingCopiesDeleted of (MasterPDBWorkingCopy * exn option) list
 
 let private masterPDBGarbageCollectorBody 
     (parameters:Parameters)
     (oracleShortTaskExecutor:IActorRef<Application.OracleShortTaskExecutor.Command>)
     (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 
-    (masterPDB:Domain.MasterPDB.MasterPDB)
+    (instance:Domain.OracleInstance.OracleInstance)
     (ctx : Actor<Command>) =
 
     let deletePDB pdb : Exceptional<string> = 
@@ -37,10 +37,10 @@ let private masterPDBGarbageCollectorBody
 
         match command with
         | CollectGarbage ->
-            ctx.Log.Value.Info("Garbage collection of PDB {pdb} requested", masterPDB.Name)
+            ctx.Log.Value.Info("Garbage collection of Oracle instance {instance} requested", instance.Name)
             // Delete expired working copies
             let deletionResults =
-                masterPDB.WorkingCopies
+                instance.WorkingCopies
                 |> Map.toList |> List.map snd
                 |> List.choose (fun wc -> 
                     match wc.Lifetime with 
@@ -50,18 +50,24 @@ let private masterPDBGarbageCollectorBody
                 |> List.map (fun wc -> (wc, deletePDB wc.Name |> toErrorMaybe))
             ctx.Sender() <! WorkingCopiesDeleted deletionResults
             
-            let sourceVersionPDBsMaybe = getPDBNamesLike (sprintf "%s_V%%_%s" masterPDB.Name parameters.ServerInstanceName)
-            match sourceVersionPDBsMaybe with
-            | Ok sourceVersionPDBs -> 
-                if not (sourceVersionPDBs |> List.isEmpty) then
-                    ctx.Parent() <! CollectVersionsGarbage sourceVersionPDBs
-            | Error error -> 
-                ctx.Log.Value.Error(error.ToString())
+            let collectMasterPDBGarbage masterPDBName =
+                let sourceVersionPDBsMaybe = getPDBNamesLike (sprintf "%s_V%%_%s" masterPDBName parameters.ServerInstanceName)
+                match sourceVersionPDBsMaybe with
+                | Ok sourceVersionPDBs -> 
+                    if not (sourceVersionPDBs |> List.isEmpty) then
+                        let regex = System.Text.RegularExpressions.Regex((sprintf "^%s_V([\\d]+)_.+$" masterPDBName))
+                        let parseResults = sourceVersionPDBs |> List.map (fun sourceVersionPDB -> System.Int32.TryParse(regex.Replace(sourceVersionPDB, "$1")))
+                        let versions = parseResults |> List.filter fst |> List.map snd
+                        if not (versions |> List.isEmpty) then
+                            ctx.Parent() <! CollectVersionsGarbage (masterPDBName, versions)
+                | Error error -> 
+                    ctx.Log.Value.Error(error.ToString())
+            instance.MasterPDBs |> List.iter collectMasterPDBGarbage
             return! loop ()
 
         | DeleteWorkingCopy (requestId, workingCopy) ->
             let result = deletePDB workingCopy.Name
-            ctx.Parent() <! WorkingCopiesDeleted [ (workingCopy, result |> toErrorMaybe) ]
+            //ctx.Sender() <! WorkingCopiesDeleted (Some requestId, [ (workingCopy, result) ])
             ctx.Sender() <! (requestId, result)
             return! loop ()
 
@@ -69,14 +75,14 @@ let private masterPDBGarbageCollectorBody
 
     loop ()
 
-let spawn parameters shortTaskExecutor longTaskExecutor (masterPDB:Domain.MasterPDB.MasterPDB) (actorFactory:IActorRefFactory) =
+let spawn parameters shortTaskExecutor longTaskExecutor (instance:Domain.OracleInstance.OracleInstance) (actorFactory:IActorRefFactory) =
 
-    (Akkling.Spawn.spawn actorFactory "garbageCollector"
+    (Akkling.Spawn.spawn actorFactory "GarbageCollector"
         <| props (
             masterPDBGarbageCollectorBody 
                 parameters
                 shortTaskExecutor
                 longTaskExecutor 
-                masterPDB
+                instance
         )).Retype<Command>()
 

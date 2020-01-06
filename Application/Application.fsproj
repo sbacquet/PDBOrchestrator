@@ -15,10 +15,10 @@
     <Compile Include="OracleDiskIntensiveActor.fs" />
     <Compile Include="MasterPDBVersionActor.fs" />
     <Compile Include="MasterPDBEditionActor.fs" />
-    <Compile Include="MasterPDBGarbageCollector.fs" />
     <Compile Include="MasterPDBDTO.fs" />
     <Compile Include="MasterPDBActor.fs" />
     <Compile Include="OracleInstanceDTO.fs" />
+    <Compile Include="OracleInstanceGarbageCollector.fs" />
     <Compile Include="OracleInstanceActor.fs" />
     <Compile Include="OrchestratorDTO.fs" />
     <Compile Include="OrchestratorActor.fs" />

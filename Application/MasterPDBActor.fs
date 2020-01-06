@@ -21,10 +21,8 @@ type Command =
 | Commit of WithRequestId<string, string> // responds with WithRequestId<EditionCommitted>
 | Rollback of WithRequestId<string> // responds with WithRequestId<EditionRolledBack>
 | CreateWorkingCopy of WithRequestId<int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
-| DeleteWorkingCopy of WithRequestId<string, int> // responds with OraclePDBResultWithReqId
 | CreateWorkingCopyOfEdition of WithRequestId<string, bool, bool> // WithRequest<CreateWorkingCopyResult>
-| DeleteWorkingCopyOfEdition of WithRequestId<string> // responds with OraclePDBResultWithReqId
-| CollectGarbage // no response
+| CollectVersionsGarbage of int list // no response
 
 type PrepareForModificationResult = 
 | Prepared of MasterPDB * string * string * (string * string) list
@@ -235,36 +233,20 @@ let private masterPDBActorBody
                         retype editionActor <! Akka.Actor.PoisonPill.Instance
                         return! loop state
 
-            | CollectGarbage ->
-                ctx.Log.Value.Info("Garbage collection of PDB {pdb} requested", masterPDB.Name)
-                let garbageCollector = MasterPDBGarbageCollector.spawn parameters oracleShortTaskExecutor oracleLongTaskExecutor masterPDB ctx
-                garbageCollector <! MasterPDBGarbageCollector.CollectGarbage
-                retype garbageCollector <! Akka.Actor.PoisonPill.Instance
-                return loop state
-
-            | DeleteWorkingCopy (requestId, pdb, version) ->
-                let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
-                let workingCopy = masterPDB |> workingCopyOfVersion version pdb
-                match workingCopy with
-                | Some workingCopy ->
-                    let garbageCollector = MasterPDBGarbageCollector.spawn parameters oracleShortTaskExecutor oracleLongTaskExecutor masterPDB ctx
-                    garbageCollector <<! MasterPDBGarbageCollector.DeleteWorkingCopy (requestId, workingCopy)
-                    retype garbageCollector <! Akka.Actor.PoisonPill.Instance
-                | None ->
-                    sender <! (requestId, Error (sprintf "version %d of master PDB %s has not been copied as %s" version masterPDB.Name pdb |> exn))
-                return! loop state
-
-            | DeleteWorkingCopyOfEdition (requestId, pdb) ->
-                let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
-                let workingCopy = masterPDB |> workingCopyOfEdition pdb
-                match workingCopy with
-                | Some workingCopy ->
-                    let garbageCollector = MasterPDBGarbageCollector.spawn parameters oracleShortTaskExecutor oracleLongTaskExecutor masterPDB ctx
-                    garbageCollector <<! MasterPDBGarbageCollector.DeleteWorkingCopy (requestId, workingCopy)
-                    retype garbageCollector <! Akka.Actor.PoisonPill.Instance
-                | None ->
-                    sender <! (requestId, Error (sprintf "edition of master PDB %s has not been copied as %s" masterPDB.Name pdb |> exn))
-                return! loop state
+            | CollectVersionsGarbage versions ->
+                ctx.Log.Value.Info("Garbage collection of versions of PDB {pdb} requested", masterPDB.Name)
+                let collectVersionGarbage collabs version =
+                    let versionPDBMaybe = masterPDB.Versions |> Map.tryFind version
+                    match versionPDBMaybe with
+                    | Some versionPDB -> 
+                        let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name versionPDB collabs ctx
+                        versionActor <! MasterPDBVersionActor.CollectGarbage
+                        newCollabs
+                    | None -> 
+                        ctx.Log.Value.Warning("Cannot garbage version {0} because it is not a version of {pdb}", version, masterPDB.Name)
+                        collabs
+                let newCollabs = versions |> List.fold collectVersionGarbage state.Collaborators
+                return loop { state with Collaborators = newCollabs }
 
         | :? MasterPDBVersionActor.CommandToParent as commandToParent->
             match commandToParent with
@@ -278,38 +260,6 @@ let private masterPDBActorBody
                 | None -> 
                     ctx.Log.Value.Error("cannot find actor for PDB {pdb} version {pdbversion}", masterPDB.Name, version)
                     return! loop state
-
-        | :? MasterPDBGarbageCollector.CommandToParent as commandToParent ->
-            match commandToParent with
-            | MasterPDBGarbageCollector.CollectVersionsGarbage sourceVersionPDBs ->
-                // Get existing snapshot-source PDBs and try to delete them
-                let regex = System.Text.RegularExpressions.Regex((sprintf "^%s_V([\\d]+)_.+$" masterPDB.Name))
-                let garbageVersion collabs sourceVersionPDB = 
-                    let ok, version = System.Int32.TryParse(regex.Replace(sourceVersionPDB, "$1"))
-                    if ok then 
-                        let versionPDBMaybe = masterPDB.Versions |> Map.tryFind version
-                        match versionPDBMaybe with
-                        | Some versionPDB -> 
-                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name versionPDB collabs ctx
-                            versionActor <! MasterPDBVersionActor.CollectGarbage
-                            newCollabs
-                        | None -> 
-                            ctx.Log.Value.Error("Cannot garbage PDB {0} because it does not correspond to a PDB version of {pdb}", sourceVersionPDB, masterPDB.Name)
-                            collabs
-                    else
-                        ctx.Log.Value.Error("PDB {0} has not a valid PDB version name", sourceVersionPDB)
-                        collabs
-                let newCollabs = sourceVersionPDBs |> List.fold garbageVersion state.Collaborators
-                return! loop { state with Collaborators = newCollabs }
-
-            | MasterPDBGarbageCollector.WorkingCopiesDeleted deletionResults ->
-                let deletedWorkingCopies, undeletedWorkingCopies = deletionResults |> List.partition (fun (_, errorMaybe) -> errorMaybe |> Option.isNone)
-                undeletedWorkingCopies |> List.iter (fun (wc, error) ->
-                    ctx.Log.Value.Warning("Cannot delete working copy {workingCopy} : {error}", wc.Name, error.Value.Message)
-                )
-                let deletedWorkingCopies = deletedWorkingCopies |> List.map (fun (wc, _) -> wc.Name) |> Set.ofList
-                return! loop { state with MasterPDB = { state.MasterPDB with WorkingCopies = state.MasterPDB.WorkingCopies |> Map.filter (fun name _ -> not (deletedWorkingCopies |> Set.contains name)) } }
-                
 
         | :? OraclePDBResultWithReqId as requestResponse ->
 

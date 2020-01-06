@@ -7,12 +7,14 @@ open Application.DTO.MasterPDB
 type OracleInstanceDTO = {
     Name: string
     MasterPDBs: MasterPDBDTO list
+    WorkingCopies: Domain.MasterPDBWorkingCopy.MasterPDBWorkingCopy list
 }
 
-let consOracleInstanceDTO name masterPDBs = 
+let consOracleInstanceDTO name masterPDBs workingCopies = 
     { 
         Name = name
         MasterPDBs = masterPDBs 
+        WorkingCopies = workingCopies
     }
 
 
@@ -33,6 +35,7 @@ let toDTO (masterPDBActors:Map<string, IActorRef<obj>>) (oracleInstance : Domain
         consOracleInstanceDTO 
             oracleInstance.Name 
             (masterPDBs |> Array.toList)
+            (oracleInstance.WorkingCopies |> Map.toList |> List.map snd)
 }
 
 type OracleInstanceFullDTO = {
@@ -47,10 +50,11 @@ type OracleInstanceFullDTO = {
     SnapshotPDBDestPath: string
     OracleDirectoryForDumps: string
     MasterPDBs: MasterPDBDTO list
+    WorkingCopies: Domain.MasterPDBWorkingCopy.MasterPDBWorkingCopy list
     SnapshotCapable: bool
 }
 
-let consOracleInstanceFullDTO name server port dbaUser dbaPassword mp dp sdp ssdp odd masterPDBs snapshotCapable =
+let consOracleInstanceFullDTO name server port dbaUser dbaPassword mp dp sdp ssdp odd masterPDBs wcList snapshotCapable =
     {
         Name = name
         Server = server
@@ -63,6 +67,7 @@ let consOracleInstanceFullDTO name server port dbaUser dbaPassword mp dp sdp ssd
         SnapshotSourcePDBDestPath = ssdp
         OracleDirectoryForDumps = odd
         MasterPDBs = masterPDBs
+        WorkingCopies = wcList
         SnapshotCapable = snapshotCapable
     }
 
@@ -79,5 +84,6 @@ let toFullDTO masterPDBs (instance:Domain.OracleInstance.OracleInstance) =
         SnapshotSourcePDBDestPath = instance.SnapshotSourcePDBDestPath
         OracleDirectoryForDumps = instance.OracleDirectoryForDumps
         MasterPDBs = masterPDBs
+        WorkingCopies = instance.WorkingCopies |> Map.toList |> List.map snd
         SnapshotCapable = instance.SnapshotCapable
     }

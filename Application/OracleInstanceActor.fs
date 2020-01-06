@@ -346,16 +346,19 @@ let private oracleInstanceActorBody
                     retype masterPDBActor <! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, snapshot, durable, force)
                     return! loop { state with Requests = newRequests }
 
-            | DeleteWorkingCopy (requestId, masterPDBName, versionNumber, wcName) ->
+            | DeleteWorkingCopy (requestId, _, _, wcName) // TODO
+            | DeleteWorkingCopyOfEdition (requestId, _, wcName) ->
                 let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
-                match instance |> containsMasterPDB masterPDBName with
+                match instance |> getWorkingCopy wcName with
                 | None ->
-                    sender <! (requestId, sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name |> exn |> Error)
+                    sender <! (requestId, sprintf "working copy %s does not exist on instance %s" wcName instance.Name |> exn |> Error)
                     return! loop state
-                | Some masterPDBName ->
-                    let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
-                    retype masterPDBActor <<! MasterPDBActor.DeleteWorkingCopy (requestId, wcName, versionNumber)
-                    return! loop state
+                | Some workingCopy ->
+                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                    let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
+                    garbageCollector <! OracleInstanceGarbageCollector.DeleteWorkingCopy (requestId, workingCopy)
+                    retype garbageCollector <! Akka.Actor.PoisonPill.Instance
+                    return! loop { state with Requests = newRequests }
 
             | CreateWorkingCopyOfEdition (requestId, masterPDBName, wcName, durable, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
@@ -369,25 +372,16 @@ let private oracleInstanceActorBody
                     retype masterPDBActor <! MasterPDBActor.CreateWorkingCopyOfEdition (requestId, wcName, durable, force)
                     return! loop { state with Requests = newRequests }
 
-            | DeleteWorkingCopyOfEdition (requestId, masterPDBName, wcName) ->
-                let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
-                match instance |> containsMasterPDB masterPDBName with
-                | None ->
-                    sender <! (requestId, sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name |> exn |> Error)
-                    return! loop state
-                | Some masterPDBName ->
-                    let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
-                    retype masterPDBActor <<! MasterPDBActor.DeleteWorkingCopyOfEdition (requestId, wcName)
-                    return! loop state
-
             | CollectGarbage ->
                 ctx.Log.Value.Info("Garbage collection of instance {instance} requested.", instance.Name)
-                if instance.SnapshotCapable then
-                    collaborators.MasterPDBActors |> Map.iter (fun _ pdbActor -> retype pdbActor <! MasterPDBActor.CollectGarbage)
-                    return! loop state
-                else
-                    collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.DeleteOldPDBsInFolder (getWorkingCopyPath instance false)
-                    return! loop state
+                let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
+                garbageCollector <! OracleInstanceGarbageCollector.CollectGarbage
+                retype garbageCollector <! Akka.Actor.PoisonPill.Instance
+                //if instance.SnapshotCapable then
+                //    collaborators.MasterPDBActors |> Map.iter (fun _ pdbActor -> retype pdbActor <! MasterPDBActor.CollectGarbage)
+                //else
+                //    collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.DeleteOldPDBsInFolder (getWorkingCopyPath instance false)
+                return! loop state
 
             | GetDumpTransferInfo ->
                 let transferInfo = {
@@ -463,6 +457,12 @@ let private oracleInstanceActorBody
                         sender <! (requestId, Error error.Message)
                         return! loop { state with Requests = newRequests }
 
+                | DeleteWorkingCopy (_, _, _, wcName)
+                | DeleteWorkingCopyOfEdition (_, _, wcName) ->
+                    let sender = request.Requester.Retype<OraclePDBResultWithReqId>()
+                    sender <! requestResponse
+                    return! loop { state with Requests = newRequests; Instance = instance |> removeWorkingCopy wcName }
+
                 | CreateWorkingCopyOfEdition (requestId, masterPDBName, wcName, durable, _) ->
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
@@ -521,6 +521,23 @@ let private oracleInstanceActorBody
             | None -> 
                 ctx.Log.Value.Error("internal error : request {0} not found", requestId)
                 return! loop state
+
+        | :? OracleInstanceGarbageCollector.CommandToParent as commandToParent ->
+            match commandToParent with
+            | OracleInstanceGarbageCollector.CollectVersionsGarbage (masterPDBName, versions)->
+                if (instance.MasterPDBs |> List.contains masterPDBName) then
+                    retype state.Collaborators.MasterPDBActors.[masterPDBName] <! MasterPDBActor.CollectVersionsGarbage versions
+                else
+                    ctx.Log.Value.Warning("Cannot collect garbage for {pdb} because it does not exist on instance {instance}", masterPDBName, instance.Name)
+                return! loop state
+
+            | OracleInstanceGarbageCollector.WorkingCopiesDeleted deletionResults ->
+                let deletedWorkingCopies, undeletedWorkingCopies = deletionResults |> List.partition (fun (_, errorMaybe) -> errorMaybe |> Option.isNone)
+                undeletedWorkingCopies |> List.iter (fun (wc, error) ->
+                    ctx.Log.Value.Warning("Cannot delete working copy {workingCopy} : {error}", wc.Name,error.Value.Message)
+                )
+                let deletedWorkingCopies = deletedWorkingCopies |> List.map (fun (wc, _) -> wc.Name) |> Set.ofList
+                return! loop { state with Instance = { state.Instance with WorkingCopies = state.Instance.WorkingCopies |> Map.filter (fun name _ -> not (deletedWorkingCopies |> Set.contains name)) } }
 
         | Terminated (child, _, _) ->
             ctx.Log.Value.Error("Child actor {0} is down => disabling Oracle instance {1}...", child.Path, initialInstance.Name)

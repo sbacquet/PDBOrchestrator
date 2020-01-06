@@ -491,6 +491,11 @@ let ``API creates a snapshot working copy`` () = test <| fun tck ->
     Assert.True(data |> List.contains (PDBService "server1.com/workingcopy"))
     Assert.True(data |> List.contains (OracleInstance "server1"))
 
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy") |> Option.isSome)
+    | Error error -> failwith error 
+
 [<Fact>]
 let ``API creates a clone working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
@@ -502,6 +507,11 @@ let ``API creates a clone working copy`` () = test <| fun tck ->
     Assert.True(data |> List.contains (PDBService "server1.com/workingcopy"))
     Assert.True(data |> List.contains (OracleInstance "server1"))
 
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy") |> Option.isSome)
+    | Error error -> failwith error 
+
 [<Fact>]
 let ``API fails to create a snapshot working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
@@ -510,6 +520,11 @@ let ``API fails to create a snapshot working copy`` () = test <| fun tck ->
     let request = API.createWorkingCopy ctx "me" "server1" "test1" 10 "workingcopy" true false false |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx
 
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy") |> Option.isNone)
+    | Error error -> failwith error 
+
 [<Fact>]
 let ``API fails to create a clone working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
@@ -517,6 +532,11 @@ let ``API fails to create a clone working copy`` () = test <| fun tck ->
 
     let request = API.createWorkingCopy ctx "me" "server1" "test1" 10 "workingcopy" false false false |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy") |> Option.isNone)
+    | Error error -> failwith error 
 
 [<Fact>]
 let ``API creates a working copy of edition`` () = test <| fun tck ->
@@ -586,12 +606,23 @@ let ``API gets pending changes`` () = test <| fun tck ->
 
 [<Fact>]
 let ``API deletes a working copy`` () = test <| fun tck ->
+    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "test1wc", newDurableWorkingCopy "me" (SpecificVersion 1) "test1" "test1wc" ] |> Map.ofList }) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "test1wc") |> Option.isSome)
+    | Error error -> failwith error 
 
     let request = API.deleteWorkingCopy ctx "me" "server1" "test1" 1 "test1wc" |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
     Assert.True(data |> List.contains (PDBName "test1wc"))
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "test1wc") |> Option.isNone)
+    | Error error -> failwith error 
 
 [<Fact>]
 let ``API fails to delete a working copy`` () = test <| fun tck ->

@@ -57,6 +57,9 @@ let newMasterPDB name schemas createdBy comment =
         WorkingCopies = Map.empty
     }
 
+let hasVersion version masterPDB =
+    masterPDB.Versions |> Map.tryFind version |> Option.isSome
+
 let isVersionDeleted version masterPDB =
     masterPDB.Versions |> Map.tryFind version |> Option.exists (fun v -> v.Deleted)
 
