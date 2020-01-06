@@ -54,13 +54,7 @@ let validateProperties pdb properties =
     else
         Invalid [ sprintf "PDB %s has an empty property key" pdb ]
 
-let validateWorkingCopy (workingCopy:MasterPDBWorkingCopy) =
-    Valid workingCopy // TODO
-
-let validateWorkingCopies (workingCopies:MasterPDBWorkingCopy list) =
-    workingCopies |> traverse validateWorkingCopy
-    
-let consValidMasterPDB name schemas versions lockState editionDisabled properties workingCopies =
+let consValidMasterPDB name schemas versions lockState editionDisabled properties =
     retn
         consMasterPDB <*> 
         validateName name <*> 
@@ -68,5 +62,4 @@ let consValidMasterPDB name schemas versions lockState editionDisabled propertie
         validateVersions name versions <*>
         validateLock name lockState <*>
         Valid editionDisabled <*>
-        validateProperties name properties <*>
-        validateWorkingCopies workingCopies
+        validateProperties name properties

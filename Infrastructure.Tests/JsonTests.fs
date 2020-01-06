@@ -15,8 +15,7 @@ open Application.OracleInstanceActor
 let ``Serialize and deserialize master PDB`` () =
     let password = "toto"
     let props = [ "key", "value" ] |> Map.ofList
-    let wc = [ newTempWorkingCopy (System.TimeSpan.FromHours(12.)) "me" (SpecificVersion 13) "test1" "wc" ]
-    let pdb = consMasterPDB "test1" [ consSchema "toto" password "Invest" ] [ newPDBVersion "me" "comment" ] (newEditionInfo "me" |> Some) false props wc
+    let pdb = consMasterPDB "test1" [ consSchema "toto" password "Invest" ] [ newPDBVersion "me" "comment" ] (newEditionInfo "me" |> Some) false props
     let json = pdb |> MasterPDBJson.masterPDBtoJson
     let pdb' = json |> MasterPDBJson.jsonToMasterPDB
     match pdb' with

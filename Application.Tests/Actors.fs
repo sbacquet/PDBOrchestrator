@@ -200,13 +200,13 @@ type FakeMasterPDBRepo(pdb: MasterPDB) =
 
 let masterPDBMap1 =
     [ 
-        "test1", { newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1" with WorkingCopies = [ "test1wc", newDurableWorkingCopy "me" (SpecificVersion 1) "test1" "test1wc" ] |> Map.ofList }
-        "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "new comment2")
+        "test1", newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
+        "test2", newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "new comment2"
     ] |> Map.ofList
 
 let masterPDBMap2 =
     [ 
-        "test2", (newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "comment2")
+        "test2", newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "comment2"
     ] |> Map.ofList
 
 let getMasterPDBRepo (instance:OracleInstance) name = 
@@ -580,7 +580,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
     let getMasterPDBRepo (instance:OracleInstance) name = 
         match instance.Name with
         | "server1" -> 
-            let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newEditionInfo "lockman" |> Some) false Map.empty List.empty
+            let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newEditionInfo "lockman" |> Some) false Map.empty
             match name with
             | "test1" | "test2" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
             | "locked" -> FakeMasterPDBRepo lockedMasterPDB :> IMasterPDBRepository

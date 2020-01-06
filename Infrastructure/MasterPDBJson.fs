@@ -151,7 +151,6 @@ let decodeMasterPDB (algo:SymmetricAlgorithm) = jsonDecoder {
         let! lockState = Decode.optional decodeLockInfo "edition"
         let! editionDisabled = Decode.optional Decode.bool "editionDisabled"
         let! properties = Decode.optional (Decode.mapWith Decode.string) "properties"
-        let! workingCopies = Decode.optional (Decode.listWith (decodeWorkingCopy name)) "workingCopies"
         return 
             consMasterPDB 
                 name 
@@ -160,7 +159,6 @@ let decodeMasterPDB (algo:SymmetricAlgorithm) = jsonDecoder {
                 lockState 
                 (editionDisabled |> Option.defaultValue false)
                 (properties |> Option.defaultValue Map.empty)
-                (workingCopies |> Option.defaultValue List.empty)
     | _ -> 
         return! Decoder.alwaysFail (JsonFailure.SingleFailure (JsonFailureReason.InvalidJson (sprintf "unknown master PDB JSON version %d" version)))
 }
@@ -171,7 +169,6 @@ let encodeMasterPDB (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:MasterP
     Encode.ifNotEqual Map.empty (Encode.mapWith Encode.string) "properties" x.Properties >>
     Encode.ifNotEqual false Encode.bool "editionDisabled" x.EditionDisabled >>
     Encode.optional encodeLockInfo "edition" x.EditionState >>
-    Encode.ifNotEqual List.empty (Encode.listWith encodeWorkingCopy) "workingCopies" (x.WorkingCopies |> Map.toList |> List.map snd) >>
     Encode.required (Encode.listWith encodeMasterPDBVersion) "versions" (x.Versions |> Map.toList |> List.map snd) >>
     Encode.required Encode.int "_version" cCurrentJsonVersion >>
     Encode.required Encode.bytes "_iv" algo.IV
