@@ -298,7 +298,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     let instance = state.Collaborators.OracleInstanceActors.[instanceName]
                     let requestId = newRequestId()
                     let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
-                    retype instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, masterPDBName, versionNumber, wcName, snapshot, durable, force)
+                    retype instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
                 | None ->
@@ -326,7 +326,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     let instance = state.Collaborators.OracleInstanceActors.[instanceName]
                     let requestId = newRequestId()
                     let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
-                    retype instance <! Application.OracleInstanceActor.CreateWorkingCopyOfEdition (requestId, masterPDBName, wcName, durable, force)
+                    retype instance <! Application.OracleInstanceActor.CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
                 | None ->

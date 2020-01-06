@@ -445,7 +445,7 @@ let ``MasterPDB creates a snapshot working copy`` () = test <| fun tck ->
 let ``OracleInstance creates a snapshot working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server1"
 
-    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test1", 1, "workingcopy", true, false, false) |> run
+    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "test1", 1, "workingcopy", true, false, false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
     result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
         Assert.Equal("test1", masterPDBName)
@@ -458,7 +458,7 @@ let ``OracleInstance creates a snapshot working copy`` () = test <| fun tck ->
 let ``OracleInstance creates a clone working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server1"
 
-    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test1", 1, "workingcopy", false, false, false) |> run
+    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "test1", 1, "workingcopy", false, false, false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
     result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
         Assert.Equal("test1", masterPDBName)
@@ -471,7 +471,7 @@ let ``OracleInstance creates a clone working copy`` () = test <| fun tck ->
 let ``OracleInstance (non snapshot capable) creates a working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server2"
 
-    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "test2", 1, "workingcopy", true, false, false) |> run
+    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "test2", 1, "workingcopy", true, false, false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
     result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
         Assert.Equal("test2", masterPDBName)
@@ -493,7 +493,7 @@ let ``API creates a snapshot working copy`` () = test <| fun tck ->
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy") |> Option.isSome)
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me") |> Option.isSome)
     | Error error -> failwith error 
 
 [<Fact>]
@@ -509,7 +509,7 @@ let ``API creates a clone working copy`` () = test <| fun tck ->
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy") |> Option.isSome)
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me") |> Option.isSome)
     | Error error -> failwith error 
 
 [<Fact>]
@@ -612,7 +612,7 @@ let ``API deletes a working copy`` () = test <| fun tck ->
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "test1wc") |> Option.isSome)
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "test1wc" && wc.CreatedBy = "me") |> Option.isSome)
     | Error error -> failwith error 
 
     let request = API.deleteWorkingCopy ctx "me" "server1" "test1wc" |> runQuick

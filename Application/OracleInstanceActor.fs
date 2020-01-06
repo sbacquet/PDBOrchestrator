@@ -97,9 +97,9 @@ type Command =
 | PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
 | CommitMasterPDB of WithRequestId<string, string, string> // responds with WithRequestId<MasterPDBActor.EditionCommitted>
 | RollbackMasterPDB of WithRequestId<string, string> // responds with WithRequestId<MasterPDBActor.EditionRolledBack>
-| CreateWorkingCopy of WithRequestId<string, int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
+| CreateWorkingCopy of WithRequestId<string, string, int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | DeleteWorkingCopy of WithRequestId<string> // responds with OraclePDBResultWithReqId
-| CreateWorkingCopyOfEdition of WithRequestId<string, string, bool, bool> // responds with RequestValidation
+| CreateWorkingCopyOfEdition of WithRequestId<string, string, string, bool, bool> // responds with RequestValidation
 | CollectGarbage // no response
 | GetDumpTransferInfo // responds with DumpTransferInfo
 
@@ -333,7 +333,7 @@ let private oracleInstanceActorBody
                     retype masterPDBActor <! MasterPDBActor.Rollback (requestId, user)
                     return! loop { state with Requests = newRequests }
 
-            | CreateWorkingCopy (requestId, masterPDBName, versionNumber, wcName, snapshot, durable, force) ->
+            | CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
                 match instance |> containsMasterPDB masterPDBName with
                 | None ->
@@ -358,7 +358,7 @@ let private oracleInstanceActorBody
                     retype garbageCollector <! Akka.Actor.PoisonPill.Instance
                     return! loop { state with Requests = newRequests }
 
-            | CreateWorkingCopyOfEdition (requestId, masterPDBName, wcName, durable, force) ->
+            | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
                 match instance |> containsMasterPDB masterPDBName with
                 | None ->
@@ -439,7 +439,7 @@ let private oracleInstanceActorBody
                         requester <! (requestId, MasterPDBCreationFailure (commandParameters.Name, error.Message))
                         return! loop { state with Requests = newRequests }
 
-                | CreateWorkingCopy (requestId, masterPDBName, versionNumber, wcName, snapshot, durable, _) ->
+                | CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, _) ->
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
@@ -447,9 +447,9 @@ let private oracleInstanceActorBody
                         sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, wcService, instance.Name))
                         let wc = 
                             if durable then 
-                                newDurableWorkingCopy "userTODO" (SpecificVersion versionNumber) masterPDBName wcName // TODO
+                                newDurableWorkingCopy user (SpecificVersion versionNumber) masterPDBName wcName
                             else    
-                                newTempWorkingCopy parameters.GarbageCollectionDelay "userTODO" (SpecificVersion versionNumber) masterPDBName wcName // TODO
+                                newTempWorkingCopy parameters.GarbageCollectionDelay user (SpecificVersion versionNumber) masterPDBName wcName
                         return! loop { state with Requests = newRequests; Instance = state.Instance |> addWorkingCopy wc }
                     | Error error ->
                         sender <! (requestId, Error error.Message)
@@ -460,7 +460,7 @@ let private oracleInstanceActorBody
                     sender <! requestResponse
                     return! loop { state with Requests = newRequests; Instance = instance |> removeWorkingCopy wcName }
 
-                | CreateWorkingCopyOfEdition (requestId, masterPDBName, wcName, durable, _) ->
+                | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, _) ->
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
@@ -468,9 +468,9 @@ let private oracleInstanceActorBody
                         sender <! (requestId, Ok (masterPDBName, 0, wcName, wcService, instance.Name))
                         let wc = 
                             if durable then 
-                                newDurableWorkingCopy "userTODO" Edition masterPDBName wcName // TODO
+                                newDurableWorkingCopy user Edition masterPDBName wcName
                             else    
-                                newTempWorkingCopy parameters.GarbageCollectionDelay "userTODO" Edition masterPDBName wcName // TODO
+                                newTempWorkingCopy parameters.GarbageCollectionDelay user Edition masterPDBName wcName
                         return! loop { state with Requests = newRequests; Instance = state.Instance |> addWorkingCopy wc }
                     | Error error ->
                         sender <! (requestId, Error error.Message)
