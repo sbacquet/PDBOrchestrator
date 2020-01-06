@@ -147,15 +147,9 @@ let createWorkingCopyOfEdition apiCtx (masterPDB:string, name:string) =
                 return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
-let deleteWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, name:string) =
+let deleteWorkingCopy apiCtx (instance:string, name:string) =
     withUser (fun user next ctx -> task {
-        let! requestValidation = API.deleteWorkingCopy apiCtx user.Name instance masterPDB version name
-        return! returnRequest apiCtx.Endpoint requestValidation next ctx
-    })
-
-let deleteWorkingCopyOfEdition apiCtx (masterPDB:string, name:string) =
-    withUser (fun user next ctx -> task {
-        let! requestValidation = API.deleteWorkingCopyOfEdition apiCtx user.Name masterPDB name
+        let! requestValidation = API.deleteWorkingCopy apiCtx user.Name instance name
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 

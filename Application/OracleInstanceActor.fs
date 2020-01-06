@@ -98,9 +98,8 @@ type Command =
 | CommitMasterPDB of WithRequestId<string, string, string> // responds with WithRequestId<MasterPDBActor.EditionCommitted>
 | RollbackMasterPDB of WithRequestId<string, string> // responds with WithRequestId<MasterPDBActor.EditionRolledBack>
 | CreateWorkingCopy of WithRequestId<string, int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
-| DeleteWorkingCopy of WithRequestId<string, int, string> // responds with OraclePDBResultWithReqId
+| DeleteWorkingCopy of WithRequestId<string> // responds with OraclePDBResultWithReqId
 | CreateWorkingCopyOfEdition of WithRequestId<string, string, bool, bool> // responds with RequestValidation
-| DeleteWorkingCopyOfEdition of WithRequestId<string, string> // responds with RequestValidation
 | CollectGarbage // no response
 | GetDumpTransferInfo // responds with DumpTransferInfo
 
@@ -346,8 +345,7 @@ let private oracleInstanceActorBody
                     retype masterPDBActor <! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, snapshot, durable, force)
                     return! loop { state with Requests = newRequests }
 
-            | DeleteWorkingCopy (requestId, _, _, wcName) // TODO
-            | DeleteWorkingCopyOfEdition (requestId, _, wcName) ->
+            | DeleteWorkingCopy (requestId, wcName) ->
                 let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
                 match instance |> getWorkingCopy wcName with
                 | None ->
@@ -457,8 +455,7 @@ let private oracleInstanceActorBody
                         sender <! (requestId, Error error.Message)
                         return! loop { state with Requests = newRequests }
 
-                | DeleteWorkingCopy (_, _, _, wcName)
-                | DeleteWorkingCopyOfEdition (_, _, wcName) ->
+                | DeleteWorkingCopy (_, wcName) ->
                     let sender = request.Requester.Retype<OraclePDBResultWithReqId>()
                     sender <! requestResponse
                     return! loop { state with Requests = newRequests; Instance = instance |> removeWorkingCopy wcName }

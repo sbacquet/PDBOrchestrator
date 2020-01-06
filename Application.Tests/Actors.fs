@@ -615,7 +615,7 @@ let ``API deletes a working copy`` () = test <| fun tck ->
     | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "test1wc") |> Option.isSome)
     | Error error -> failwith error 
 
-    let request = API.deleteWorkingCopy ctx "me" "server1" "test1" 1 "test1wc" |> runQuick
+    let request = API.deleteWorkingCopy ctx "me" "server1" "test1wc" |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
     Assert.True(data |> List.contains (PDBName "test1wc"))
 
@@ -629,5 +629,5 @@ let ``API fails to delete a working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
-    let request = API.deleteWorkingCopy ctx "me" "server1" "test1" 1 "doesnotexist" |> runQuick
+    let request = API.deleteWorkingCopy ctx "me" "server1" "doesnotexist" |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx

@@ -40,12 +40,10 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             route "/instances/primary" >=> HttpHandlers.switchPrimaryOracleInstanceWith apiCtx
         ]
         DELETE >=> choose [
-            // Delete working copy of edition
-            routef "/instances/primary/master-pdbs/%s/edition/working-copies/%s" (HttpHandlers.deleteWorkingCopyOfEdition apiCtx)
             // Rollback edition
             routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
             // Delete working copy
-            routef "/instances/%s/master-pdbs/%s/%i/working-copies/%s" (HttpHandlers.deleteWorkingCopy apiCtx)
+            routef "/instances/%s/working-copies/%s" (HttpHandlers.deleteWorkingCopy apiCtx)
             // Collect garbage
             route "/garbage" >=> HttpHandlers.collectGarbage apiCtx
         ]
