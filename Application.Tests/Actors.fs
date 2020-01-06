@@ -428,7 +428,7 @@ let ``MasterPDB creates a clone working copy`` () = test <| fun tck ->
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
     let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
-    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", false, false, false) |> run
+    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", false) |> run
     result |> Result.mapError raise |> ignore
 
 [<Fact>]
@@ -438,7 +438,7 @@ let ``MasterPDB creates a snapshot working copy`` () = test <| fun tck ->
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
     let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
-    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", true, false, false) |> run
+    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", true) |> run
     result |> Result.mapError raise |> ignore
 
 [<Fact>]
@@ -495,6 +495,74 @@ let ``API creates a snapshot working copy`` () = test <| fun tck ->
     match instanceState with
     | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me") |> Option.isSome)
     | Error error -> failwith error 
+
+[<Fact>]
+let ``API skips creation of a snapshot working copy`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true false false |> runQuick
+    request |> throwIfRequestNotCompletedOk ctx |> ignore
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    let firstWC = 
+        match instanceState with
+        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me")
+        | Error error -> failwith error
+    Assert.True(firstWC.IsSome)
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true false false |> runQuick
+    request |> throwIfRequestNotCompletedOk ctx |> ignore
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    let firstWC' = 
+        match instanceState with
+        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me")
+        | Error error -> failwith error
+    Assert.Equal(firstWC.Value, firstWC'.Value)
+
+[<Fact>]
+let ``API overwrites an existing working copy`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true false false |> runQuick
+    request |> throwIfRequestNotCompletedOk ctx |> ignore
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    let firstWC = 
+        match instanceState with
+        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me")
+        | Error error -> failwith error
+    Assert.True(firstWC.IsSome)
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true false true |> runQuick
+    request |> throwIfRequestNotCompletedOk ctx |> ignore
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    let firstWC' = 
+        match instanceState with
+        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me")
+        | Error error -> failwith error
+    Assert.NotEqual(firstWC.Value, firstWC'.Value)
+
+[<Fact>]
+let ``API fails to overwrite an existing working copy`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true false false |> runQuick
+    request |> throwIfRequestNotCompletedOk ctx |> ignore
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 2 "workingcopy" true false true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test2" 1 "workingcopy" true false true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+
+    let request = API.createWorkingCopy ctx "someoneElse" "server1" "test1" 1 "workingcopy" true false true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+
+    let request = API.createWorkingCopyOfEdition ctx "me" "test1" "workingcopy" true true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
 
 [<Fact>]
 let ``API creates a clone working copy`` () = test <| fun tck ->

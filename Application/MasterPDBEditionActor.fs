@@ -12,7 +12,7 @@ open Domain.OracleInstance
 open Application.Common
 
 type Command =
-| CreateWorkingCopy of WithRequestId<string, bool, bool> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopy of WithRequestId<string> // responds with OraclePDBResultWithReqId
 
 let private masterPDBEditionActorBody 
     (parameters:Parameters)
@@ -39,17 +39,13 @@ let private masterPDBEditionActorBody
         let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
 
         match command with
-        | CreateWorkingCopy (requestId, workingCopyName, durable, force) -> 
+        | CreateWorkingCopy (requestId, workingCopyName) -> 
             let result = result {
                 let! wcExists = pdbExists workingCopyName
-                if wcExists && (not force) then 
-                    ctx.Log.Value.Info("Working copy {pdb} already exists, not enforcing creation.", workingCopyName)
-                    return! Ok workingCopyName
-                else
-                    let! _ = 
-                        if wcExists then deletePDB workingCopyName // force creation
-                        else Ok ""
-                    return! cloneEditionPDB workingCopyName
+                let! _ = 
+                    if wcExists then deletePDB workingCopyName // force creation
+                    else Ok ""
+                return! cloneEditionPDB workingCopyName
             }
             sender <! (requestId, result)
             return! loop ()

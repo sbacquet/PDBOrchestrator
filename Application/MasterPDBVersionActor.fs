@@ -13,7 +13,7 @@ open Application.Common
 open Application
 
 type Command =
-| CreateWorkingCopy of WithRequestId<string, bool, bool, bool> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopy of WithRequestId<string, bool> // responds with OraclePDBResultWithReqId
 | CollectGarbage // no response
 | HaraKiri // no response
 
@@ -46,36 +46,32 @@ let private masterPDBVersionActorBody
         let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
 
         match command with
-        | CreateWorkingCopy (requestId, workingCopyName, snapshot, durable, force) -> 
+        | CreateWorkingCopy (requestId, workingCopyName, snapshot) -> 
             let result:OraclePDBResult = result {
                 let! wcExists = pdbExists workingCopyName
-                if wcExists && (not force) then 
-                    ctx.Log.Value.Info("Working copy {pdb} already exists, not enforcing creation.", workingCopyName)
-                    return workingCopyName
-                else
+                let! _ = 
+                    if wcExists then deletePDB workingCopyName // force creation
+                    else Ok ""
+                let sourceManifest = Domain.MasterPDBVersion.manifestFile masterPDBName masterPDBVersion.Number
+                let destPath = instance.WorkingCopyDestPath
+                if (instance.SnapshotCapable && snapshot) then
+                    let! snapshotSourceExists = pdbExists snapshotSourceName
                     let! _ = 
-                        if wcExists then deletePDB workingCopyName // force creation
-                        else Ok ""
-                    let sourceManifest = Domain.MasterPDBVersion.manifestFile masterPDBName masterPDBVersion.Number
-                    let destPath = getWorkingCopyPath instance durable
-                    if (instance.SnapshotCapable && snapshot) then
-                        let! snapshotSourceExists = pdbExists snapshotSourceName
-                        let! _ = 
-                            if (not snapshotSourceExists) then
-                                oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, sourceManifest, instance.SnapshotSourcePDBDestPath, snapshotSourceName)
-                                |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot create snapshot source PDB %s : timeout exceeded" snapshotSourceName |> exn |> Error)
-                            else
-                                ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
-                                Ok ""
-                        let result:OraclePDBResult =
-                            oracleLongTaskExecutor <? OracleLongTaskExecutor.SnapshotPDB (None, snapshotSourceName, destPath, workingCopyName)
-                            |> runWithin parameters.LongTimeout id (fun () -> sprintf "cannot snapshot PDB %s to %s : timeout exceeded" snapshotSourceName workingCopyName |> exn |> Error)
-                        return! result
-                    else
-                        let result:OraclePDBResult =
-                            oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, sourceManifest, destPath, workingCopyName)
-                            |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot create PDB clone %s : timeout exceeded" workingCopyName |> exn |> Error)
-                        return! result
+                        if (not snapshotSourceExists) then
+                            oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, sourceManifest, instance.SnapshotSourcePDBDestPath, snapshotSourceName)
+                            |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot create snapshot source PDB %s : timeout exceeded" snapshotSourceName |> exn |> Error)
+                        else
+                            ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
+                            Ok ""
+                    let result:OraclePDBResult =
+                        oracleLongTaskExecutor <? OracleLongTaskExecutor.SnapshotPDB (None, snapshotSourceName, destPath, workingCopyName)
+                        |> runWithin parameters.LongTimeout id (fun () -> sprintf "cannot snapshot PDB %s to %s : timeout exceeded" snapshotSourceName workingCopyName |> exn |> Error)
+                    return! result
+                else
+                    let result:OraclePDBResult =
+                        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, sourceManifest, destPath, workingCopyName)
+                        |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot create PDB clone %s : timeout exceeded" workingCopyName |> exn |> Error)
+                    return! result
             }
             sender <! (requestId, result)
             return! loop ()

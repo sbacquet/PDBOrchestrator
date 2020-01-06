@@ -20,8 +20,8 @@ type Command =
 | PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
 | Commit of WithRequestId<string, string> // responds with WithRequestId<EditionCommitted>
 | Rollback of WithRequestId<string> // responds with WithRequestId<EditionRolledBack>
-| CreateWorkingCopy of WithRequestId<int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
-| CreateWorkingCopyOfEdition of WithRequestId<string, bool, bool> // WithRequest<CreateWorkingCopyResult>
+| CreateWorkingCopy of WithRequestId<int, string, bool> // responds with WithRequest<CreateWorkingCopyResult>
+| CreateWorkingCopyOfEdition of WithRequestId<string> // WithRequest<CreateWorkingCopyResult>
 | CollectVersionsGarbage of int list // no response
 
 type PrepareForModificationResult = 
@@ -204,7 +204,7 @@ let private masterPDBActorBody
                         oracleLongTaskExecutor <! OracleLongTaskExecutor.DeletePDB (Some requestId, editionPDBName)
                         return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
             
-            | CreateWorkingCopy (requestId, versionNumber, name, snapshot, durable, force) ->
+            | CreateWorkingCopy (requestId, versionNumber, name, snapshot) ->
                 let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
                 let versionMaybe = masterPDB.Versions |> Map.tryFind versionNumber
                 match versionMaybe with
@@ -213,10 +213,10 @@ let private masterPDBActorBody
                     return! loop state
                 | Some version -> 
                     let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators ctx
-                    versionActor <<! MasterPDBVersionActor.CreateWorkingCopy (requestId, name, snapshot, durable, force)
+                    versionActor <<! MasterPDBVersionActor.CreateWorkingCopy (requestId, name, snapshot)
                     return! loop { state with Collaborators = newCollabs }
 
-            | CreateWorkingCopyOfEdition (requestId, workingCopyName, durable, force) ->
+            | CreateWorkingCopyOfEdition (requestId, workingCopyName) ->
                 let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
                 let lockInfoMaybe = masterPDB.EditionState
                 match lockInfoMaybe with
@@ -229,7 +229,7 @@ let private masterPDBActorBody
                         return! loop state
                     else
                         let editionActor = MasterPDBEditionActor.spawn parameters instance oracleShortTaskExecutor oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor editionPDBName ctx
-                        editionActor <<! MasterPDBEditionActor.CreateWorkingCopy (requestId, workingCopyName, durable, force)
+                        editionActor <<! MasterPDBEditionActor.CreateWorkingCopy (requestId, workingCopyName)
                         retype editionActor <! Akka.Actor.PoisonPill.Instance
                         return! loop state
 

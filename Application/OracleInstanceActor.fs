@@ -232,6 +232,7 @@ let private oracleInstanceActorBody
         let instance = state.Instance
         let collaborators = state.Collaborators
         let requests = state.Requests
+        let wcService = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port)
 
         if state.PreviousInstance <> instance then
             ctx.Log.Value.Debug("Persisted modified Oracle instance {instance}", instance.Name)
@@ -335,15 +336,38 @@ let private oracleInstanceActorBody
 
             | CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
-                match instance |> containsMasterPDB masterPDBName with
-                | None ->
-                    sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
+                let cancel:Result<unit,string> option = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
+                    if not (wc.MasterPDBName =~ masterPDBName) || not (wc.CreatedBy =~ user) then
+                        sprintf "working copy %s already exists but for a different master PDB/user (%s/%s)" wcName wc.MasterPDBName wc.CreatedBy |> Error |> Some
+                    else
+                        match wc.Source with
+                        | SpecificVersion version ->
+                            if version = versionNumber then
+                                if force then None else Some (Ok ())
+                            else
+                                sprintf "working copy %s of %s already exists but for a different version (%d)" wcName wc.MasterPDBName version |> Error |> Some
+                        | Edition ->
+                            sprintf "working copy %s already exists but for a edition of %s" wcName wc.MasterPDBName |> Error |> Some
+                )
+                match cancel with
+                | Some result ->
+                    let res:CreateWorkingCopyResult = 
+                        match result with
+                        | Ok () -> 
+                             Ok (masterPDBName, versionNumber, wcName, wcService wcName, instance.Name)
+                        | Error error -> Error error
+                    sender <! (requestId, res)
                     return! loop state
-                | Some masterPDBName ->
-                    let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
-                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                    retype masterPDBActor <! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, snapshot, durable, force)
-                    return! loop { state with Requests = newRequests }
+                | None ->
+                    match instance |> containsMasterPDB masterPDBName with
+                    | None ->
+                        sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
+                        return! loop state
+                    | Some masterPDBName ->
+                        let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
+                        let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                        retype masterPDBActor <! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, snapshot)
+                        return! loop { state with Requests = newRequests }
 
             | DeleteWorkingCopy (requestId, wcName) ->
                 let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
@@ -360,15 +384,35 @@ let private oracleInstanceActorBody
 
             | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
-                match instance |> containsMasterPDB masterPDBName with
-                | None ->
-                    sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
+                let cancel:Result<unit,string> option = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
+                    if not (wc.MasterPDBName =~ masterPDBName) || not (wc.CreatedBy =~ user) then
+                        sprintf "working copy %s already exists but for a different master PDB/user (%s/%s)" wcName wc.MasterPDBName wc.CreatedBy |> Error |> Some
+                    else
+                        match wc.Source with
+                        | Edition ->
+                            if force then None else Some (Ok ())
+                        | SpecificVersion version ->
+                            sprintf "working copy %s already exists but for a specific version (%d) of %s" wcName version wc.MasterPDBName |> Error |> Some
+                )
+                match cancel with
+                | Some result ->
+                    let res:CreateWorkingCopyResult = 
+                        match result with
+                        | Ok () -> 
+                             Ok (masterPDBName, 0, wcName, wcService wcName, instance.Name)
+                        | Error error -> Error error
+                    sender <! (requestId, res)
                     return! loop state
-                | Some masterPDBName ->
-                    let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
-                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                    retype masterPDBActor <! MasterPDBActor.CreateWorkingCopyOfEdition (requestId, wcName, durable, force)
-                    return! loop { state with Requests = newRequests }
+                | None ->
+                    match instance |> containsMasterPDB masterPDBName with
+                    | None ->
+                        sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
+                        return! loop state
+                    | Some masterPDBName ->
+                        let masterPDBActor = collaborators.MasterPDBActors.[masterPDBName]
+                        let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                        retype masterPDBActor <! MasterPDBActor.CreateWorkingCopyOfEdition (requestId, wcName)
+                        return! loop { state with Requests = newRequests }
 
             | CollectGarbage ->
                 ctx.Log.Value.Info("Garbage collection of instance {instance} requested.", instance.Name)
@@ -443,8 +487,7 @@ let private oracleInstanceActorBody
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
-                        let wcService = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port) wcName
-                        sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, wcService, instance.Name))
+                        sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, wcService wcName, instance.Name))
                         let wc = 
                             if durable then 
                                 newDurableWorkingCopy user (SpecificVersion versionNumber) masterPDBName wcName
@@ -464,8 +507,7 @@ let private oracleInstanceActorBody
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
-                        let wcService = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port) wcName
-                        sender <! (requestId, Ok (masterPDBName, 0, wcName, wcService, instance.Name))
+                        sender <! (requestId, Ok (masterPDBName, 0, wcName, wcService wcName, instance.Name))
                         let wc = 
                             if durable then 
                                 newDurableWorkingCopy user Edition masterPDBName wcName

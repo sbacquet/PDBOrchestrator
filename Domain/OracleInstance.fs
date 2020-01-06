@@ -74,10 +74,6 @@ let addMasterPDB masterPDB oracleInstance =
 let containsMasterPDB (pdb:string) instance =
     instance.MasterPDBs |> List.tryFind ((=~)pdb)
 
-let getWorkingCopySubFolderName durable = if durable then "durable" else "temporary"
-
-let getWorkingCopyPath instance durable = sprintf "%s/%s" instance.WorkingCopyDestPath (getWorkingCopySubFolderName durable)
-
 let getWorkingCopy name (instance:OracleInstance) =
     instance.WorkingCopies |> Map.tryFind name
 

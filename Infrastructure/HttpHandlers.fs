@@ -26,7 +26,7 @@ let withUser f : HttpHandler =
         let isAdmin = ctx.TryGetRequestHeader "admin" |> Option.contains "true" // TODO
         match userNameMaybe with
         | Some userName -> 
-            let user:Application.UserRights.User = { Name = userName; Roles = if isAdmin then [ "admin" ] else [] }
+            let user:Application.UserRights.User = { Name = userName.ToLower(); Roles = if isAdmin then [ "admin" ] else [] }
             return! f user next ctx
         | None -> return! RequestErrors.badRequest (text "User cannot be determined.") next ctx
     }
@@ -59,7 +59,7 @@ let getMasterPDBs apiCtx (instancename:string) next (ctx:HttpContext) = task {
 }
 
 let getMasterPDB apiCtx (instance:string, pdb:string) next (ctx:HttpContext) = task {
-    let! stateMaybe = API.getMasterPDBState apiCtx instance pdb
+    let! stateMaybe = API.getMasterPDBState apiCtx instance (pdb.ToLower())
     match stateMaybe with
     | Ok state -> return! json (MasterPDB.masterPDBStatetoJson state) next ctx
     | Error error -> return! RequestErrors.notFound (text error) next ctx
@@ -143,13 +143,13 @@ let createWorkingCopyOfEdition apiCtx (masterPDB:string, name:string) =
             if not parsedOk then 
                 return! RequestErrors.badRequest (text "When provided, the \"durable\" query parameter must be \"true\" or \"false\".") next ctx
             else
-                let! requestValidation = API.createWorkingCopyOfEdition apiCtx user.Name masterPDB name durable force
+                let! requestValidation = API.createWorkingCopyOfEdition apiCtx user.Name (masterPDB.ToLower()) (name.ToLower()) durable force
                 return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
 let deleteWorkingCopy apiCtx (instance:string, name:string) =
     withUser (fun user next ctx -> task {
-        let! requestValidation = API.deleteWorkingCopy apiCtx user.Name instance name
+        let! requestValidation = API.deleteWorkingCopy apiCtx user.Name instance (name.ToLower())
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
@@ -200,13 +200,13 @@ let getMode apiCtx next (ctx:HttpContext) = task {
     return! json (if readOnly then @"""maintenance""" else @"""normal""") next ctx
 }
 
-let prepareMasterPDBForModification apiCtx pdb = withUser (fun user next ctx -> task {
+let prepareMasterPDBForModification apiCtx (pdb:string) = withUser (fun user next ctx -> task {
     let version = ctx.TryGetQueryStringValue "version"
     match version with
     | Some version -> 
         let (ok, version) = System.Int32.TryParse version
         if ok then
-            let! requestValidation = API.prepareMasterPDBForModification apiCtx user.Name pdb version
+            let! requestValidation = API.prepareMasterPDBForModification apiCtx user.Name (pdb.ToLower()) version
             return! returnRequest apiCtx.Endpoint requestValidation next ctx
         else 
             return! RequestErrors.badRequest (text "The current version must an integer.") next ctx
@@ -214,17 +214,17 @@ let prepareMasterPDBForModification apiCtx pdb = withUser (fun user next ctx -> 
         return! RequestErrors.badRequest (text "The current version must be provided.") next ctx
 })
 
-let commitMasterPDB apiCtx pdb = withUser (fun user next ctx -> task {
+let commitMasterPDB apiCtx (pdb:string) = withUser (fun user next ctx -> task {
     let! comment = ctx.ReadBodyFromRequestAsync()
     if (comment <> "") then
-        let! requestValidation = API.commitMasterPDB apiCtx user.Name pdb comment
+        let! requestValidation = API.commitMasterPDB apiCtx user.Name (pdb.ToLower()) comment
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     else
         return! RequestErrors.badRequest (text "A comment must be provided.") next ctx
 })
 
-let rollbackMasterPDB apiCtx pdb = withUser (fun user next ctx -> task {
-    let! requestValidation = API.rollbackMasterPDB apiCtx user.Name pdb
+let rollbackMasterPDB apiCtx (pdb:string) = withUser (fun user next ctx -> task {
+    let! requestValidation = API.rollbackMasterPDB apiCtx user.Name (pdb.ToLower())
     return! returnRequest apiCtx.Endpoint requestValidation next ctx
 })
 
