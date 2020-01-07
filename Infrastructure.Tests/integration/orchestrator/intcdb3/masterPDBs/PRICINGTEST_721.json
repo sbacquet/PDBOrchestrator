@@ -3,7 +3,7 @@
   "schemas": [
     {
       "user": "PRICINGTEST_721",
-      "password": "9xKWansXDfTmWGZsNhPmyw==",
+      "password": "7Ln77YC/70Nta7VLO5exTw==",
       "type": "Invest"
     }
   ],
@@ -110,8 +110,14 @@
       "createdBy": "yuzhang1",
       "creationDate": "2019-09-17T22:00:00.0000000Z",
       "comment": "SIMPLE-11222 add instruments for jgb simple yield case"
+    },
+    {
+      "number": 68,
+      "createdBy": "yuzhang1",
+      "creationDate": "2019-12-25T23:00:00.0000000Z",
+      "comment": "[SIMPLE-12034] add SOFR 1M and 3M Futures"
     }
   ],
   "_version": 1,
-  "_iv": "8E3sc7Wtu3twqjJu8A5TBg=="
+  "_iv": "0ldsN+m0yNhOKJ1ux0eILQ=="
 }
