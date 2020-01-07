@@ -7,6 +7,7 @@ open Domain
 open Domain.OracleInstance
 open Domain.Common.Validation
 open Domain.Common
+open Domain.Common.Exceptional
 open System
 open Application.Common
 open Application.Parameters
@@ -246,6 +247,28 @@ let private oracleInstanceActorBody
 
         try
         match msg with
+        | :? LifecycleEvent as event ->
+            match event with
+            | LifecycleEvent.PreStart ->
+                ctx.Log.Value.Info("Checking integrity of Oracle instance {instance}...", state.Instance.Name)
+                let pdbExists pdb : Async<Exceptional<bool>> = state.Collaborators.OracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
+                let isWorkingCopyValid name = async {
+                    let! exists = pdbExists name
+                    match exists with
+                    | Ok exists -> return (name, exists)
+                    | Error _ -> return (name, true) // ignore errors
+                }
+                let! workingCopyValidations = 
+                    instance.WorkingCopies 
+                    |> Map.toList 
+                    |> Async.traverseP (fst >> isWorkingCopyValid)
+                let workingCopyValidationsMap = workingCopyValidations |> Map.ofList
+                let existingWCs, nonExistingWCs = instance.WorkingCopies |> Map.partition (fun key _ -> workingCopyValidationsMap.[key])
+                nonExistingWCs |> Map.iter (fun name _ -> ctx.Log.Value.Warning("PDB for working copy {pdb} does not exist => removed from the list of Oracle instance {instance}", name, instance.Name))
+                ctx.Log.Value.Info("Integrity of Oracle instance {instance} checked.", state.Instance.Name)
+                return! loop { state with Instance = { state.Instance with WorkingCopies = existingWCs } }
+            | _ -> return! loop state
+
         | :? Command as command ->
             match command with
             | GetState ->

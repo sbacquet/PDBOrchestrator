@@ -11,7 +11,6 @@ open Application.Parameters
 open Application.Common
 open Domain.Common.Exceptional
 open Domain.Common
-open Domain.MasterPDBWorkingCopy
 
 type Command =
 | GetState // responds with StateResult
@@ -103,7 +102,7 @@ let private masterPDBActorBody
         | :? LifecycleEvent as event ->
             match event with
             | LifecycleEvent.PreStart ->
-                ctx.Log.Value.Info("Checking integrity of {pdb}...", masterPDB.Name)
+                ctx.Log.Value.Info("Checking integrity of master PDB {pdb}...", masterPDB.Name)
                 let pdbExists pdb : Async<Exceptional<bool>> = oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
                 let! editionPDBExists = pdbExists editionPDBName
                 match editionPDBExists, masterPDB.EditionState.IsSome with
@@ -118,10 +117,10 @@ let private masterPDBActorBody
                     ctx.Log.Value.Warning("Master PDB {pdb} is declared as locked whereas its edition PDB does not exist on server => unlocked it", masterPDB.Name)
                     return! loop { state with MasterPDB = { masterPDB with EditionState = None } }
                 | Ok _, _->
-                    ctx.Log.Value.Info("Integrity of {pdb} OK.", masterPDB.Name)
+                    ctx.Log.Value.Info("Integrity of master PDB {pdb} OK.", masterPDB.Name)
                     return! loop state
                 | Error error, _ ->
-                    ctx.Log.Value.Error("Cannot check integrity of {pdb} : {error}", masterPDB.Name, error)
+                    ctx.Log.Value.Error("Cannot check integrity of master PDB {pdb} : {error}", masterPDB.Name, error)
                     return! loop state
             | _ ->
                 return! loop state
