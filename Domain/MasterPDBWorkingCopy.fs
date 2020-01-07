@@ -17,10 +17,10 @@ type MasterPDBWorkingCopy = {
     Lifetime: Lifetime
 }
 
-let consWorkingCopy (date:System.DateTime) lifetime createdBy source masterPDBName name =
+let consWorkingCopy (date:System.DateTime) lifetime createdBy source (masterPDBName:string) (name:string) =
     {
-        Name = name
-        MasterPDBName = masterPDBName
+        Name = name.ToUpper()
+        MasterPDBName = masterPDBName.ToUpper()
         CreationDate = date.ToUniversalTime()
         CreatedBy = createdBy
         Source = source

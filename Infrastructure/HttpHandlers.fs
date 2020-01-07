@@ -59,20 +59,41 @@ let getMasterPDBs apiCtx (instancename:string) next (ctx:HttpContext) = task {
 }
 
 let getMasterPDB apiCtx (instance:string, pdb:string) next (ctx:HttpContext) = task {
-    let! stateMaybe = API.getMasterPDBState apiCtx instance (pdb.ToLower())
+    let! stateMaybe = API.getMasterPDBState apiCtx instance pdb
     match stateMaybe with
     | Ok state -> return! json (MasterPDB.masterPDBStatetoJson state) next ctx
     | Error error -> return! RequestErrors.notFound (text error) next ctx
 }
 
+let getWorkingCopies apiCtx (instancename:string) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getInstanceState apiCtx instancename
+    match stateMaybe with
+    | Ok state -> return! json (OracleInstance.workingCopiesToJson state) next ctx
+    | Error error -> return! RequestErrors.notFound (text error) next ctx
+}
+
+let getWorkingCopy apiCtx (instancename:string, workingCopyName:string) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getInstanceState apiCtx instancename
+    match stateMaybe with
+    | Ok state ->
+        let workingCopy = state.WorkingCopies |> List.tryFind (fun wc -> wc.Name = workingCopyName.ToUpper())
+        match workingCopy with
+        | Some workingCopy -> 
+            return! json (OracleInstance.workingCopyToJson workingCopy) next ctx
+        | None ->
+            return! RequestErrors.notFound (sprintf "Working copy %s not found on Oracle instance %s" (workingCopyName.ToUpper()) (instancename.ToLower()) |> text) next ctx
+    | Error error -> 
+        return! RequestErrors.notFound (text error) next ctx
+}
+
 let getRequestStatus apiCtx (requestId:PendingRequest.RequestId) next (ctx:HttpContext) = task {
 
     let completedRequestDataKeyValue = function
-    | OrchestratorActor.PDBName name -> "PDB name", name
+    | OrchestratorActor.PDBName name -> "PDB name", name.ToUpper()
     | OrchestratorActor.PDBVersion version -> "PDB version", version.ToString()
     | OrchestratorActor.PDBService service -> "PDB service", service
     | OrchestratorActor.SchemaLogon (schemaType, schemaLogon) -> sprintf "%s schema logon" schemaType, schemaLogon
-    | OrchestratorActor.OracleInstance instance -> sprintf "Oracle instance", instance
+    | OrchestratorActor.OracleInstance instance -> "Oracle instance", instance.ToLower()
 
     let! (_, requestStatus) = API.getRequestStatus apiCtx requestId
     
@@ -105,7 +126,6 @@ let getRequestStatus apiCtx (requestId:PendingRequest.RequestId) next (ctx:HttpC
 }
 
 open Domain.Common.Validation
-open Application
 
 let returnRequest endpoint requestValidation : HttpHandler =
     match requestValidation with
@@ -143,13 +163,13 @@ let createWorkingCopyOfEdition apiCtx (masterPDB:string, name:string) =
             if not parsedOk then 
                 return! RequestErrors.badRequest (text "When provided, the \"durable\" query parameter must be \"true\" or \"false\".") next ctx
             else
-                let! requestValidation = API.createWorkingCopyOfEdition apiCtx user.Name (masterPDB.ToLower()) (name.ToLower()) durable force
+                let! requestValidation = API.createWorkingCopyOfEdition apiCtx user.Name masterPDB name durable force
                 return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
 let deleteWorkingCopy apiCtx (instance:string, name:string) =
     withUser (fun user next ctx -> task {
-        let! requestValidation = API.deleteWorkingCopy apiCtx user.Name instance (name.ToLower())
+        let! requestValidation = API.deleteWorkingCopy apiCtx user.Name instance name
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
@@ -168,7 +188,7 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
             let encodeOpenMasterPDB = Encode.buildWith (fun (x:string * MasterPDB.EditionInfoDTO) jObj ->
                 let name, lockInfo = x
                 jObj 
-                |> Encode.required Encode.string "name" name
+                |> Encode.required Encode.string "name" (name.ToUpper())
                 |> Encode.required MasterPDB.encodeLockInfo "lock" lockInfo
             )
             let encodePendingChanges = Encode.buildWith (fun (x:OrchestratorActor.PendingChanges) jObj ->
@@ -206,7 +226,7 @@ let prepareMasterPDBForModification apiCtx (pdb:string) = withUser (fun user nex
     | Some version -> 
         let (ok, version) = System.Int32.TryParse version
         if ok then
-            let! requestValidation = API.prepareMasterPDBForModification apiCtx user.Name (pdb.ToLower()) version
+            let! requestValidation = API.prepareMasterPDBForModification apiCtx user.Name pdb version
             return! returnRequest apiCtx.Endpoint requestValidation next ctx
         else 
             return! RequestErrors.badRequest (text "The current version must an integer.") next ctx
@@ -217,14 +237,14 @@ let prepareMasterPDBForModification apiCtx (pdb:string) = withUser (fun user nex
 let commitMasterPDB apiCtx (pdb:string) = withUser (fun user next ctx -> task {
     let! comment = ctx.ReadBodyFromRequestAsync()
     if (comment <> "") then
-        let! requestValidation = API.commitMasterPDB apiCtx user.Name (pdb.ToLower()) comment
+        let! requestValidation = API.commitMasterPDB apiCtx user.Name pdb comment
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     else
         return! RequestErrors.badRequest (text "A comment must be provided.") next ctx
 })
 
 let rollbackMasterPDB apiCtx (pdb:string) = withUser (fun user next ctx -> task {
-    let! requestValidation = API.rollbackMasterPDB apiCtx user.Name (pdb.ToLower())
+    let! requestValidation = API.rollbackMasterPDB apiCtx user.Name pdb
     return! returnRequest apiCtx.Endpoint requestValidation next ctx
 })
 
@@ -237,7 +257,7 @@ let synchronizePrimaryInstanceWith apiCtx instance next ctx = task {
     let! stateMaybe = API.synchronizePrimaryInstanceWith apiCtx instance
     match stateMaybe with
     | Ok state -> return! (json <| OracleInstance.oracleInstanceToJson state) next ctx
-    | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot synchronize %s with primary instance : %s." instance error) next ctx
+    | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot synchronize %s with primary instance : %s." (instance.ToLower()) error) next ctx
 }
 
 let switchPrimaryOracleInstanceWith apiCtx next (ctx:HttpContext) = task {
@@ -247,8 +267,8 @@ let switchPrimaryOracleInstanceWith apiCtx next (ctx:HttpContext) = task {
     else
         let! result = API.switchPrimaryOracleInstanceWith apiCtx instance
         match result with
-        | Ok newInstance -> return! (text <| sprintf "New primary Oracle instance is now %s" newInstance) next ctx
-        | Error (error, currentInstance) -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot switch primary Oracle instance to %s : %s. The primary instance is unchanged (%s)." instance error currentInstance) next ctx
+        | Ok newInstance -> return! (text <| sprintf "New primary Oracle instance is now %s" (newInstance.ToLower())) next ctx
+        | Error (error, currentInstance) -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot switch primary Oracle instance to %s : %s. The primary instance is unchanged (%s)." (instance.ToLower()) error (currentInstance.ToLower())) next ctx
 }
 
 open Application.OracleInstanceActor
@@ -317,5 +337,5 @@ let getDumpTransferInfo apiCtx instance next (ctx:HttpContext) = task {
     let! dumpTransferInfoMaybe = API.getDumpTransferInfo apiCtx instance
     match dumpTransferInfoMaybe with
     | Ok dumpTransferInfo -> return! (json <| dumpTransferInfoToJson dumpTransferInfo) next ctx
-    | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot get dump transfer info for instance %s : %s." instance error) next ctx
+    | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot get dump transfer info for instance %s : %s." (instance.ToLower()) error) next ctx
 }

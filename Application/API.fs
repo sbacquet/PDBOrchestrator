@@ -19,38 +19,38 @@ let consAPIContext system orchestratorActor (loggerFactory:ILoggerFactory) endpo
 let getState (ctx:APIContext) : Async<Application.DTO.Orchestrator.OrchestratorState> =
     ctx.Orchestrator <? GetState
 
-let getInstanceState (ctx:APIContext) instance : Async<Application.OracleInstanceActor.StateResult> =
-    ctx.Orchestrator <? GetInstanceState instance
+let getInstanceState (ctx:APIContext) (instance:string) : Async<Application.OracleInstanceActor.StateResult> =
+    ctx.Orchestrator <? GetInstanceState (instance.ToLower())
 
-let getMasterPDBState (ctx:APIContext) instance pdb : Async<Application.MasterPDBActor.StateResult> =
-    ctx.Orchestrator <? GetMasterPDBState (instance, pdb)
+let getMasterPDBState (ctx:APIContext) (instance:string) (pdb:string) : Async<Application.MasterPDBActor.StateResult> =
+    ctx.Orchestrator <? GetMasterPDBState (instance.ToLower(), pdb.ToUpper())
 
-let synchronizePrimaryInstanceWith (ctx:APIContext) instance : Async<Application.OracleInstanceActor.StateResult> =
-    retype ctx.Orchestrator <? Synchronize instance
+let synchronizePrimaryInstanceWith (ctx:APIContext) (instance:string) : Async<Application.OracleInstanceActor.StateResult> =
+    retype ctx.Orchestrator <? Synchronize (instance.ToLower())
 
 let getRequestStatus (ctx:APIContext) requestId : Async<WithRequestId<RequestStatus>> =
     ctx.Orchestrator <? GetRequest requestId
 
-let createWorkingCopy (ctx:APIContext) user instance masterPDBName versionNumber wcName snapshot durable force : Async<RequestValidation> =
-    ctx.Orchestrator <? CreateWorkingCopy (user, instance, masterPDBName, versionNumber, wcName, snapshot, durable, force)
+let createWorkingCopy (ctx:APIContext) (user:string) (instance:string) (masterPDBName:string) versionNumber (wcName:string) snapshot durable force : Async<RequestValidation> =
+    ctx.Orchestrator <? CreateWorkingCopy (user.ToLower(), instance.ToLower(), masterPDBName.ToUpper(), versionNumber, wcName.ToUpper(), snapshot, durable, force)
 
-let createWorkingCopyOfEdition (ctx:APIContext) user masterPDBName wcName durable force : Async<RequestValidation> =
-    ctx.Orchestrator <? CreateWorkingCopyOfEdition (user, masterPDBName, wcName, durable, force)
+let createWorkingCopyOfEdition (ctx:APIContext) (user:string) (masterPDBName:string) (wcName:string) durable force : Async<RequestValidation> =
+    ctx.Orchestrator <? CreateWorkingCopyOfEdition (user.ToLower(), masterPDBName.ToUpper(), wcName.ToUpper(), durable, force)
 
-let deleteWorkingCopy (ctx:APIContext) user instance snapshotName : Async<RequestValidation> =
-    ctx.Orchestrator <? DeleteWorkingCopy (user, instance, snapshotName)
+let deleteWorkingCopy (ctx:APIContext) (user:string) (instance:string) (snapshotName:string) : Async<RequestValidation> =
+    ctx.Orchestrator <? DeleteWorkingCopy (user.ToLower(), instance.ToLower(), snapshotName.ToUpper())
 
 let createMasterPDB (ctx:APIContext) (pars:OracleInstanceActor.CreateMasterPDBParams) : Async<RequestValidation> =
     ctx.Orchestrator <? OrchestratorActor.CreateMasterPDB (pars.User, pars)
 
-let prepareMasterPDBForModification (ctx:APIContext) user pdb version : Async<RequestValidation> =
-    ctx.Orchestrator <? OrchestratorActor.PrepareMasterPDBForModification (user, pdb, version)
+let prepareMasterPDBForModification (ctx:APIContext) (user:string) (pdb:string) version : Async<RequestValidation> =
+    ctx.Orchestrator <? OrchestratorActor.PrepareMasterPDBForModification (user.ToLower(), pdb.ToUpper(), version)
 
-let rollbackMasterPDB (ctx:APIContext) user pdb : Async<RequestValidation> =
-    ctx.Orchestrator <? OrchestratorActor.RollbackMasterPDB (user, pdb)
+let rollbackMasterPDB (ctx:APIContext) (user:string) (pdb:string) : Async<RequestValidation> =
+    ctx.Orchestrator <? OrchestratorActor.RollbackMasterPDB (user.ToLower(), pdb.ToUpper())
 
-let commitMasterPDB (ctx:APIContext) user pdb comment : Async<RequestValidation> =
-    ctx.Orchestrator <? OrchestratorActor.CommitMasterPDB (user, pdb, comment)
+let commitMasterPDB (ctx:APIContext) (user:string) (pdb:string) comment : Async<RequestValidation> =
+    ctx.Orchestrator <? OrchestratorActor.CommitMasterPDB (user.ToLower(), pdb.ToUpper(), comment)
 
 let getPendingChanges (ctx:APIContext) : Async<Result<Option<PendingChanges>,string>> =
     retype ctx.Orchestrator <? OrchestratorActor.GetPendingChanges
@@ -67,8 +67,8 @@ let isMaintenanceMode (ctx:APIContext) : Async<bool> =
 let collectGarbage (ctx:APIContext) =
     retype ctx.Orchestrator <! OrchestratorActor.CollectGarbage
 
-let switchPrimaryOracleInstanceWith (ctx:APIContext) instance : Async<Result<string,string*string>> =
-    retype ctx.Orchestrator <? SetPrimaryOracleInstance instance
+let switchPrimaryOracleInstanceWith (ctx:APIContext) (instance:string) : Async<Result<string,string*string>> =
+    retype ctx.Orchestrator <? SetPrimaryOracleInstance (instance.ToLower())
 
-let getDumpTransferInfo (ctx:APIContext) instance : Async<Result<Application.OracleInstanceActor.DumpTransferInfo, string>> =
-    retype ctx.Orchestrator <? GetDumpTransferInfo instance
+let getDumpTransferInfo (ctx:APIContext) (instance:string) : Async<Result<Application.OracleInstanceActor.DumpTransferInfo, string>> =
+    retype ctx.Orchestrator <? GetDumpTransferInfo (instance.ToLower())

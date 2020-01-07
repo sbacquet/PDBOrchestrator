@@ -34,9 +34,9 @@ type MasterPDB = {
     Properties: Map<string, string>
 }
 
-let consMasterPDB name schemas versions (editionState:EditionInfo option) editionDisabled properties = 
+let consMasterPDB (name:string) schemas versions (editionState:EditionInfo option) editionDisabled properties = 
     { 
-        Name = name
+        Name = name.ToUpper()
         Schemas = schemas 
         Versions = versions |> List.map (fun version -> version.Number, version) |> Map.ofList
         EditionState = editionState |> Option.map (fun editionState -> { editionState with Date = editionState.Date.ToUniversalTime() })
@@ -44,9 +44,9 @@ let consMasterPDB name schemas versions (editionState:EditionInfo option) editio
         Properties = properties
     }
 
-let newMasterPDB name schemas createdBy comment =
+let newMasterPDB (name:string) schemas createdBy comment =
     { 
-        Name = name
+        Name = name.ToUpper()
         Schemas = schemas
         Versions = [ 1, newPDBVersion createdBy comment ] |> Map.ofList
         EditionState = None 

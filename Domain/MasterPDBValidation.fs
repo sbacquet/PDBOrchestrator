@@ -3,13 +3,15 @@
 open Domain.Common.Validation
 open Domain.Validation.MasterPDBVersion
 open Domain.MasterPDB
-open Domain.MasterPDBWorkingCopy
 
 let validateName name : Validation<string, string> =
     if System.String.IsNullOrEmpty(name) then
         Invalid [ "a row has an empty name" ]
     else
-        Valid name
+        if name <> name.ToUpper() then
+            Invalid [ "the PDB name must be uppercase" ]
+        else
+            Valid name
 
 let validateSchemaUser pdb schemaUser =
     if System.String.IsNullOrEmpty(schemaUser) then

@@ -345,7 +345,9 @@ let private masterPDBActorBody
         Repository = initialRepository
     }
 
-let private masterPDBActorName (masterPDB:string) = Common.ActorName (sprintf "MasterPDB='%s'" (masterPDB.ToUpper() |> System.Uri.EscapeDataString))
+let private masterPDBActorName (masterPDB:string) = 
+    Common.ActorName 
+        (sprintf "MasterPDB='%s'" (masterPDB.ToUpper() |> System.Uri.EscapeDataString))
 
 let spawn
         parameters
@@ -354,9 +356,11 @@ let spawn
         (longTaskExecutor:IActorRef<Application.OracleLongTaskExecutor.Command>)
         (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>)
         (getRepository:OracleInstance -> string -> IMasterPDBRepository)
-        name
+        (name:string)
         (actorFactory:IActorRefFactory) =
     
+    let name = name.ToUpper()
+
     let initialRepository = getRepository instance name
 
     let (Common.ActorName actorName) = masterPDBActorName name

@@ -13,6 +13,8 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             routef "/instances/%s/master-pdbs/%s" (HttpHandlers.getMasterPDB apiCtx)
             routef "/instances/%s/master-pdbs" (HttpHandlers.getMasterPDBs apiCtx)
             routef "/instances/%s/dump-import-info" (HttpHandlers.getDumpTransferInfo apiCtx)
+            routef "/instances/%s/working-copies/%s" (HttpHandlers.getWorkingCopy apiCtx)
+            routef "/instances/%s/working-copies" (HttpHandlers.getWorkingCopies apiCtx)
             routef "/instances/%s" (HttpHandlers.getInstance apiCtx) // works with /instances/primary as well
             route "/instances" >=> HttpHandlers.getAllInstances apiCtx
 

@@ -114,7 +114,7 @@ let instance2 =
         false
 
 type FakeOracleAPI(existingPDBs : Set<string>) = 
-    let mutable _existingPDBs = existingPDBs
+    let mutable _existingPDBs = existingPDBs |> Set.map (fun pdb -> pdb.ToUpper())
     member __.Logger = loggerFactory.CreateLogger("Fake Oracle API")
     member val ExistingPDBs = _existingPDBs with get, set
     interface IOracleAPI with
@@ -130,11 +130,11 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
             return Ok name 
         }
         member this.DeletePDB name = async { 
-            if not (this.ExistingPDBs |> Set.contains name) then
+            if not (this.ExistingPDBs |> Set.contains (name.ToUpper())) then
                 return sprintf "%s does not exist" name |> exn |> Error
             else
                 this.Logger.LogDebug("Deleting PDB {PDB}...", name)
-                this.ExistingPDBs <- this.ExistingPDBs |> Set.remove name
+                this.ExistingPDBs <- this.ExistingPDBs |> Set.remove (name.ToUpper())
                 return Ok name 
         }
         member this.ExportPDB _ name = async { 
@@ -143,27 +143,27 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
         }
         member this.ImportPDB _ _ name = async { 
             this.Logger.LogDebug("Importing PDB {PDB}...", name)
-            this.ExistingPDBs <- this.ExistingPDBs.Add name
+            this.ExistingPDBs <- this.ExistingPDBs.Add (name.ToUpper())
             return Ok name 
         }
         member this.SnapshotPDB sourcePDB _ name = async { 
             this.Logger.LogDebug("Snapshoting PDB {sourcePDB} to {snapshotCopy}...", sourcePDB, name)
-            this.ExistingPDBs <- this.ExistingPDBs.Add name
+            this.ExistingPDBs <- this.ExistingPDBs.Add (name.ToUpper())
             return Ok name 
         }
         member this.ClonePDB sourcePDB _ name = async { 
             this.Logger.LogDebug("Cloning PDB {sourcePDB} to {destPDB}...", sourcePDB, name)
-            this.ExistingPDBs <- this.ExistingPDBs.Add name
+            this.ExistingPDBs <- this.ExistingPDBs.Add (name.ToUpper())
             return Ok name 
         }
         member this.PDBHasSnapshots _ = async { 
             return Ok false
         }
         member this.PDBExists name = async { 
-            return Ok (this.ExistingPDBs |> Set.contains name)
+            return Ok (this.ExistingPDBs |> Set.contains (name.ToUpper()))
         }
         member this.DeletePDBSnapshots _ _ _ name = async { 
-            if not (this.ExistingPDBs |> Set.contains name) then
+            if not (this.ExistingPDBs |> Set.contains (name.ToUpper())) then
                 return Invalid [ sprintf "%s does not exist" name |> exn ]
             else
                 return Valid false
@@ -190,8 +190,8 @@ let allInstances =
         "server2", instance2
     ] |> Map.ofList
 
-let getInstanceRepo name = 
-    FakeOracleInstanceRepo allInstances.[name] :> IOracleInstanceRepository
+let getInstanceRepo (name:string) = 
+    FakeOracleInstanceRepo allInstances.[name.ToLower()] :> IOracleInstanceRepository
 
 type FakeMasterPDBRepo(pdb: MasterPDB) =
     interface IMasterPDBRepository with
@@ -200,19 +200,19 @@ type FakeMasterPDBRepo(pdb: MasterPDB) =
 
 let masterPDBMap1 =
     [ 
-        "test1", newMasterPDB "test1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
-        "test2", newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "new comment2"
+        "TEST1", newMasterPDB "TEST1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
+        "TEST2", newMasterPDB "TEST2" [ consSchema "toto" "toto" "Invest" ] "me" "new comment2"
     ] |> Map.ofList
 
 let masterPDBMap2 =
     [ 
-        "test2", newMasterPDB "test2" [ consSchema "toto" "toto" "Invest" ] "me" "comment2"
+        "TEST2", newMasterPDB "TEST2" [ consSchema "toto" "toto" "Invest" ] "me" "comment2"
     ] |> Map.ofList
 
-let getMasterPDBRepo (instance:OracleInstance) name = 
+let getMasterPDBRepo (instance:OracleInstance) (name:string) = 
     match instance.Name with
-    | "server1" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
-    | "server2" ->  FakeMasterPDBRepo masterPDBMap2.[name] :> IMasterPDBRepository
+    | "server1" -> FakeMasterPDBRepo masterPDBMap1.[name.ToUpper()] :> IMasterPDBRepository
+    | "server2" ->  FakeMasterPDBRepo masterPDBMap2.[name.ToUpper()] :> IMasterPDBRepository
     | name -> failwithf "Oracle instance %s does not exist" name
 
 let newMasterPDBRepo _ pdb = FakeMasterPDBRepo pdb :> IMasterPDBRepository
@@ -261,15 +261,14 @@ let ``Oracle instance actor creates PDB`` () = test <| fun tck ->
     | Ok state -> Assert.Equal(1, state.MasterPDBs.Length)
     | Error error -> failwith error
 
-    let parameters : OracleInstanceActor.CreateMasterPDBParams = {
-        Name = "test3"
-        Dump = @"c:\windows\system.ini" // always exists
-        Schemas = [ "schema1" ]
-        TargetSchemas = [ "targetschema1", "pass1", "Invest" ]
-        User = "me"
-        Date = DateTime.Now
-        Comment = "yeah"
-    }
+    let parameters = 
+        Application.OracleInstanceActor.newCreateMasterPDBParams
+            "test3"
+            @"c:\windows\system.ini" // always exists
+            [ "schema1" ]
+            [ "targetschema1", "pass1", "Invest" ]
+            "me"
+            "yeah"
     let _, res : WithRequestId<OracleInstanceActor.MasterPDBCreationResult> = 
         retype oracleActor <? OracleInstanceActor.CreateMasterPDB (newRequestId(), parameters) |> run
     match res with
@@ -388,7 +387,7 @@ let ``OracleInstance locks master PDB`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server1"
 
     let (_, result) : WithRequestId<MasterPDBActor.PrepareForModificationResult> = 
-        retype oracleActor <? OracleInstanceActor.PrepareMasterPDBForModification (newRequestId(), "test1", 1, "me") |> run
+        retype oracleActor <? OracleInstanceActor.PrepareMasterPDBForModification (newRequestId(), "TEST1", 1, "me") |> run
 
     match result with
     | MasterPDBActor.Prepared _ -> ()
@@ -428,7 +427,7 @@ let ``MasterPDB creates a clone working copy`` () = test <| fun tck ->
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
     let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
-    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", false) |> run
+    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "WORKINGCOPY", false) |> run
     result |> Result.mapError raise |> ignore
 
 [<Fact>]
@@ -438,46 +437,46 @@ let ``MasterPDB creates a snapshot working copy`` () = test <| fun tck ->
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
     let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
-    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "workingcopy", true) |> run
+    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "WORKINGCOPY", true) |> run
     result |> Result.mapError raise |> ignore
 
 [<Fact>]
 let ``OracleInstance creates a snapshot working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server1"
 
-    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "test1", 1, "workingcopy", true, false, false) |> run
+    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "TEST1", 1, "WORKINGCOPY", true, false, false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
     result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
-        Assert.Equal("test1", masterPDBName)
+        Assert.Equal("TEST1", masterPDBName)
         Assert.Equal(1, versionNumber)
-        Assert.Equal("workingcopy", wcName)
-        Assert.Equal("server1.com/workingcopy", service)
+        Assert.Equal("WORKINGCOPY", wcName)
+        Assert.Equal("server1.com/WORKINGCOPY", service)
         Assert.Equal("server1", instance)) |> ignore
 
 [<Fact>]
 let ``OracleInstance creates a clone working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server1"
 
-    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "test1", 1, "workingcopy", false, false, false) |> run
+    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "TEST1", 1, "WORKINGCOPY", false, false, false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
     result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
-        Assert.Equal("test1", masterPDBName)
+        Assert.Equal("TEST1", masterPDBName)
         Assert.Equal(1, versionNumber)
-        Assert.Equal("workingcopy", wcName)
-        Assert.Equal("server1.com/workingcopy", service)
+        Assert.Equal("WORKINGCOPY", wcName)
+        Assert.Equal("server1.com/WORKINGCOPY", service)
         Assert.Equal("server1", instance)) |> ignore
 
 [<Fact>]
 let ``OracleInstance (non snapshot capable) creates a working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server2"
 
-    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "test2", 1, "workingcopy", true, false, false) |> run
+    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "TEST2", 1, "WORKINGCOPY", true, false, false) |> run
     result |> Result.mapError (fun error -> failwith error) |> ignore
     result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
-        Assert.Equal("test2", masterPDBName)
+        Assert.Equal("TEST2", masterPDBName)
         Assert.Equal(1, versionNumber)
-        Assert.Equal("workingcopy", wcName)
-        Assert.Equal("server2.com/workingcopy", service)
+        Assert.Equal("WORKINGCOPY", wcName)
+        Assert.Equal("server2.com/WORKINGCOPY", service)
         Assert.Equal("server2", instance)) |> ignore
 
 [<Fact>]
@@ -487,13 +486,13 @@ let ``API creates a snapshot working copy`` () = test <| fun tck ->
 
     let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true false false |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
-    Assert.True(data |> List.contains (PDBName "workingcopy"))
-    Assert.True(data |> List.contains (PDBService "server1.com/workingcopy"))
+    Assert.True(data |> List.contains (PDBName "WORKINGCOPY"))
+    Assert.True(data |> List.contains (PDBService "server1.com/WORKINGCOPY"))
     Assert.True(data |> List.contains (OracleInstance "server1"))
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me") |> Option.isSome)
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me") |> Option.isSome)
     | Error error -> failwith error 
 
 [<Fact>]
@@ -506,7 +505,7 @@ let ``API skips creation of a snapshot working copy`` () = test <| fun tck ->
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     let firstWC = 
         match instanceState with
-        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me")
+        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me")
         | Error error -> failwith error
     Assert.True(firstWC.IsSome)
 
@@ -516,7 +515,7 @@ let ``API skips creation of a snapshot working copy`` () = test <| fun tck ->
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     let firstWC' = 
         match instanceState with
-        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me")
+        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me")
         | Error error -> failwith error
     Assert.Equal(firstWC.Value, firstWC'.Value)
 
@@ -530,7 +529,7 @@ let ``API overwrites an existing working copy`` () = test <| fun tck ->
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     let firstWC = 
         match instanceState with
-        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me")
+        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me")
         | Error error -> failwith error
     Assert.True(firstWC.IsSome)
 
@@ -540,7 +539,7 @@ let ``API overwrites an existing working copy`` () = test <| fun tck ->
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     let firstWC' = 
         match instanceState with
-        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me")
+        | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me")
         | Error error -> failwith error
     Assert.NotEqual(firstWC.Value, firstWC'.Value)
 
@@ -571,13 +570,13 @@ let ``API creates a clone working copy`` () = test <| fun tck ->
 
     let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" false false false |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
-    Assert.True(data |> List.contains (PDBName "workingcopy"))
-    Assert.True(data |> List.contains (PDBService "server1.com/workingcopy"))
+    Assert.True(data |> List.contains (PDBName "WORKINGCOPY"))
+    Assert.True(data |> List.contains (PDBService "server1.com/WORKINGCOPY"))
     Assert.True(data |> List.contains (OracleInstance "server1"))
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy" && wc.CreatedBy = "me") |> Option.isSome)
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me") |> Option.isSome)
     | Error error -> failwith error 
 
 [<Fact>]
@@ -590,7 +589,7 @@ let ``API fails to create a snapshot working copy`` () = test <| fun tck ->
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy") |> Option.isNone)
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY") |> Option.isNone)
     | Error error -> failwith error 
 
 [<Fact>]
@@ -603,7 +602,7 @@ let ``API fails to create a clone working copy`` () = test <| fun tck ->
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "workingcopy") |> Option.isNone)
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY") |> Option.isNone)
     | Error error -> failwith error 
 
 [<Fact>]
@@ -616,8 +615,8 @@ let ``API creates a working copy of edition`` () = test <| fun tck ->
 
     let request = API.createWorkingCopyOfEdition ctx "me" "test1" "workingcopy" false false |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
-    Assert.True(data |> List.contains (PDBName "workingcopy"))
-    Assert.True(data |> List.contains (PDBService "server1.com/workingcopy"))
+    Assert.True(data |> List.contains (PDBName "WORKINGCOPY"))
+    Assert.True(data |> List.contains (PDBService "server1.com/WORKINGCOPY"))
     Assert.True(data |> List.contains (OracleInstance "server1"))
 
 [<Fact>]
@@ -645,16 +644,16 @@ let ``API gets no pending changes`` () = test <| fun tck ->
 
 [<Fact>]
 let ``API gets pending changes`` () = test <| fun tck ->
-    let getMasterPDBRepo (instance:OracleInstance) name = 
+    let getMasterPDBRepo (instance:OracleInstance) (name:string) = 
         match instance.Name with
         | "server1" -> 
             let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newEditionInfo "lockman" |> Some) false Map.empty
             match name with
-            | "test1" | "test2" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
-            | "locked" -> FakeMasterPDBRepo lockedMasterPDB :> IMasterPDBRepository
+            | "TEST1" | "TEST2" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
+            | "LOCKED" -> FakeMasterPDBRepo lockedMasterPDB :> IMasterPDBRepository
             | name -> failwithf "Master PDB %s does not exist on instance %s" name instance.Name
         | name -> failwithf "Oracle instance %s does not exist" name
-    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with MasterPDBs = "locked" :: instance1.MasterPDBs }) :> IOracleInstanceRepository
+    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with MasterPDBs = "LOCKED" :: instance1.MasterPDBs }) :> IOracleInstanceRepository
     let orchestratorRepo = FakeOrchestratorRepo { OracleInstanceNames = [ "server1" ]; PrimaryInstance = "server1" }
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "locked"; "locked_EDITION" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
@@ -667,29 +666,29 @@ let ``API gets pending changes`` () = test <| fun tck ->
     match pendingChangesMaybe with
     | Ok pendingChanges -> 
         let lockedPDBName, lockInfo = pendingChanges.Value.OpenMasterPDBs.Head
-        Assert.Equal("locked", lockedPDBName)
+        Assert.Equal("LOCKED", lockedPDBName)
         Assert.Equal("lockman", lockInfo.Editor)
         Assert.Equal(1, pendingChanges.Value.Commands.Length)
     | Error error -> failwith error
 
 [<Fact>]
 let ``API deletes a working copy`` () = test <| fun tck ->
-    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "test1wc", newDurableWorkingCopy "me" (SpecificVersion 1) "test1" "test1wc" ] |> Map.ofList }) :> IOracleInstanceRepository
+    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "TEST1WC", newDurableWorkingCopy "me" (SpecificVersion 1) "TEST1" "TEST1WC" ] |> Map.ofList }) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "test1wc" && wc.CreatedBy = "me") |> Option.isSome)
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC" && wc.CreatedBy = "me") |> Option.isSome)
     | Error error -> failwith error 
 
     let request = API.deleteWorkingCopy ctx "me" "server1" "test1wc" |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
-    Assert.True(data |> List.contains (PDBName "test1wc"))
+    Assert.True(data |> List.contains (PDBName "TEST1WC"))
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "test1wc") |> Option.isNone)
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC") |> Option.isNone)
     | Error error -> failwith error 
 
 [<Fact>]
