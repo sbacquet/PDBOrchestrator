@@ -3,37 +3,37 @@
   "schemas": [
     {
       "user": "CI_SANDBOX_721",
-      "password": "A5/JXBgzsHyF7uEak7BUx725H/q+nAMARfz415bLCvI=",
+      "password": "yMhM3diIMfF5HG9WI0/y7+ZRpdSamzR6b7LiD/L2SVk=",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 8,
+      "versionNumber": 8,
       "createdBy": "dcristac",
       "creationDate": "2017-08-24T09:53:59.0000000Z",
       "comment": "Added setup for Collat Dashboard and Detailed Limits Report PoCoTo test"
     },
     {
-      "number": 10,
+      "versionNumber": 10,
       "createdBy": "vlpatuna",
       "creationDate": "2018-06-05T15:52:55.0000000Z",
       "comment": "grant manage scheduler to public"
     },
     {
-      "number": 12,
+      "versionNumber": 12,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
     },
     {
-      "number": 13,
+      "versionNumber": 13,
       "createdBy": "aanghela",
       "creationDate": "2019-04-10T15:09:14.0000000Z",
       "comment": "Removed one Inst Modif to fix test for SRQ-67095"
     }
   ],
   "_version": 1,
-  "_iv": "s46Xuflhx7oLVSAs9po3vw=="
+  "_iv": "ZUIdTgof9wrkER97vV2Nug=="
 }

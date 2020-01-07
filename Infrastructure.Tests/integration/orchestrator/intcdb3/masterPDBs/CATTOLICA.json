@@ -3,30 +3,30 @@
   "schemas": [
     {
       "user": "fusioninvest",
-      "password": "7KX3zwhIbIk8IGCRpXykbg==",
+      "password": "cvW0zpY+2EQI11zE98HDaQ==",
       "type": "Invest"
     },
     {
       "user": "af",
-      "password": "7KX3zwhIbIk8IGCRpXykbg==",
+      "password": "cvW0zpY+2EQI11zE98HDaQ==",
       "type": "SRM"
     }
   ],
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2019-02-24T23:00:00.0000000Z",
       "comment": "Imported schemas CATDEVFI from dump //fr1pslsophisdb01/ImportDumps/expdp_schema_CATDEVFI_21FEB2019.dmp"
     },
     {
-      "number": 2,
+      "versionNumber": 2,
       "createdBy": "sbacquet",
       "creationDate": "2019-03-31T22:00:00.0000000Z",
       "comment": "Updated with 7.3.0 build 6002"
     },
     {
-      "number": 3,
+      "versionNumber": 3,
       "createdBy": "sbacquet",
       "creationDate": "2019-04-17T22:00:00.0000000Z",
       "comment": "New funds for Raise Partner",
@@ -34,5 +34,5 @@
     }
   ],
   "_version": 1,
-  "_iv": "4ZBcee3Kal8FFAb1Wvfp+g=="
+  "_iv": "eCx5kqjBCeiE7/pkITZATw=="
 }

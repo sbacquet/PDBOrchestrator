@@ -3,61 +3,61 @@
   "schemas": [
     {
       "user": "neptune720_test",
-      "password": "UeQn3KpZ6qHYoACYRQHBQA==",
+      "password": "hYEJyeyxrVqaAF+P3JfwDA==",
       "type": "Invest"
     }
   ],
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2017-02-21T13:50:25.0000000Z",
       "comment": "First version",
       "deleted": true
     },
     {
-      "number": 19,
+      "versionNumber": 19,
       "createdBy": "vbergeret",
       "creationDate": "2017-08-31T16:56:48.0000000Z",
       "comment": "Add dcb test with no consolidation"
     },
     {
-      "number": 28,
+      "versionNumber": 28,
       "createdBy": "rmoncet",
       "creationDate": "2017-10-18T15:39:48.0000000Z",
       "comment": "SRQ-59151 + SIMPLE-6208: modify Report Templates for benchmark automated tests, so that the columns to compare are parameters of the test, not to be saved in a column configuration in DB. Enable generation of missing benchmark components in LDPM_1_Template."
     },
     {
-      "number": 30,
+      "versionNumber": 30,
       "createdBy": "vlpatuna",
       "creationDate": "2018-03-28T13:09:59.0000000Z",
       "comment": "Grant SCHEDULER_ADMIN role to public"
     },
     {
-      "number": 33,
+      "versionNumber": 33,
       "createdBy": "afarhat",
       "creationDate": "2018-06-04T09:46:14.0000000Z",
       "comment": "add password to TestUser1"
     },
     {
-      "number": 35,
+      "versionNumber": 35,
       "createdBy": "lzhu",
       "creationDate": "2018-11-07T08:27:13.0000000Z",
       "comment": "delete old user preference USE_PNL_DATE which is no longer used but it will have a name conflict with the new user preference when mounting the database"
     },
     {
-      "number": 36,
+      "versionNumber": 36,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
     },
     {
-      "number": 37,
+      "versionNumber": 37,
       "createdBy": "afarhat",
       "creationDate": "2019-07-24T17:06:21.0000000Z",
       "comment": "migrate advanced limits to the new model"
     }
   ],
   "_version": 1,
-  "_iv": "zdWGhEfqLXzCNjZqHYwJzA=="
+  "_iv": "A/nbN42l/FduYlGxBtCUBA=="
 }

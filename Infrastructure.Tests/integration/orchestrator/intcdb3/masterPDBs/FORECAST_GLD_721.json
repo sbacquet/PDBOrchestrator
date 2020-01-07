@@ -3,26 +3,26 @@
   "schemas": [
     {
       "user": "FORECAST_GLD_721",
-      "password": "DMW2Iop8XJjFpP2yTh8I81PUd0LYzRWrhYcZLisIg/xneIDL3O8TWm+cXXerHogt",
+      "password": "M6hIHo5NUpr0bYn7Wq6LcMa6uVfMcy1oHpVZwLwE+Giaw7kOWcnkkrRp34Tg/mbp",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "xdelecroix",
       "creationDate": "2017-08-30T22:00:00.0000000Z",
       "comment": "Imported schemas FORECAST_GLD_721 from dump //fr1pswbld10.misys.global.ad/TestData/DatabaseDumps/FORECAST_GLD_721_TEST.DMP",
       "deleted": true
     },
     {
-      "number": 2,
+      "versionNumber": 2,
       "createdBy": "rpoenaru",
       "creationDate": "2017-09-03T22:00:00.0000000Z",
       "comment": "SIMPLE-5936: Add new auto-transmit selector entry."
     }
   ],
   "_version": 1,
-  "_iv": "PINKk8tL8xsA8bMU9HHq3Q=="
+  "_iv": "LbIaqfPg/1aFF4efzaf6xg=="
 }

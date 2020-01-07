@@ -65,6 +65,24 @@ let getMasterPDB apiCtx (instance:string, pdb:string) next (ctx:HttpContext) = t
     | Error error -> return! RequestErrors.notFound (text error) next ctx
 }
 
+let getMasterPDBVersions apiCtx (instance:string, pdb:string) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getMasterPDBState apiCtx instance pdb
+    match stateMaybe with
+    | Ok state -> return! json (MasterPDB.masterPDBVersionstoJson state) next ctx
+    | Error error -> return! RequestErrors.notFound (text error) next ctx
+}
+
+let getMasterPDBVersion apiCtx (instance:string, pdb:string, version:int) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getMasterPDBState apiCtx instance pdb
+    match stateMaybe with
+    | Ok state -> 
+        let versionPDB = state.Versions |> List.tryFind (fun v -> v.VersionNumber = version)
+        match versionPDB with
+        | Some versionPDB -> return! json (MasterPDBVersion.versionFulltoJson (Application.DTO.MasterPDB.toFullDTO state versionPDB)) next ctx
+        | None -> return! RequestErrors.notFound (sprintf "Master PDB %s has no version %d on Oracle instance %s" pdb version instance |> text) next ctx
+    | Error error -> return! RequestErrors.notFound (text error) next ctx
+}
+
 let getWorkingCopies apiCtx (instancename:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx instancename
     match stateMaybe with
@@ -86,7 +104,7 @@ let getWorkingCopy apiCtx (instancename:string, workingCopyName:string) next (ct
         return! RequestErrors.notFound (text error) next ctx
 }
 
-let getRequestStatus apiCtx (requestId:PendingRequest.RequestId) next (ctx:HttpContext) = task {
+let getRequestStatus (apiCtx:API.APIContext) (requestId:PendingRequest.RequestId) next (ctx:HttpContext) = task {
 
     let completedRequestDataKeyValue = function
     | OrchestratorActor.PDBName name -> "PDB name", name.ToUpper()
@@ -94,6 +112,7 @@ let getRequestStatus apiCtx (requestId:PendingRequest.RequestId) next (ctx:HttpC
     | OrchestratorActor.PDBService service -> "PDB service", service
     | OrchestratorActor.SchemaLogon (schemaType, schemaLogon) -> sprintf "%s schema logon" schemaType, schemaLogon
     | OrchestratorActor.OracleInstance instance -> "Oracle instance", instance.ToLower()
+    | OrchestratorActor.ResourceLink link -> "Resource link", apiCtx.Endpoint + link
 
     let! (_, requestStatus) = API.getRequestStatus apiCtx requestId
     

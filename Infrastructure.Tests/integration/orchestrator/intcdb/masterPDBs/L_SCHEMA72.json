@@ -3,43 +3,43 @@
   "schemas": [
     {
       "user": "L_SCHEMA72",
-      "password": "GJi5oTIvlH9orZ4CkGdP6Q==",
+      "password": "1v/qVTU1U4tJUfGrgWGb8g==",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 10,
+      "versionNumber": 10,
       "createdBy": "truongle",
       "creationDate": "2017-08-31T15:18:49.0000000Z",
       "comment": "Adding test for import/export swap trades"
     },
     {
-      "number": 11,
+      "versionNumber": 11,
       "createdBy": "thkhayat",
       "creationDate": "2017-11-08T13:51:49.0000000Z",
       "comment": "Adding test for inflation seasonality"
     },
     {
-      "number": 15,
+      "versionNumber": 15,
       "createdBy": "tashamza",
       "creationDate": "2018-04-11T22:18:50.0000000Z",
       "comment": "add funds for IS Update tests in coherency"
     },
     {
-      "number": 18,
+      "versionNumber": 18,
       "createdBy": "rmoncet",
       "creationDate": "2018-06-07T07:36:10.0000000Z",
       "comment": "Fix inconsistent state for sequence AM_BENCHMARK_FXHEDGE_SEQ"
     },
     {
-      "number": 19,
+      "versionNumber": 19,
       "createdBy": "schazel",
       "creationDate": "2018-07-24T11:52:04.0000000Z",
       "comment": "Update ORDER_UNEXEC_REPORTING_COLL and ORDER_UNEXEC_REPORTING_REPO in order to be compliant with toolkit columns"
     }
   ],
   "_version": 1,
-  "_iv": "5aNEp683ijcFpIsCahjbAQ=="
+  "_iv": "dz26gEL7dqpacb/KT0xaTA=="
 }

@@ -3,24 +3,24 @@
   "schemas": [
     {
       "user": "LOCKED_PRICING721",
-      "password": "3roeUxcJ9ytuj92jBslIig==",
+      "password": "Am7d0Epg/+atlAt88ixNhA==",
       "type": "Invest"
     }
   ],
   "versions": [
     {
-      "number": 2,
+      "versionNumber": 2,
       "createdBy": "vlpatuna",
       "creationDate": "2018-03-27T22:00:00.0000000Z",
       "comment": "Grant SCHEDULER_ADMIN role to public"
     },
     {
-      "number": 3,
+      "versionNumber": 3,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
     }
   ],
   "_version": 1,
-  "_iv": "vzcHFvRP4bux+YPmRhwL2Q=="
+  "_iv": "slyQTZigJtqX14CecGaBYg=="
 }

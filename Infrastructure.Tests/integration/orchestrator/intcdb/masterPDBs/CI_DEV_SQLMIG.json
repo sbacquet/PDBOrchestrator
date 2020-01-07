@@ -3,7 +3,7 @@
   "schemas": [
     {
       "user": "CI_DEV_SQLMIG",
-      "password": "st9DlR+AF+YeQoO2Srbokwiziu5GqVKUCXK81zRyTAg=",
+      "password": "f+Qr5mvq9icKuDNv7Ox/eFWiwIMLI6LfRwibG/ys+m0=",
       "type": "Invest"
     }
   ],
@@ -13,18 +13,18 @@
   "editionDisabled": true,
   "versions": [
     {
-      "number": 3,
+      "versionNumber": 3,
       "createdBy": "sbacquet",
       "creationDate": "2017-08-23T14:21:08.0000000Z",
       "comment": "Password expiry set to UNLIMITED"
     },
     {
-      "number": 4,
+      "versionNumber": 4,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
     }
   ],
   "_version": 1,
-  "_iv": "yHWHsITmra8IpWbWP4C2lw=="
+  "_iv": "yHy/7Jx8NQ304LjphxCBtA=="
 }

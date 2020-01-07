@@ -3,74 +3,74 @@
   "schemas": [
     {
       "user": "pricing_main",
-      "password": "mbuILyKxlAeOJeaN1IN8Fw==",
+      "password": "wS+J0v+8CUlusKfJHIiV9Q==",
       "type": "Invest"
     }
   ],
   "versions": [
     {
-      "number": 5,
+      "versionNumber": 5,
       "createdBy": "vlpatuna",
       "creationDate": "2018-03-27T22:00:00.0000000Z",
       "comment": "Grant SCHEDULER_ADMIN role to public"
     },
     {
-      "number": 6,
+      "versionNumber": 6,
       "createdBy": "xdelecroix",
       "creationDate": "2018-05-01T22:00:00.0000000Z",
       "comment": "Import new dump file."
     },
     {
-      "number": 15,
+      "versionNumber": 15,
       "createdBy": "maranton",
       "creationDate": "2018-09-23T22:00:00.0000000Z",
       "comment": "Change the bump size for Delta and Vega from 0.01 to 1 on user IR_Derivatives"
     },
     {
-      "number": 19,
+      "versionNumber": 19,
       "createdBy": "jenkins.sophis",
       "creationDate": "2018-12-03T23:00:00.0000000Z",
       "comment": "Import new dump file."
     },
     {
-      "number": 23,
+      "versionNumber": 23,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?",
       "deleted": true
     },
     {
-      "number": 24,
+      "versionNumber": 24,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-03-26T23:00:00.0000000Z",
       "comment": "Import new dump file.",
       "deleted": true
     },
     {
-      "number": 25,
+      "versionNumber": 25,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-10T22:00:00.0000000Z",
       "comment": "Import new dump file."
     },
     {
-      "number": 26,
+      "versionNumber": 26,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-29T22:00:00.0000000Z",
       "comment": "Import new dump file."
     },
     {
-      "number": 27,
+      "versionNumber": 27,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-10-07T22:00:00.0000000Z",
       "comment": "Import new dump file."
     },
     {
-      "number": 28,
+      "versionNumber": 28,
       "createdBy": "mgiordano",
       "creationDate": "2019-12-08T23:00:00.0000000Z",
       "comment": "update user preferences for EQ_Derivatives : removed 2nd and 3rd order greeks + crosed vega + fo accounting :D"
     }
   ],
   "_version": 1,
-  "_iv": "LfNaEQGtbnCZTNF03w8dJw=="
+  "_iv": "pLF4k6DymuIv/ffE1Hc7SA=="
 }

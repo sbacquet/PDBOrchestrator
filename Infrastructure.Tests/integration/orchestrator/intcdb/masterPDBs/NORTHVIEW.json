@@ -3,49 +3,49 @@
   "schemas": [
     {
       "user": "NVW_72X_REF",
-      "password": "zxYGTX0W0Pg5SrfikiGDaQ==",
+      "password": "zhGgyn28i5waa+VuNrQ4dQ==",
       "type": "Invest"
     }
   ],
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2018-08-27T16:02:47.0000000Z",
       "comment": "Imported schemas NVW_72X_REF from dump d:/Datapump/Northview.dmp"
     },
     {
-      "number": 5,
+      "versionNumber": 5,
       "createdBy": "aavdulaj",
       "creationDate": "2018-11-13T16:59:03.0000000Z",
       "comment": "Update configurations of Variation Margin selector and Report Template for Nostro Cash Statement tests."
     },
     {
-      "number": 9,
+      "versionNumber": 9,
       "createdBy": "aavdulaj",
       "creationDate": "2019-01-25T15:59:58.0000000Z",
       "comment": "Update for External Systems tests."
     },
     {
-      "number": 12,
+      "versionNumber": 12,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
     },
     {
-      "number": 13,
+      "versionNumber": 13,
       "createdBy": "tbarrevi",
       "creationDate": "2019-07-23T15:46:53.0000000Z",
       "comment": "Add extraction for fx pnl pocoto test",
       "deleted": true
     },
     {
-      "number": 14,
+      "versionNumber": 14,
       "createdBy": "aionesc3",
       "creationDate": "2019-09-10T10:46:49.0000000Z",
       "comment": "update user rights for users 294,500 "
     }
   ],
   "_version": 1,
-  "_iv": "0oquS6ij+I7Zl8O8EjIEeg=="
+  "_iv": "omRDQliHerl7k2nZLXkA2A=="
 }

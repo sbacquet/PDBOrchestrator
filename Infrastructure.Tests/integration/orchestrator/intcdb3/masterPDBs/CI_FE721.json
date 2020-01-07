@@ -3,44 +3,44 @@
   "schemas": [
     {
       "user": "CI_FE721",
-      "password": "bdukftuSfhBGbEo1R/jOhkW4kVKW/Kpm4MS9yt2tscI=",
+      "password": "muFzphBjyFe1YeSag4fGkxD8iN5BPMgLJrBjPIHSV2o=",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 10,
+      "versionNumber": 10,
       "createdBy": "xinzhang",
       "creationDate": "2017-07-12T22:00:00.0000000Z",
       "comment": "Add two brazilian inflation bonds to test dev on SIMPLE-5292",
       "deleted": true
     },
     {
-      "number": 13,
+      "versionNumber": 13,
       "createdBy": "sbacquet",
       "creationDate": "2017-08-22T22:00:00.0000000Z",
       "comment": "Password expiry set to UNLIMITED"
     },
     {
-      "number": 15,
+      "versionNumber": 15,
       "createdBy": "XINZHANG",
       "creationDate": "2017-12-07T23:00:00.0000000Z",
       "comment": "SRQ-62687 : Add Brazilian inflation bonds with Beta model."
     },
     {
-      "number": 16,
+      "versionNumber": 16,
       "createdBy": "vlpatuna",
       "creationDate": "2018-07-22T22:00:00.0000000Z",
       "comment": "grant MANAGE SCHEDULER to public"
     },
     {
-      "number": 18,
+      "versionNumber": 18,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
     }
   ],
   "_version": 1,
-  "_iv": "tYZ98yct0g9CdptCA0Yjug=="
+  "_iv": "5TF/NyTSnd2qxCFMXKayDQ=="
 }

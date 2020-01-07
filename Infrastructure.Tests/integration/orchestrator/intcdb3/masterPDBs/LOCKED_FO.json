@@ -3,24 +3,24 @@
   "schemas": [
     {
       "user": "fusioninvest",
-      "password": "VWkKXrDh075gUf/vNtR2YQ==",
+      "password": "/63PQ/IJQh9MuNypCUSfWg==",
       "type": "Invest"
     }
   ],
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2019-06-12T22:00:00.0000000Z",
       "comment": "Imported schemas LOCKED_FO from dump //sophis/Dumps/locked_fo_20190607.dmp"
     },
     {
-      "number": 2,
+      "versionNumber": 2,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-09-25T22:00:00.0000000Z",
       "comment": "Import new dump file."
     }
   ],
   "_version": 1,
-  "_iv": "osiWtG0HeWkjPOlk7I0Xfw=="
+  "_iv": "CaaSqB4+3IirWfsZuJP5WQ=="
 }

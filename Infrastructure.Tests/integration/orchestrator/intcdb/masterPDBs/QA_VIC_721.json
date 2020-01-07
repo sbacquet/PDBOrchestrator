@@ -3,25 +3,25 @@
   "schemas": [
     {
       "user": "locked_pricing632to721",
-      "password": "MxUMBxYtv6lKpxSQMI040Q==",
+      "password": "B/VEVt6iA9avNcWld15oIQ==",
       "type": "Invest"
     }
   ],
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "xdelecroix",
       "creationDate": "2017-07-27T15:58:21.0000000Z",
       "comment": "Imported schemas locked_pricing632to721 from dump //fr1csltsoqa0015/intcdb_dumps/QA_VIC_721.DMP",
       "deleted": true
     },
     {
-      "number": 4,
+      "versionNumber": 4,
       "createdBy": "xdelecroix",
       "creationDate": "2017-08-24T15:37:33.0000000Z",
       "comment": "Updating TCA context settings."
     }
   ],
   "_version": 1,
-  "_iv": "9JvDdBn3p438l8/MDRAlPA=="
+  "_iv": "JISp3+L/2Ls0yMtwrRSQkw=="
 }

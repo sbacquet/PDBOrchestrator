@@ -38,7 +38,7 @@ let consMasterPDB (name:string) schemas versions (editionState:EditionInfo optio
     { 
         Name = name.ToUpper()
         Schemas = schemas 
-        Versions = versions |> List.map (fun version -> version.Number, version) |> Map.ofList
+        Versions = versions |> List.map (fun version -> version.VersionNumber, version) |> Map.ofList
         EditionState = editionState |> Option.map (fun editionState -> { editionState with Date = editionState.Date.ToUniversalTime() })
         EditionDisabled = editionDisabled
         Properties = properties
@@ -68,12 +68,12 @@ let getLatestAvailableVersion masterPDB =
 
 let getLatestAvailableVersionNumber masterPDB =
     getLatestAvailableVersion masterPDB
-    |> Option.map (fun v -> v.Number)
+    |> Option.map (fun v -> v.VersionNumber)
     |> Option.defaultValue 0
 
 let getNextAvailableVersion masterPDB =
     let highestVersionUsed = masterPDB.Versions |> Map.toList |> List.last |> snd
-    highestVersionUsed.Number + 1
+    highestVersionUsed.VersionNumber + 1
 
 let addVersionToMasterPDB createdBy comment masterPDB =
     let newVersionNumber = getNextAvailableVersion masterPDB

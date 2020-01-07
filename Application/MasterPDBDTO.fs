@@ -2,42 +2,7 @@
 
 open System
 open Domain
-
-type SchemaDTO = {
-    User: string
-    Password: string
-    Type: string
-}
-
-type MasterPDBVersionDTO = {
-    Number: int
-    CreatedBy: string
-    CreationDate: DateTime
-    Comment: string
-    Deleted : bool
-    Manifest : string
-    Properties: Map<string, string>
-}
-
-let consMasterPDBVersionDTO version createdBy (creationDate:DateTime) comment deleted manifest properties = {
-    Number = version
-    CreatedBy = createdBy
-    CreationDate = creationDate.ToUniversalTime()
-    Comment = comment
-    Deleted = deleted
-    Manifest = manifest
-    Properties = properties
-}
-
-let toMasterPDBVersionDTO manifest (version:Domain.MasterPDBVersion.MasterPDBVersion) =
-    consMasterPDBVersionDTO 
-        version.Number 
-        version.CreatedBy 
-        version.CreationDate
-        version.Comment 
-        version.Deleted 
-        manifest 
-        version.Properties
+open Application.DTO.MasterPDBVersion
 
 type EditionInfoDTO = {
     Editor: string
@@ -72,11 +37,9 @@ let consMasterPDBDTO name schemas latestVersion versions editionState editionDis
 let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) =
     consMasterPDBDTO
         masterPDB.Name
-        (masterPDB.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type }))
+        (masterPDB.Schemas |> List.map toSchemaDTO)
         (masterPDB |> Domain.MasterPDB.getLatestAvailableVersionNumber)
-        (masterPDB.Versions 
-         |> Map.map (fun _ version -> version |> toMasterPDBVersionDTO (Domain.MasterPDBVersion.manifestFile masterPDB.Name version.Number))
-         |> Map.toList |> List.map snd)
+        (masterPDB.Versions |> Map.toList |> List.map (fun (_, version) -> version |> toDTO (Domain.MasterPDBVersion.manifestFile masterPDB.Name version.VersionNumber)))
         (masterPDB.EditionState |> toEditionInfoDTO)
         masterPDB.EditionDisabled
         masterPDB.Properties
@@ -87,7 +50,7 @@ let fromDTO (dto:MasterPDBDTO) : Domain.MasterPDB.MasterPDB =
         (dto.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type }))
         (dto.Versions |> List.map (fun version -> 
             MasterPDBVersion.consPDBVersion 
-                version.Number
+                version.VersionNumber
                 version.Deleted
                 version.CreatedBy
                 version.CreationDate
@@ -98,3 +61,14 @@ let fromDTO (dto:MasterPDBDTO) : Domain.MasterPDB.MasterPDB =
         dto.Properties
 
 
+let toFullDTO (masterPDB:MasterPDBDTO) (version:MasterPDBVersionDTO) =
+    consMasterPDBVersionFullDTO
+        masterPDB.Name
+        masterPDB.Schemas
+        version.VersionNumber
+        version.CreatedBy
+        version.CreationDate
+        version.Comment
+        version.Deleted
+        version.Manifest
+        version.Properties

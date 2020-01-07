@@ -3,19 +3,19 @@
   "schemas": [
     {
       "user": "PTF_TEST_721_2",
-      "password": "pIwXl9bUw4+xP/uiaNNJXSVFMfSRFuDR4Cz46dnFwnE=",
+      "password": "sw/znHjwVt9bkzx8V4Q1GchkqSQNcz/ngEhRvo6JOhc=",
       "type": "Invest"
     },
     {
       "user": "AF",
-      "password": "WRHVicPdOR+E26Rjq7doXA==",
+      "password": "aebpCp+9dtHq/dc1g8EoLA==",
       "type": "SRM"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 16,
+      "versionNumber": 16,
       "createdBy": "sbacquet",
       "creationDate": "2017-08-23T13:29:12.0000000Z",
       "comment": "Password expiry set to UNLIMITED",
@@ -24,7 +24,7 @@
       }
     },
     {
-      "number": 22,
+      "versionNumber": 22,
       "createdBy": "mgiordano",
       "creationDate": "2017-11-01T21:20:23.0000000Z",
       "comment": "wrong setup unintentionally saved => calculation server mode = off, calc server test are failing",
@@ -33,7 +33,7 @@
       }
     },
     {
-      "number": 23,
+      "versionNumber": 23,
       "createdBy": "mgiordano",
       "creationDate": "2017-11-28T16:53:10.0000000Z",
       "comment": "?",
@@ -42,7 +42,7 @@
       }
     },
     {
-      "number": 31,
+      "versionNumber": 31,
       "createdBy": "oroussel",
       "creationDate": "2018-04-09T15:17:41.0000000Z",
       "comment": "cleaning in My Portfolios : remove some thousands of position on fixed bonds and shares",
@@ -51,7 +51,7 @@
       }
     },
     {
-      "number": 33,
+      "versionNumber": 33,
       "createdBy": "oroussel",
       "creationDate": "2018-04-17T15:58:12.0000000Z",
       "comment": "for inflation coherency test, add password to user UserLocal",
@@ -60,7 +60,7 @@
       }
     },
     {
-      "number": 35,
+      "versionNumber": 35,
       "createdBy": "smarchal",
       "creationDate": "2018-10-12T10:10:47.0000000Z",
       "comment": "Fix bonds with new quotation conventions",
@@ -69,7 +69,7 @@
       }
     },
     {
-      "number": 38,
+      "versionNumber": 38,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?",
@@ -79,7 +79,7 @@
       }
     },
     {
-      "number": 39,
+      "versionNumber": 39,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?",
@@ -88,12 +88,12 @@
       }
     },
     {
-      "number": 40,
+      "versionNumber": 40,
       "createdBy": "sbacquet",
       "creationDate": "2019-05-05T14:39:30.0000000Z",
       "comment": "Added Analytics Factory schema (AF/pass) from FE PDB"
     }
   ],
   "_version": 1,
-  "_iv": "kfg5Coc5LAGtYy6kvVFnLQ=="
+  "_iv": "Jw1iVWYAZ36dMhd5KMMH1w=="
 }

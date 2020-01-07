@@ -3,13 +3,13 @@
   "schemas": [
     {
       "user": "LOCKED_PRICING721",
-      "password": "Vev2g5b48gIf/zplyACUAA==",
+      "password": "XE/O7erlhTDrn7TCNTWNDg==",
       "type": "Invest"
     }
   ],
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2017-12-20T23:00:00.0000000Z",
       "comment": "Imported schemas LOCKED_PRICING721 from dump //fr1pswbld10.misys.global.ad/TestData/DatabaseDumps/locked_pricing721.DMP",
@@ -17,5 +17,5 @@
     }
   ],
   "_version": 1,
-  "_iv": "Ghbjd9baepBE6Z5PTB4gZQ=="
+  "_iv": "uPMGDqDNgjc7oWt4XrFQPA=="
 }

@@ -3,44 +3,44 @@
   "schemas": [
     {
       "user": "kilimanjaro_721",
-      "password": "g7pFxdSbP+gEvU8FcSm1xg==",
+      "password": "JtR1pt3/AkpY7d2UbjqcvQ==",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2017-02-21T09:34:51.0000000Z",
       "comment": "First version",
       "deleted": true
     },
     {
-      "number": 11,
+      "versionNumber": 11,
       "createdBy": "sbacquet",
       "creationDate": "2017-08-23T13:32:12.0000000Z",
       "comment": "Password expiry set to UNLIMITED"
     },
     {
-      "number": 12,
+      "versionNumber": 12,
       "createdBy": "vlpatuna",
       "creationDate": "2018-03-28T12:57:26.0000000Z",
       "comment": "Grant SCHEDULER_ADMIN role to public"
     },
     {
-      "number": 13,
+      "versionNumber": 13,
       "createdBy": "vlpatuna",
       "creationDate": "2018-07-23T16:38:33.0000000Z",
       "comment": "grant MANAGE SCHEDULER to public"
     },
     {
-      "number": 14,
+      "versionNumber": 14,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
     }
   ],
   "_version": 1,
-  "_iv": "Xzh1cVqSrpnzsARdxTqXgg=="
+  "_iv": "P9jSmsLyRSMQjY0yOM5T3A=="
 }

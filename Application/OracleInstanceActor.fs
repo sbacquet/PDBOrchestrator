@@ -110,8 +110,8 @@ let stateError error : StateResult = Error error
 
 type MasterPDBCreationResult = 
 | InvalidRequest of string list
-| MasterPDBCreated of Domain.MasterPDB.MasterPDB
-| MasterPDBCreationFailure of string * string
+| MasterPDBCreated of string * Domain.MasterPDB.MasterPDB
+| MasterPDBCreationFailure of string * string * string
 
 type CreateWorkingCopyResult = Result<string * int * string * string * string, string>
 
@@ -494,7 +494,7 @@ let private oracleInstanceActorBody
                                 collaborators 
                                 masterPDB
                                 newMasterPDBRepo
-                        requester <! (requestId, MasterPDBCreated masterPDB)
+                        requester <! (requestId, MasterPDBCreated (instance.Name, masterPDB))
                         let newInstance, newCollabs = 
                             match newStateResult with
                             | Ok s -> s
@@ -504,7 +504,7 @@ let private oracleInstanceActorBody
                         return! loop { state with Instance = newInstance; Collaborators = newCollabs; Requests = newRequests }
                     | Error error -> 
                         ctx.Log.Value.Error("PDB {pdb} failed to create with error : {error}", commandParameters.Name, error.Message)
-                        requester <! (requestId, MasterPDBCreationFailure (commandParameters.Name, error.Message))
+                        requester <! (requestId, MasterPDBCreationFailure (instance.Name, commandParameters.Name, error.Message))
                         return! loop { state with Requests = newRequests }
 
                 | CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, _) ->

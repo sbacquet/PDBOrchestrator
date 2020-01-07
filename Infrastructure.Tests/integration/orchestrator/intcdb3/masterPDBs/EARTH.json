@@ -3,62 +3,62 @@
   "schemas": [
     {
       "user": "golden_720",
-      "password": "3F+2TwG9Fh5e2WAZyubLZA==",
+      "password": "vjyqUTwDNrN4Em98hDACxw==",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2017-02-20T23:00:00.0000000Z",
       "comment": "First version",
       "deleted": true
     },
     {
-      "number": 19,
+      "versionNumber": 19,
       "createdBy": "adriivan",
       "creationDate": "2017-08-20T22:00:00.0000000Z",
       "comment": "modified auto transmit selector rule"
     },
     {
-      "number": 30,
+      "versionNumber": 30,
       "createdBy": "ericarde",
       "creationDate": "2017-11-13T23:00:00.0000000Z",
       "comment": "fix the optimize_history_pkg which had two historique tables defined"
     },
     {
-      "number": 31,
+      "versionNumber": 31,
       "createdBy": "vlpatuna",
       "creationDate": "2018-03-27T22:00:00.0000000Z",
       "comment": "Grant SCHEDULER_ADMIN role to public"
     },
     {
-      "number": 34,
+      "versionNumber": 34,
       "createdBy": "stioanas",
       "creationDate": "2018-04-16T22:00:00.0000000Z",
       "comment": "Update to RC617 and setup for QC39036"
     },
     {
-      "number": 35,
+      "versionNumber": 35,
       "createdBy": "vlpatuna",
       "creationDate": "2018-07-23T22:00:00.0000000Z",
       "comment": "grant MANAGE SCHEDULER to public"
     },
     {
-      "number": 36,
+      "versionNumber": 36,
       "createdBy": "aanghela",
       "creationDate": "2018-11-19T23:00:00.0000000Z",
       "comment": "Update SophisToSwiftAdapter xsl files for MT540 and MT541 to follow the 2018 SwiftAdapter  rules"
     },
     {
-      "number": 37,
+      "versionNumber": 37,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-29T22:00:00.0000000Z",
       "comment": "?"
     }
   ],
   "_version": 1,
-  "_iv": "HnNupTTVF/RH7KnRETqfHA=="
+  "_iv": "fGu5H29Wp6RFnHOarPMNBQ=="
 }

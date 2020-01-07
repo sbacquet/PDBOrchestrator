@@ -3,20 +3,20 @@
   "schemas": [
     {
       "user": "CI_GOLDEN_721",
-      "password": "QtSo09Lq8U8ZKmKZjPm9849xWL5c4EF+jAyjLCPNT9w=",
+      "password": "IeVP466A1of90ZPFCU7W5CTOZvHQH+1spKaNm1qy/ng=",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "vlpatuna",
-      "creationDate": "2017-09-01T14:38:56.0000000Z",
+      "creationDate": "2017-08-31T22:00:00.0000000Z",
       "comment": "Imported schemas CI_GOLDEN_721 from dump //fr1pslsophisdb01.misys.global.ad/AppDumps/CI_GOLDEN_721.DMP",
       "deleted": true
     }
   ],
   "_version": 1,
-  "_iv": "nQoEw+eB/K00EOIKZ0G/Jw=="
+  "_iv": "lZvRN6W9lh4cosXAMoHT/Q=="
 }

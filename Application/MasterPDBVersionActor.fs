@@ -20,7 +20,7 @@ type Command =
 type CommandToParent =
 | KillVersion of int
 
-let getSnapshotSourceName (pdb:string) (masterPDBVersion:MasterPDBVersion) (suffix:string) = sprintf "%s_V%03d_%s" (pdb.ToUpper()) masterPDBVersion.Number (suffix.ToUpper())
+let getSnapshotSourceName (pdb:string) (masterPDBVersion:MasterPDBVersion) (suffix:string) = sprintf "%s_V%03d_%s" (pdb.ToUpper()) masterPDBVersion.VersionNumber (suffix.ToUpper())
 
 let private masterPDBVersionActorBody 
     (parameters:Parameters)
@@ -52,7 +52,7 @@ let private masterPDBVersionActorBody
                 let! _ = 
                     if wcExists then deletePDB workingCopyName // force creation
                     else Ok ""
-                let sourceManifest = Domain.MasterPDBVersion.manifestFile masterPDBName masterPDBVersion.Number
+                let sourceManifest = Domain.MasterPDBVersion.manifestFile masterPDBName masterPDBVersion.VersionNumber
                 let destPath = instance.WorkingCopyDestPath
                 if (instance.SnapshotCapable && snapshot) then
                     let! snapshotSourceExists = pdbExists snapshotSourceName
@@ -80,7 +80,7 @@ let private masterPDBVersionActorBody
             if instance.SnapshotCapable then
                 let _ = result {
                     let! _ = deletePDB snapshotSourceName
-                    retype (ctx.Parent()) <! KillVersion masterPDBVersion.Number
+                    retype (ctx.Parent()) <! KillVersion masterPDBVersion.VersionNumber
                     return ()
                 }
                 return! loop ()
@@ -88,7 +88,7 @@ let private masterPDBVersionActorBody
                 return! loop ()
 
         | HaraKiri ->
-            ctx.Log.Value.Info("Stop of actor for version {pdbversion} of {pdb} requested", masterPDBVersion.Number, masterPDBName)
+            ctx.Log.Value.Info("Stop of actor for version {pdbversion} of {pdb} requested", masterPDBVersion.VersionNumber, masterPDBName)
             retype ctx.Self <! Akka.Actor.PoisonPill.Instance
             return! loop ()
     }

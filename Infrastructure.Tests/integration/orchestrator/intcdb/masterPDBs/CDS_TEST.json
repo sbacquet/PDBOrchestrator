@@ -3,73 +3,73 @@
   "schemas": [
     {
       "user": "CDS_TEST",
-      "password": "vnD3Qzh9jQTMb8J2V2VVRA==",
+      "password": "1KcJX1ZbFWQXnCAizcbMpQ==",
       "type": "Invest"
     },
     {
       "user": "CDS_AF_TEST",
-      "password": "vnD3Qzh9jQTMb8J2V2VVRA==",
+      "password": "1KcJX1ZbFWQXnCAizcbMpQ==",
       "type": "SRM"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2017-02-21T13:41:59.0000000Z",
       "comment": "First version",
       "deleted": true
     },
     {
-      "number": 18,
+      "versionNumber": 18,
       "createdBy": "violiver",
       "creationDate": "2017-09-01T11:56:02.0000000Z",
       "comment": "Remove temporaly japan bonds from scope and create new reference calculation in SRM"
     },
     {
-      "number": 44,
+      "versionNumber": 44,
       "createdBy": "ricdally",
       "creationDate": "2017-12-05T16:42:55.0000000Z",
       "comment": "Modify inflation volatility shocks to use strike and maturity interpolation"
     },
     {
-      "number": 47,
+      "versionNumber": 47,
       "createdBy": "oroussel",
       "creationDate": "2018-01-03T16:20:52.0000000Z",
       "comment": "following previous modification, the cds_test db must be updated by sophisscript"
     },
     {
-      "number": 59,
+      "versionNumber": 59,
       "createdBy": "vstriche",
       "creationDate": "2018-04-09T16:13:20.0000000Z",
       "comment": "bugfix CompareXmlTables"
     },
     {
-      "number": 66,
+      "versionNumber": 66,
       "createdBy": "oroussel",
       "creationDate": "2018-06-13T13:14:37.0000000Z",
       "comment": "inflation migration + setup inflation breakdown set for user manager "
     },
     {
-      "number": 69,
+      "versionNumber": 69,
       "createdBy": "mihborea",
       "creationDate": "2018-08-23T14:44:02.0000000Z",
       "comment": "SIMPLE-8454, added an IR Hedge Delta Swap scenario to the Solvency scenario group."
     },
     {
-      "number": 71,
+      "versionNumber": 71,
       "createdBy": "mihborea",
       "creationDate": "2018-10-09T11:40:03.0000000Z",
       "comment": "SRQ-65894 - Changed bump size to 1, for IRH Delta Swap scenario, in order to avoid test failures, due to rounding."
     },
     {
-      "number": 73,
+      "versionNumber": 73,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
     }
   ],
   "_version": 1,
-  "_iv": "Pw9WyGhTsTJcLQkwVmYIcg=="
+  "_iv": "65FWrbltykyBAVMrwOEhrw=="
 }

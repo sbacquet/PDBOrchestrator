@@ -10,6 +10,8 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
     choose [
         GET >=> choose [
             routef "/requests/%O" (HttpHandlers.getRequestStatus apiCtx)
+            routef "/instances/%s/master-pdbs/%s/versions/%i" (HttpHandlers.getMasterPDBVersion apiCtx)
+            routef "/instances/%s/master-pdbs/%s/versions" (HttpHandlers.getMasterPDBVersions apiCtx)
             routef "/instances/%s/master-pdbs/%s" (HttpHandlers.getMasterPDB apiCtx)
             routef "/instances/%s/master-pdbs" (HttpHandlers.getMasterPDBs apiCtx)
             routef "/instances/%s/dump-import-info" (HttpHandlers.getDumpTransferInfo apiCtx)
@@ -34,7 +36,7 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             // Prepare for edition
             routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.prepareMasterPDBForModification apiCtx)
             // Create working copy
-            routef "/instances/%s/master-pdbs/%s/%i/working-copies/%s" (HttpHandlers.createWorkingCopy apiCtx)
+            routef "/instances/%s/master-pdbs/%s/versions/%i/working-copies/%s" (HttpHandlers.createWorkingCopy apiCtx)
 
             // Routes for admins
             route "/mode/maintenance" >=> HttpHandlers.enterMaintenanceMode apiCtx

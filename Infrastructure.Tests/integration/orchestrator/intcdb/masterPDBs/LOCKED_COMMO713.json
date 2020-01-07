@@ -3,7 +3,7 @@
   "schemas": [
     {
       "user": "LOCKED_COMMO713",
-      "password": "jn7mug2ISV4jxHhpZMws6g==",
+      "password": "IWHkYk+cwSKxLjUFG2WqWg==",
       "type": "Invest"
     }
   ],
@@ -13,7 +13,7 @@
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "vlpatuna",
       "creationDate": "2017-12-04T15:32:37.0000000Z",
       "comment": "Imported schemas LOCKED_COMMO713 from dump //fr1pslsophisdb01.misys.global.ad/AppDumps/LOCKED_COMMO713.DMP",
@@ -21,5 +21,5 @@
     }
   ],
   "_version": 1,
-  "_iv": "fypnujRyCX+rNg42jAgj3g=="
+  "_iv": "PWp95/0TTuEplDmOQUXjWQ=="
 }

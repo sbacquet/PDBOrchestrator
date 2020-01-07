@@ -109,7 +109,8 @@ let main args =
         let orchestratorActor = system |> OrchestratorActor.spawn validApplicationParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
         system |> OrchestratorWatcher.spawn orchestratorActor |> ignore
         let port = infrastuctureParameters.Port
-        let endPoint = sprintf "http://%s:%d" infrastuctureParameters.DNSName port // TODO (https)
+        let portString port = if port = 80 then "" else sprintf ":%d" port
+        let endPoint = sprintf "http://%s%s" infrastuctureParameters.DNSName (portString port) // TODO (https)
         let apiContext = 
             API.consAPIContext 
                 system 

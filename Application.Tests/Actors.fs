@@ -272,8 +272,8 @@ let ``Oracle instance actor creates PDB`` () = test <| fun tck ->
     let _, res : WithRequestId<OracleInstanceActor.MasterPDBCreationResult> = 
         retype oracleActor <? OracleInstanceActor.CreateMasterPDB (newRequestId(), parameters) |> run
     match res with
-    | OracleInstanceActor.MasterPDBCreated creationResponse -> ()
-    | OracleInstanceActor.MasterPDBCreationFailure (_, error) -> failwithf "the creation of %s failed : %s" parameters.Name error
+    | OracleInstanceActor.MasterPDBCreated _ -> ()
+    | OracleInstanceActor.MasterPDBCreationFailure (_, _, error) -> failwithf "the creation of %s failed : %s" parameters.Name error
     | OracleInstanceActor.InvalidRequest errors -> failwithf "the request is invalid : %A" errors
 
     let stateAfter : OracleInstanceActor.StateResult = retype oracleActor <? OracleInstanceActor.GetState |> runQuick

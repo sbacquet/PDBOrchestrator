@@ -3,14 +3,14 @@
   "schemas": [
     {
       "user": "CI_GOLDEN_721",
-      "password": "pdUlSG/peKmberCh1rvV80obwXevUcQV6mBTAeSXdmY=",
+      "password": "qYHo1c5ydkiT8Mgc7QmKo1Doe9NO20tByIuoYKBpvCw=",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "vlpatuna",
       "creationDate": "2017-09-01T14:38:56.0000000Z",
       "comment": "Imported schemas CI_GOLDEN_721 from dump //fr1pslsophisdb01.misys.global.ad/AppDumps/CI_GOLDEN_721.DMP",
@@ -18,5 +18,5 @@
     }
   ],
   "_version": 1,
-  "_iv": "HPFdYt/2R2q3EPCR7FZUog=="
+  "_iv": "PBXr+jccUnSHUaz7XcZDow=="
 }

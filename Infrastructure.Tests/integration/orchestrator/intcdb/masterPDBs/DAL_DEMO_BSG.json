@@ -3,52 +3,52 @@
   "schemas": [
     {
       "user": "DAL_DEMO_BSG",
-      "password": "HyFTLXJquJu2ohZaLvY3MQ==",
+      "password": "J+hreP0qPMowEjYcVw/9Ng==",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2017-08-25T11:30:16.0000000Z",
       "comment": "Imported schemas DEMO_BSG_721 from dump //PARD009459/dpdump/Cepheus/DAL_TESTS.DMP",
       "deleted": true
     },
     {
-      "number": 3,
+      "versionNumber": 3,
       "createdBy": "vbergeret",
       "creationDate": "2017-09-20T08:11:48.0000000Z",
       "comment": "Add test for credit risk bulk load"
     },
     {
-      "number": 4,
+      "versionNumber": 4,
       "createdBy": "ldonstet",
       "creationDate": "2018-01-05T14:00:38.0000000Z",
       "comment": "prefs updated to not load all portfolio",
       "deleted": true
     },
     {
-      "number": 6,
+      "versionNumber": 6,
       "createdBy": "schazel",
       "creationDate": "2018-07-10T13:44:25.0000000Z",
       "comment": "Format the definition of JOIN_POSITION_HISTOMVTS in order to allow column removal on HISTOMVTS"
     },
     {
-      "number": 7,
+      "versionNumber": 7,
       "createdBy": "thocruze",
       "creationDate": "2019-02-18T13:27:31.0000000Z",
       "comment": "SIMPLE-9936 Added temporary table for ATV bulk query",
       "deleted": true
     },
     {
-      "number": 8,
+      "versionNumber": 8,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
     }
   ],
   "_version": 1,
-  "_iv": "fzpy0dUbjxALsA/0PVQigg=="
+  "_iv": "yYq2dIRht5nx4odQ1sMPeA=="
 }

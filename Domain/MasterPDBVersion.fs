@@ -5,7 +5,7 @@ open System
 type VersionNumber = int
 
 type MasterPDBVersion = {
-    Number: VersionNumber
+    VersionNumber: VersionNumber
     CreatedBy: string
     CreationDate: DateTime
     Comment: string
@@ -15,7 +15,7 @@ type MasterPDBVersion = {
 
 let consPDBVersion version deleted createdBy (creationDate:DateTime) comment properties =
     { 
-        Number = version
+        VersionNumber = version
         CreatedBy = createdBy
         CreationDate = creationDate.ToUniversalTime()
         Comment = comment 

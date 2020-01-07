@@ -41,4 +41,4 @@ let consValidPDBVersion pdb version deleted createdBy creationDate comment prope
             validateProperties pdb version properties
 
 let validateVersion pdb (version:MasterPDBVersion) =
-    consValidPDBVersion pdb version.Number version.Deleted version.CreatedBy version.CreationDate version.Comment version.Properties
+    consValidPDBVersion pdb version.VersionNumber version.Deleted version.CreatedBy version.CreationDate version.Comment version.Properties

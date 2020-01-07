@@ -3,19 +3,19 @@
   "schemas": [
     {
       "user": "GOLDEN_721",
-      "password": "DaBplQFSypujpmI0d6JIVnGSkW7vdqZmsaJQvfw+4wA=",
+      "password": "TuAmx3jsK+gGppIG4dqIbfoR8Uf3tpSvUdWD+mVcc8s=",
       "type": "Invest"
     },
     {
       "user": "GOLDEN_RM_721",
-      "password": "Ic3zlY/XP5Yu0CJiVemlh7NXVEC8QWWrcHlkAhri888=",
+      "password": "AD8THFhFyIZ5WWIqLalyQ7Pt9GedtFna4IwbwffuHvA=",
       "type": "SRM"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "vlpatuna",
       "creationDate": "2017-09-14T22:00:00.0000000Z",
       "comment": "Imported schemas GOLDEN_721 from dump //fr1pslsophisdb01.misys.global.ad/AppDumps/GOLDEN_721.DMP",
@@ -25,7 +25,7 @@
       }
     },
     {
-      "number": 6,
+      "versionNumber": 6,
       "createdBy": "sbacquet",
       "creationDate": "2017-10-19T22:00:00.0000000Z",
       "comment": "Refresh from QA golden schema",
@@ -34,24 +34,24 @@
       }
     },
     {
-      "number": 7,
+      "versionNumber": 7,
       "createdBy": "sbacquet",
       "creationDate": "2017-11-29T23:00:00.0000000Z",
       "comment": "Added SRM schema + refresh"
     },
     {
-      "number": 13,
+      "versionNumber": 13,
       "createdBy": "vlpatuna",
       "creationDate": "2018-03-27T22:00:00.0000000Z",
       "comment": "Grant SCHEDULER_ADMIN role to public"
     },
     {
-      "number": 14,
+      "versionNumber": 14,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
     }
   ],
   "_version": 1,
-  "_iv": "9GizVaR8MtWtMJfX8J1aoA=="
+  "_iv": "syDQNLYtxCzL9nGDoG1UsQ=="
 }

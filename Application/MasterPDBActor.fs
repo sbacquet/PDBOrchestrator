@@ -24,15 +24,15 @@ type Command =
 | CollectVersionsGarbage of int list // no response
 
 type PrepareForModificationResult = 
-| Prepared of MasterPDB * string * string * (string * string) list
+| Prepared of string * MasterPDB * string * string * (string * string) list
 | PreparationFailure of string * string
 
 type StateResult = Result<Application.DTO.MasterPDB.MasterPDBDTO, string>
 let stateOk state : StateResult = Ok state
 let stateError error : StateResult = Error error
 
-type EditionCommitted = Result<MasterPDB * int, string>
-type EditionRolledBack = Result<MasterPDB, string>
+type EditionCommitted = Result<string * MasterPDB * int, string>
+type EditionRolledBack = Result<string * MasterPDB, string>
 
 type CreateWorkingCopyResult = Result<string * int * string, string>
 
@@ -44,7 +44,7 @@ type private Collaborators = {
 }
 
 let private getOrSpawnVersionActor parameters instance (masterPDBName:string) (version:MasterPDBVersion) collaborators ctx =
-    let versionActorMaybe = collaborators.MasterPDBVersionActors |> Map.tryFind version.Number
+    let versionActorMaybe = collaborators.MasterPDBVersionActors |> Map.tryFind version.VersionNumber
     match versionActorMaybe with
     | Some versionActor -> collaborators, versionActor
     | None -> 
@@ -58,7 +58,7 @@ let private getOrSpawnVersionActor parameters instance (masterPDBName:string) (v
                 masterPDBName
                 version
         
-        { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Add(version.Number, versionActor) }, 
+        { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Add(version.VersionNumber, versionActor) }, 
         versionActor
 
 type private State = {
@@ -279,7 +279,7 @@ let private masterPDBActorBody
                         let newMasterPDB = masterPDB |> lockForEdition locker
                         let editionPDBService = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port) editionPDB
                         let schemaLogons = newMasterPDB.Schemas |> List.map (fun schema -> (schema.Type, sprintf "%s/%s@%s" schema.User schema.Password editionPDBService))
-                        sender <! (requestId, Prepared (newMasterPDB, editionPDB, editionPDBService, schemaLogons))
+                        sender <! (requestId, Prepared (instance.Name, newMasterPDB, editionPDB, editionPDBService, schemaLogons))
                         return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                     | Error error ->
                         sender <! (requestId, PreparationFailure (masterPDB.Name, error.Message))
@@ -292,7 +292,7 @@ let private masterPDBActorBody
                         let newMasterPDBMaybe = masterPDB |> unlock |> Result.map (addVersionToMasterPDB unlocker comment)
                         match newMasterPDBMaybe with
                         | Ok (newMasterPDB, newVersion) ->
-                            sender <! (requestId, Ok (newMasterPDB, newVersion))
+                            sender <! (requestId, Ok (instance.Name, newMasterPDB, newVersion))
                             return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                         | Error error -> 
                             sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name error))
@@ -308,7 +308,7 @@ let private masterPDBActorBody
                         let newMasterPDBMaybe = masterPDB |> unlock
                         match newMasterPDBMaybe with
                         | Ok newMasterPDB ->
-                            sender <! (requestId, Ok newMasterPDB)
+                            sender <! (requestId, Ok (instance.Name, newMasterPDB))
                             return! loop { state with MasterPDB = newMasterPDB; Requests = newRequests; EditionOperationInProgress = false }
                         | Error error -> 
                             sender <! (requestId, Error (sprintf "cannot unlock %s : %s" masterPDB.Name error))

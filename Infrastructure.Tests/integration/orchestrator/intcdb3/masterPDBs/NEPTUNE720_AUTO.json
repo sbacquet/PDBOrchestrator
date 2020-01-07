@@ -3,26 +3,26 @@
   "schemas": [
     {
       "user": "neptune720_auto",
-      "password": "5oi+Bq85l2dOJTLw4cPXCWjvYgv2bngH6jzWohqUx7g=",
+      "password": "IPLc0bIq2UrEEjekZgf3VV2K9j8DoY8pMyzJ07ZA01c=",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2017-02-20T23:00:00.0000000Z",
       "comment": "First version",
       "deleted": true
     },
     {
-      "number": 7,
+      "versionNumber": 7,
       "createdBy": "sbacquet",
       "creationDate": "2017-08-22T22:00:00.0000000Z",
       "comment": "Password expiry set to UNLIMITED"
     }
   ],
   "_version": 1,
-  "_iv": "/fLL8K2NSg0r/coSMa74LQ=="
+  "_iv": "IX5VNEn9NAIQNWhC4qxITw=="
 }

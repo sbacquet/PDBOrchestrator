@@ -93,7 +93,7 @@ let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword u
         let versionsPerName = 
             pdbVersions 
             |> List.groupBy fst 
-            |> List.map (fun (key, values) -> (key, values |> List.map snd |> List.sortBy (fun (v:MasterPDBVersion.MasterPDBVersion) -> v.Number)))
+            |> List.map (fun (key, values) -> (key, values |> List.map snd |> List.sortBy (fun (v:MasterPDBVersion.MasterPDBVersion) -> v.VersionNumber)))
             |> Map.ofList
         getMasterPDBRows conn 
         |> Async.RunSynchronously 

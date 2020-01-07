@@ -3,7 +3,7 @@
   "schemas": [
     {
       "user": "NEW_USER",
-      "password": "+3FMXJpFbEs5MWkdJ4Ubng==",
+      "password": "5+nCFTpCsSj4uEsjG+OqTQ==",
       "type": "Invest"
     }
   ],
@@ -13,12 +13,12 @@
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "vlpatuna",
       "creationDate": "2017-12-18T23:00:00.0000000Z",
       "comment": "Imported schemas NEW_USER from dump //fr1pslsophisdb01.misys.global.ad/AppDumps/NEW_USER.DMP"
     }
   ],
   "_version": 1,
-  "_iv": "8JziUOzSZD/I0fq0AqmS8w=="
+  "_iv": "FPIJjNepAQzwUNnvSI/lnQ=="
 }

@@ -3,32 +3,32 @@
   "schemas": [
     {
       "user": "INVEST_SCRATCH",
-      "password": "N10RQ58GEy72SYutLWbguw==",
+      "password": "WzNDWHHW2dx/xDrjWUDohQ==",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "fhereil",
       "creationDate": "2018-06-20T22:00:00.0000000Z",
       "comment": "Imported schemas NEW_USER from dump //orapar1.misys.global.ad/ImportDumps/NEW_USER.DMP",
       "deleted": true
     },
     {
-      "number": 2,
+      "versionNumber": 2,
       "createdBy": "fhereil",
       "creationDate": "2018-06-20T22:00:00.0000000Z",
       "comment": "Run SophisScript from scratch"
     },
     {
-      "number": 3,
+      "versionNumber": 3,
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-04-28T22:00:00.0000000Z",
       "comment": "?"
     }
   ],
   "_version": 1,
-  "_iv": "M55mRXsKwJDC3B7kTCXYiA=="
+  "_iv": "U7Q0Liu1LNm94408lNgq0w=="
 }

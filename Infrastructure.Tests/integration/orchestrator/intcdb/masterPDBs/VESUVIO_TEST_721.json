@@ -3,19 +3,19 @@
   "schemas": [
     {
       "user": "vesuvio_test_721",
-      "password": "0zn6IyA7nS32DoU9qWwm7LIhp5G7rQdmZp5SQhBYuYMh0aEQgLSQANH48icOoKlR",
+      "password": "xKtBCN8y27prTFrccG3oRUB/i9f4n5D8PXdmv7Zg+gyojTodyLSoftghB5LfuQlV",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 8,
+      "versionNumber": 8,
       "createdBy": "akallala",
       "creationDate": "2017-07-13T10:06:59.0000000Z",
       "comment": "SIMPLE-5019"
     }
   ],
   "_version": 1,
-  "_iv": "zGXx/W8XEukmqBRSHtSPRA=="
+  "_iv": "G1co+ImTL9pVpDvCTXDCjw=="
 }

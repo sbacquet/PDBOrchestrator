@@ -50,7 +50,7 @@ let decodeLockInfo = jsonDecoder {
 }
 
 let decodeMasterPDBVersion = jsonDecoder {
-    let! number = Decode.required Decode.int "number"
+    let! number = Decode.required Decode.int "versionNumber"
     let! createdBy = Decode.required Decode.string "createdBy"
     let! creationDate = Decode.required Decode.dateTime "creationDate"
     let! comment = Decode.required Decode.string "comment"
@@ -67,7 +67,7 @@ let decodeMasterPDBVersion = jsonDecoder {
 }
 
 let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersion) ->
-    Encode.required Encode.int "number" x.Number >>
+    Encode.required Encode.int "versionNumber" x.VersionNumber >>
     Encode.required Encode.string "createdBy" x.CreatedBy >>
     Encode.required Encode.dateTime "creationDate" x.CreationDate >>
     Encode.required Encode.string "comment" x.Comment >>

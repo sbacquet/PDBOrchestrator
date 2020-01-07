@@ -3,45 +3,45 @@
   "schemas": [
     {
       "user": "testmars72_04_07_2016",
-      "password": "3fqAuJKAA2TWd5jiNy/8Fg==",
+      "password": "5CzXoyLZPzl6wgxvgM70lA==",
       "type": "Invest"
     }
   ],
   "editionDisabled": true,
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2017-03-23T14:32:22.0000000Z",
       "comment": "Imported schemas testmars72_04_07_2016 from dump //fr1pswbld10.misys.global.ad/TestData/DatabaseDumps/testmars72_04_07_2016.dmp",
       "deleted": true
     },
     {
-      "number": 6,
+      "versionNumber": 6,
       "createdBy": "sbacquet",
       "creationDate": "2017-08-23T13:22:53.0000000Z",
       "comment": "Password expiry set to UNLIMITED"
     },
     {
-      "number": 7,
+      "versionNumber": 7,
       "createdBy": "sbacquet",
       "creationDate": "2017-11-07T12:19:50.0000000Z",
       "comment": "Update (SophisScript)"
     },
     {
-      "number": 8,
+      "versionNumber": 8,
       "createdBy": "fstoicam",
       "creationDate": "2018-01-22T13:10:28.0000000Z",
       "comment": "Update (SophisScript)",
       "deleted": true
     },
     {
-      "number": 11,
+      "versionNumber": 11,
       "createdBy": "vlpatuna",
       "creationDate": "2018-03-28T13:12:06.0000000Z",
       "comment": "Grant SCHEDULER_ADMIN role to public"
     }
   ],
   "_version": 1,
-  "_iv": "ODqNO1UBywKUPIw36XlTJw=="
+  "_iv": "Sy8M0eA4QZ6+UgZNIMOkBg=="
 }

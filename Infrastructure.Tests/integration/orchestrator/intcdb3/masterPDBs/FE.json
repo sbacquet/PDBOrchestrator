@@ -3,128 +3,128 @@
   "schemas": [
     {
       "user": "FE",
-      "password": "XAzaK9qFa6ivwO3+OaoY5w==",
+      "password": "0LzQLkPFhBM6UE9JoimHTA==",
       "type": "Invest"
     },
     {
       "user": "FE_SRM",
-      "password": "XAzaK9qFa6ivwO3+OaoY5w==",
+      "password": "0LzQLkPFhBM6UE9JoimHTA==",
       "type": "SRM"
     }
   ],
   "versions": [
     {
-      "number": 1,
+      "versionNumber": 1,
       "createdBy": "sbacquet",
       "creationDate": "2017-12-07T23:00:00.0000000Z",
       "comment": "Imported schemas VO_FE7212 from dump //fr1pswbld10.misys.global.ad/TestData/DatabaseDumps/FE.DMP",
       "deleted": true
     },
     {
-      "number": 10,
+      "versionNumber": 10,
       "createdBy": "violiver",
       "creationDate": "2018-01-08T23:00:00.0000000Z",
       "comment": "Increase IR Hedge Delta Swap scenario bumps to make test pass on Windows 10"
     },
     {
-      "number": 25,
+      "versionNumber": 25,
       "createdBy": "mmillet",
       "creationDate": "2018-05-01T22:00:00.0000000Z",
       "comment": "Update SRM test"
     },
     {
-      "number": 28,
+      "versionNumber": 28,
       "createdBy": "fhereil",
       "creationDate": "2018-11-28T23:00:00.0000000Z",
       "comment": "Fix preference_yield_curve"
     },
     {
-      "number": 37,
+      "versionNumber": 37,
       "createdBy": "tcohades",
       "creationDate": "2019-01-21T23:00:00.0000000Z",
       "comment": "Update scenarios / Perimeter for TCA scenario group"
     },
     {
-      "number": 46,
+      "versionNumber": 46,
       "createdBy": "violiver",
       "creationDate": "2019-03-31T22:00:00.0000000Z",
       "comment": "Increase bump size of REG_GR_IRHDS_1 for stability issue"
     },
     {
-      "number": 47,
+      "versionNumber": 47,
       "createdBy": "vstriche",
       "creationDate": "2019-04-29T22:00:00.0000000Z",
       "comment": "Add auto tests for Risk scenario Jump-to-Default in Analytics Factory",
       "deleted": true
     },
     {
-      "number": 48,
+      "versionNumber": 48,
       "createdBy": "llarrieu",
       "creationDate": "2019-05-08T22:00:00.0000000Z",
       "comment": "Change volatility model from NMU to Standard for instrument 67171786",
       "deleted": true
     },
     {
-      "number": 49,
+      "versionNumber": 49,
       "createdBy": "violiver",
       "creationDate": "2019-05-12T22:00:00.0000000Z",
       "comment": "remove baseline run containing instrument using intraday var proxy in Pocoto test",
       "deleted": true
     },
     {
-      "number": 50,
+      "versionNumber": 50,
       "createdBy": "frochat",
       "creationDate": "2019-05-26T22:00:00.0000000Z",
       "comment": "SIMPLE-9871 - added end of day scenario to REG_GREEK_ST_METASCENARIO_TCA",
       "deleted": true
     },
     {
-      "number": 51,
+      "versionNumber": 51,
       "createdBy": "fhereil",
       "creationDate": "2019-07-04T22:00:00.0000000Z",
       "comment": "PerformanceAttribution: add use case for Price Difference"
     },
     {
-      "number": 52,
+      "versionNumber": 52,
       "createdBy": "llarrieu",
       "creationDate": "2019-07-23T22:00:00.0000000Z",
       "comment": "add Simple Backtest in the Var configuration",
       "deleted": true
     },
     {
-      "number": 53,
+      "versionNumber": 53,
       "createdBy": "reramond",
       "creationDate": "2019-09-02T22:00:00.0000000Z",
       "comment": "Add PI var scenario for GridDispatcher test",
       "deleted": true
     },
     {
-      "number": 54,
+      "versionNumber": 54,
       "createdBy": "reramond",
       "creationDate": "2019-09-03T22:00:00.0000000Z",
       "comment": "Activate GridComputing property on PI-VAR workflow",
       "deleted": true
     },
     {
-      "number": 55,
+      "versionNumber": 55,
       "createdBy": "reramond",
       "creationDate": "2019-09-19T22:00:00.0000000Z",
       "comment": "Add PI-VAR SHOCK AF scenarion for atumated test",
       "deleted": true
     },
     {
-      "number": 56,
+      "versionNumber": 56,
       "createdBy": "violiver",
       "creationDate": "2019-09-23T22:00:00.0000000Z",
       "comment": "Add market data task in FO Risk Test DataProduction workflow (Id = 501)"
     },
     {
-      "number": 57,
+      "versionNumber": 57,
       "createdBy": "violiver",
       "creationDate": "2019-10-28T23:00:00.0000000Z",
       "comment": "Generate Fund Benchmark columns for IRH ZC DV01 and CS01 sensitivities"
     }
   ],
   "_version": 1,
-  "_iv": "5Jgwd3ELXLUlQQYBi2o6gw=="
+  "_iv": "xH3K1wmAmPeUTs0MCLaRQA=="
 }
