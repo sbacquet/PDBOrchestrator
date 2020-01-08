@@ -5,10 +5,12 @@ open Application.DTO.MasterPDB
 open Infrastructure.DTOJSON.MasterPDBVersion
 open Chiron.Serialization.Json
 open Chiron.JsonTransformer
+open Infrastructure.Common
 
 let encodeLockInfoDTO = Encode.buildWith (fun (x:EditionInfoDTO) ->
     Encode.required Encode.string "editor" x.Editor >>
-    Encode.required Encode.dateTime "date" x.Date
+    Encode.required Encode.dateTime "date" x.Date >>
+    Encode.required Encode.string "localDate" (toLocalTimeString x.Date)
 )
 
 let encodeMasterPDBDTO = Encode.buildWith (fun (x:MasterPDBDTO) ->

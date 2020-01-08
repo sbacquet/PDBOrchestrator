@@ -11,7 +11,11 @@ type EditionInfoDTO = {
     Date: System.DateTime
 }
 
-let consEditionInfoDTO editor (date:DateTime) = { Editor = editor; Date = date.ToUniversalTime() }
+let consEditionInfoDTO editor (date:DateTime) = 
+    {
+        Editor = editor
+        Date = date.ToUniversalTime() 
+    }
 
 let toEditionInfoDTO (lockInfo:Domain.MasterPDB.EditionInfo option) =
     lockInfo |> Option.map (fun lock -> consEditionInfoDTO lock.Editor lock.Date)
@@ -49,7 +53,7 @@ let toDTO (masterPDB:MasterPDB) =
 let fromDTO (dto:MasterPDBDTO) : MasterPDB = 
     MasterPDB.consMasterPDB
         dto.Name
-        (dto.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type }))
+        (dto.Schemas |> List.map (fun schema -> consSchema schema.User schema.Password schema.Type))
         (dto.Versions |> List.map (fun version -> 
             MasterPDBVersion.consPDBVersion 
                 version.VersionNumber
@@ -58,7 +62,7 @@ let fromDTO (dto:MasterPDBDTO) : MasterPDB =
                 version.CreationDate
                 version.Comment
                 version.Properties))
-        (dto. EditionState |> Option.map (fun lock -> { Editor = lock.Editor; Date = lock.Date }))
+        (dto. EditionState |> Option.map (fun lock -> consEditionInfo lock.Editor lock.Date))
         dto.EditionDisabled
         dto.Properties
 

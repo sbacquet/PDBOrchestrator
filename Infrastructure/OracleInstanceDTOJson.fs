@@ -7,7 +7,7 @@ open Application.DTO.OracleInstance
 open Domain.MasterPDBWorkingCopy
 open Application.DTO.MasterPDBWorkingCopy
 open Infrastructure.DTOJSON.MasterPDBVersion
-open Infrastructure.DTOJSON.MasterPDB
+open Infrastructure.Common
 
 let encodeMasterPDBDTOs = Encode.listWith MasterPDB.encodeMasterPDBDTO
 
@@ -16,6 +16,7 @@ let encodeWorkingCopyDTO = Encode.buildWith (fun (x:MasterPDBWorkingCopyDTO) ->
     Encode.required Encode.string "masterPDBName" x.MasterPDBName >>
     Encode.required Encode.string "createdBy" x.CreatedBy >>
     Encode.required Encode.dateTime "creationDate" x.CreationDate >>
+    Encode.required Encode.string "creationLocalDate" (toLocalTimeString x.CreationDate) >>
     (match x.Source with
     | SpecificVersion version -> 
         Encode.required Encode.string "sourceType" "SpecificVersion" >>
@@ -24,9 +25,11 @@ let encodeWorkingCopyDTO = Encode.buildWith (fun (x:MasterPDBWorkingCopyDTO) ->
         Encode.required Encode.string "sourceType" "Edition"
     ) >>
     (match x.Lifetime with
-    | Temporary lifetime -> 
+    | Temporary expiry -> 
         Encode.required Encode.string "lifetimeType" "Temporary" >>
-        Encode.required Encode.dateTime "expiryDate" lifetime
+        Encode.required Encode.dateTime "expiryDate" expiry >>
+        Encode.required Encode.string "expiryLocalDate" (toLocalTimeString expiry) >>
+        Encode.required Encode.float "hoursBeforeExpiry" (countdownInHours expiry)
     | Durable ->
         Encode.required Encode.string "lifetimeType" "Durable"
     ) >>

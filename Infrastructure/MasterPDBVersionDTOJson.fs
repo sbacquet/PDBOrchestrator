@@ -4,6 +4,7 @@ open Chiron
 open Application.DTO.MasterPDBVersion
 open Chiron.Serialization.Json
 open Chiron.JsonTransformer
+open Infrastructure.Common
 
 let encodeSchemaDTO = Encode.buildWith (fun (x:SchemaDTO) ->
     Encode.required Encode.string "user" x.User >>
@@ -16,6 +17,7 @@ let encodeMasterPDBVersionDTO = Encode.buildWith (fun (x:MasterPDBVersionDTO) ->
     Encode.required Encode.int "versionNumber" x.VersionNumber >>
     Encode.required Encode.string "createdBy" x.CreatedBy >>
     Encode.required Encode.dateTime "creationDate" x.CreationDate >>
+    Encode.required Encode.string "creationLocalDate" (toLocalTimeString x.CreationDate) >>
     Encode.required Encode.string "comment" x.Comment >>
     Encode.ifNotEqual false Encode.bool "deleted" x.Deleted >>
     Encode.required Encode.string "manifest" x.Manifest >>
@@ -28,6 +30,7 @@ let encodeMasterPDBVersionFullDTO = Encode.buildWith (fun (x:MasterPDBVersionFul
     Encode.required Encode.int "versionNumber" x.VersionNumber >>
     Encode.required Encode.string "createdBy" x.CreatedBy >>
     Encode.required Encode.dateTime "creationDate" x.CreationDate >>
+    Encode.required Encode.string "creationLocalDate" (toLocalTimeString x.CreationDate) >>
     Encode.required Encode.string "comment" x.Comment >>
     Encode.ifNotEqual false Encode.bool "deleted" x.Deleted >>
     Encode.required Encode.string "manifest" x.Manifest >>

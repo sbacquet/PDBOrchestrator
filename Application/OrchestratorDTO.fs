@@ -8,6 +8,11 @@ type OrchestratorState = {
     PrimaryInstance : string
 }
 
+let consOrchestratorState instances primary = { 
+    OracleInstances = instances |> Seq.toList
+    PrimaryInstance = primary
+}
+
 let getResult (state:OracleInstanceActor.StateResult) : OracleInstance.OracleInstanceDTO =
     match state with
     | Ok result -> result
@@ -21,5 +26,5 @@ let toDTO (instanceActors:Map<string, IActorRef<_>>) (orchestrator:Domain.Orches
             return getResult state
            })
         |> Async.Parallel
-    return { OracleInstances = instances |> Array.toList; PrimaryInstance = orchestrator.PrimaryInstance }
+    return consOrchestratorState instances orchestrator.PrimaryInstance
 }
