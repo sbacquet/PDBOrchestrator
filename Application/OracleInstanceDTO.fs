@@ -3,11 +3,15 @@
 open Akkling
 open Application
 open Application.DTO.MasterPDB
+open Application.DTO.MasterPDBWorkingCopy
+open Domain.MasterPDBWorkingCopy
+open Domain.OracleInstance
+open Application
 
 type OracleInstanceDTO = {
     Name: string
     MasterPDBs: MasterPDBDTO list
-    WorkingCopies: Domain.MasterPDBWorkingCopy.MasterPDBWorkingCopy list
+    WorkingCopies: MasterPDBWorkingCopyDTO list
 }
 
 let consOracleInstanceDTO name masterPDBs workingCopies = 
@@ -31,11 +35,15 @@ let toDTO (masterPDBActors:Map<string, IActorRef<obj>>) (oracleInstance : Domain
                 return getResult state
                })
             |> Async.Parallel
+    let schemasByMasterPDB = masterPDBs |> Array.map (fun pdb -> (pdb.Name, pdb.Schemas)) |> Map.ofSeq
+    let wcToDTO (wc:MasterPDBWorkingCopy) =
+        let wcService = pdbService oracleInstance wc.Name
+        wc |> toWorkingCopyDTO wcService (schemasByMasterPDB |> Map.tryFind wc.MasterPDBName |> Option.defaultValue List.empty)
     return 
         consOracleInstanceDTO 
             oracleInstance.Name 
             (masterPDBs |> Array.toList)
-            (oracleInstance.WorkingCopies |> Map.toList |> List.map snd)
+            (oracleInstance.WorkingCopies |> Map.toList |> List.map (snd >> wcToDTO))
 }
 
 type OracleInstanceFullDTO = {
@@ -50,7 +58,7 @@ type OracleInstanceFullDTO = {
     SnapshotPDBDestPath: string
     OracleDirectoryForDumps: string
     MasterPDBs: MasterPDBDTO list
-    WorkingCopies: Domain.MasterPDBWorkingCopy.MasterPDBWorkingCopy list
+    WorkingCopies: MasterPDBWorkingCopyDTO list
     SnapshotCapable: bool
 }
 
@@ -71,7 +79,11 @@ let consOracleInstanceFullDTO name server port dbaUser dbaPassword mp dp sdp ssd
         SnapshotCapable = snapshotCapable
     }
 
-let toFullDTO masterPDBs (instance:Domain.OracleInstance.OracleInstance) =
+let toFullDTO (masterPDBs:MasterPDBDTO list) (instance:Domain.OracleInstance.OracleInstance) =
+    let schemasByMasterPDB = masterPDBs |> List.map (fun pdb -> (pdb.Name, pdb.Schemas)) |> Map.ofList
+    let wcToDTO (wc:MasterPDBWorkingCopy) =
+        let wcService = pdbService instance wc.Name
+        wc |> toWorkingCopyDTO wcService (schemasByMasterPDB |> Map.tryFind wc.MasterPDBName |> Option.defaultValue List.empty)
     {
         Name = instance.Name
         Server = instance.Server
@@ -84,6 +96,6 @@ let toFullDTO masterPDBs (instance:Domain.OracleInstance.OracleInstance) =
         SnapshotSourcePDBDestPath = instance.SnapshotSourcePDBDestPath
         OracleDirectoryForDumps = instance.OracleDirectoryForDumps
         MasterPDBs = masterPDBs
-        WorkingCopies = instance.WorkingCopies |> Map.toList |> List.map snd
+        WorkingCopies = instance.WorkingCopies |> Map.toList |> List.map (snd >> wcToDTO)
         SnapshotCapable = instance.SnapshotCapable
     }

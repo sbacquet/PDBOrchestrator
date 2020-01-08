@@ -9,9 +9,6 @@ type OraclePDBResultWithReqId = Application.PendingRequest.WithRequestId<OracleP
 
 let getOracleServerPort port = port |> Option.defaultValue 1521
 
-let oracleInstancePortString port =
-    port |> Option.map (fun port -> sprintf ":%d" port) |> Option.defaultValue ""
-
 type IOracleAPI =
     //inherit System.IDisposable
     abstract member NewPDBFromDump : 

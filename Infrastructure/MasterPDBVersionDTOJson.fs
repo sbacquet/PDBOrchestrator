@@ -5,13 +5,14 @@ open Application.DTO.MasterPDBVersion
 open Chiron.Serialization.Json
 open Chiron.JsonTransformer
 
-let encodeSchema = Encode.buildWith (fun (x:SchemaDTO) ->
+let encodeSchemaDTO = Encode.buildWith (fun (x:SchemaDTO) ->
     Encode.required Encode.string "user" x.User >>
     Encode.required Encode.string "password" x.Password >>
-    Encode.required Encode.string "type" x.Type
+    Encode.required Encode.string "type" x.Type >>
+    Encode.optional Encode.string "connectionString" x.ConnectionString
 )
 
-let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersionDTO) ->
+let encodeMasterPDBVersionDTO = Encode.buildWith (fun (x:MasterPDBVersionDTO) ->
     Encode.required Encode.int "versionNumber" x.VersionNumber >>
     Encode.required Encode.string "createdBy" x.CreatedBy >>
     Encode.required Encode.dateTime "creationDate" x.CreationDate >>
@@ -21,9 +22,9 @@ let encodeMasterPDBVersion = Encode.buildWith (fun (x:MasterPDBVersionDTO) ->
     Encode.ifNotEqual Map.empty (Encode.mapWith Encode.string) "properties" x.Properties
 )
 
-let encodeMasterPDBVersionFull = Encode.buildWith (fun (x:MasterPDBVersionFullDTO) ->
+let encodeMasterPDBVersionFullDTO = Encode.buildWith (fun (x:MasterPDBVersionFullDTO) ->
     Encode.required Encode.string "name" x.Name >>
-    Encode.required (Encode.listWith encodeSchema) "schemas" x.Schemas >>
+    Encode.required (Encode.listWith encodeSchemaDTO) "schemas" x.Schemas >>
     Encode.required Encode.int "versionNumber" x.VersionNumber >>
     Encode.required Encode.string "createdBy" x.CreatedBy >>
     Encode.required Encode.dateTime "creationDate" x.CreationDate >>
@@ -34,4 +35,4 @@ let encodeMasterPDBVersionFull = Encode.buildWith (fun (x:MasterPDBVersionFullDT
 )
 
 let versionFulltoJson versionFullDTO =
-    versionFullDTO |> Json.serializeWith encodeMasterPDBVersionFull JsonFormattingOptions.Pretty
+    versionFullDTO |> Json.serializeWith encodeMasterPDBVersionFullDTO JsonFormattingOptions.Pretty

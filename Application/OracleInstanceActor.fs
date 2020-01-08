@@ -235,7 +235,6 @@ let private oracleInstanceActorBody
         let instance = state.Instance
         let collaborators = state.Collaborators
         let requests = state.Requests
-        let wcService = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port)
 
         if state.PreviousInstance <> instance then
             ctx.Log.Value.Debug("Persisted modified Oracle instance {instance}", instance.Name)
@@ -379,7 +378,7 @@ let private oracleInstanceActorBody
                     let res:CreateWorkingCopyResult = 
                         match result with
                         | Ok () -> 
-                             Ok (masterPDBName, versionNumber, wcName, wcService wcName, instance.Name)
+                             Ok (masterPDBName, versionNumber, wcName, pdbService instance wcName, instance.Name)
                         | Error error -> Error error
                     sender <! (requestId, res)
                     return! loop state
@@ -424,7 +423,7 @@ let private oracleInstanceActorBody
                     let res:CreateWorkingCopyResult = 
                         match result with
                         | Ok () -> 
-                             Ok (masterPDBName, 0, wcName, wcService wcName, instance.Name)
+                             Ok (masterPDBName, 0, wcName, pdbService instance wcName, instance.Name)
                         | Error error -> Error error
                     sender <! (requestId, res)
                     return! loop state
@@ -511,7 +510,7 @@ let private oracleInstanceActorBody
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
-                        sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, wcService wcName, instance.Name))
+                        sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, pdbService instance wcName, instance.Name))
                         let wc = 
                             if durable then 
                                 newDurableWorkingCopy user (SpecificVersion versionNumber) masterPDBName wcName
@@ -531,7 +530,7 @@ let private oracleInstanceActorBody
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
-                        sender <! (requestId, Ok (masterPDBName, 0, wcName, wcService wcName, instance.Name))
+                        sender <! (requestId, Ok (masterPDBName, 0, wcName, pdbService instance wcName, instance.Name))
                         let wc = 
                             if durable then 
                                 newDurableWorkingCopy user Edition masterPDBName wcName

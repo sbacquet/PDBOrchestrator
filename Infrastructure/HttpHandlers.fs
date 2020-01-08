@@ -47,7 +47,7 @@ let getAllInstances apiCtx next (ctx:HttpContext) = task {
 let getInstance apiCtx (name:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx name
     match stateMaybe with
-    | Ok state -> return! json (OracleInstance.oracleInstanceToJson state) next ctx
+    | Ok state -> return! json (OracleInstance.oracleInstanceDTOToJson state) next ctx
     | Error error -> return! RequestErrors.notFound (text error) next ctx
 }
 
@@ -97,7 +97,7 @@ let getWorkingCopy apiCtx (instancename:string, workingCopyName:string) next (ct
         let workingCopy = state.WorkingCopies |> List.tryFind (fun wc -> wc.Name = workingCopyName.ToUpper())
         match workingCopy with
         | Some workingCopy -> 
-            return! json (OracleInstance.workingCopyToJson workingCopy) next ctx
+            return! json (OracleInstance.workingCopyDTOToJson workingCopy) next ctx
         | None ->
             return! RequestErrors.notFound (sprintf "Working copy %s not found on Oracle instance %s" (workingCopyName.ToUpper()) (instancename.ToLower()) |> text) next ctx
     | Error error -> 
@@ -208,7 +208,7 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
                 let name, lockInfo = x
                 jObj 
                 |> Encode.required Encode.string "name" (name.ToUpper())
-                |> Encode.required MasterPDB.encodeLockInfo "lock" lockInfo
+                |> Encode.required MasterPDB.encodeLockInfoDTO "lock" lockInfo
             )
             let encodePendingChanges = Encode.buildWith (fun (x:OrchestratorActor.PendingChanges) jObj ->
                 jObj 
@@ -275,7 +275,7 @@ let collectGarbage apiCtx = withUser (fun user next ctx -> task {
 let synchronizePrimaryInstanceWith apiCtx instance next ctx = task {
     let! stateMaybe = API.synchronizePrimaryInstanceWith apiCtx instance
     match stateMaybe with
-    | Ok state -> return! (json <| OracleInstance.oracleInstanceToJson state) next ctx
+    | Ok state -> return! (json <| OracleInstance.oracleInstanceDTOToJson state) next ctx
     | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot synchronize %s with primary instance : %s." (instance.ToLower()) error) next ctx
 }
 

@@ -13,10 +13,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="FileTransfer.fs" />
-    <Compile Include="MasterPDBVersionDTOJson.fs" />
     <Compile Include="RunProcessAsync.fs" />
     <Compile Include="Parameters.fs" />
     <Compile Include="Encryption.fs" />
+    <Compile Include="MasterPDBVersionDTOJson.fs" />
     <Compile Include="MasterPDBJson.fs" />
     <Compile Include="MasterPDBDTOJson.fs" />
     <Compile Include="MasterPDBRepository.fs" />

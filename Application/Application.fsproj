@@ -18,6 +18,7 @@
     <Compile Include="MasterPDBEditionActor.fs" />
     <Compile Include="MasterPDBDTO.fs" />
     <Compile Include="MasterPDBActor.fs" />
+    <Compile Include="MasterPDBWorkingCopyDTO.fs" />
     <Compile Include="OracleInstanceDTO.fs" />
     <Compile Include="OracleInstanceGarbageCollector.fs" />
     <Compile Include="OracleInstanceActor.fs" />

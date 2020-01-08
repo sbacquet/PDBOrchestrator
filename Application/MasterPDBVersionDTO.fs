@@ -7,12 +7,14 @@ type SchemaDTO = {
     User: string
     Password: string
     Type: string
+    ConnectionString: string option
 }
 
 let toSchemaDTO (schema:Domain.MasterPDB.Schema) = { 
     User = schema.User
     Password = schema.Password
     Type = schema.Type
+    ConnectionString = None
 }
 
 type MasterPDBVersionDTO = {

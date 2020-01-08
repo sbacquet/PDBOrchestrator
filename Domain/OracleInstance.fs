@@ -82,3 +82,8 @@ let addWorkingCopy (wc:MasterPDBWorkingCopy) (instance:OracleInstance) =
 
 let removeWorkingCopy (name:string) (instance:OracleInstance) =
     { instance with WorkingCopies = instance.WorkingCopies |> Map.remove (name.ToUpper()) }
+
+let oracleInstancePortString port =
+    port |> Option.map (fun port -> sprintf ":%d" port) |> Option.defaultValue ""
+
+let pdbService (instance:OracleInstance) = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port)
