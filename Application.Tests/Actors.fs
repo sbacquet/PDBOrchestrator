@@ -162,20 +162,11 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
         member this.PDBExists name = async { 
             return Ok (this.ExistingPDBs |> Set.contains (name.ToUpper()))
         }
-        member this.DeletePDBSnapshots _ _ _ name = async { 
-            if not (this.ExistingPDBs |> Set.contains (name.ToUpper())) then
-                return Invalid [ sprintf "%s does not exist" name |> exn ]
-            else
-                return Valid false
-        }
         member this.PDBSnapshots name = async {
             return Ok []
         }
         member this.GetPDBNamesLike (like:string) = raise (System.NotImplementedException())
         member this.GetPDBFilesFolder name = async { return Ok (Some "fake") }
-        member this.GetOldPDBsFromFolder olderThan workingCopyFolder = async { 
-            return Ok [ "oldPDB" ] 
-        }
  
 let fakeOracleAPI = FakeOracleAPI(Set.empty)
 

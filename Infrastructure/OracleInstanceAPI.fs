@@ -72,19 +72,10 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
             |> pdbSnapshots connAsDBA None None
             |> toOraclePDBResultAsync
 
-        member __.DeletePDBSnapshots (folder:string option) (olderThan:System.TimeSpan option) (deleteSource:bool) sourceName =
-            sourceName
-            |> deletePDBSnapshots logger connAsDBA folder olderThan deleteSource
-            |> toOraclePDBValidationAsync
-
         member __.GetPDBNamesLike like = 
             getPDBNamesLike connAsDBA like
             |> toOraclePDBResultAsync
 
         member __.GetPDBFilesFolder name =
             getPDBFilesFolder connAsDBA name
-            |> toOraclePDBResultAsync
-
-        member __.GetOldPDBsFromFolder olderThan folder =
-            getOldPDBsHavingFilesFolderStartWith connAsDBA olderThan folder
             |> toOraclePDBResultAsync

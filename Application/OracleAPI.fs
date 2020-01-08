@@ -37,10 +37,6 @@ type IOracleAPI =
 
     abstract member PDBExists : name:string -> Async<Exceptional<bool>>
 
-    abstract member DeletePDBSnapshots : folder:string option -> olderThan:System.TimeSpan option -> deleteSource:bool -> sourceName:string -> Async<Validation<bool,exn>>
-
     abstract member GetPDBNamesLike : like:string -> Async<Result<string list, exn>>
 
     abstract member GetPDBFilesFolder : name:string -> Async<Exceptional<string option>>
-
-    abstract member GetOldPDBsFromFolder : olderThan:System.TimeSpan -> workingCopyFolder:string -> Async<Result<string list,exn>>
