@@ -142,36 +142,6 @@ let ``Get snapshots older than 15 seconds`` () =
     |> List.iter (Result.mapError raise >> ignore)
 
 [<Fact>]
-let ``Delete snapshots older than 15 seconds`` () =
-    let seconds = 15
-    let res = asyncValidation {
-        let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder "source"
-        let! _ = oracleAPI.SnapshotPDB "source" cTempWCFolder "snapshot"
-        let! snapshots = oracleAPI.PDBSnapshots "source"
-        let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot!") else Ok "# snapshots is 1, good"
-        Async.Sleep(1000*(seconds+5)) |> Async.RunSynchronously
-        let! deleted = "source" |> oracleAPI.DeletePDBSnapshots (Some cTempWCFolder) (Some (TimeSpan.FromSeconds((float)seconds))) true
-        let! _ = if deleted then Ok "deleted properly" else Error (exn "Source not deleted ??!!")
-        let! stillExists = oracleAPI.PDBExists "snapshot"
-        let! _ = if stillExists then Error (exn "Snapshot not deleted ??!!") else Ok "Snapshot deleted"
-        let! hasSnapshots = oracleAPI.PDBHasSnapshots "source"
-        let! _ = if hasSnapshots then Error (exn "Yet some snapshot ??!!") else Ok "No snapshot"
-        let! stillExists = oracleAPI.PDBExists "source"
-        let! _ = if stillExists then Error (exn "Source not deleted ??!!") else Ok "Source deleted"
-        return "Everything fine!"
-    }
-    let tasks = [
-        res
-        "source" |> oracleAPI.DeletePDBSnapshots None None true |> Async.map (fun _ -> Validation.Valid "source") // delete source PDB in case the test failed
-    ]
-
-    tasks 
-    |> AsyncValidation.sequenceS
-    |> Async.RunSynchronously 
-    |> Validation.mapErrors (fun errors -> errors |> List.map (fun ex -> ex.Message) |> String.concat "\n" |> failwith) 
-    |> ignore
-
-[<Fact>]
 let ``Get PDB files folder`` () =
     let folderMaybe = Infrastructure.Oracle.getPDBFilesFolder conn "ORCLPDB" |> Async.RunSynchronously 
     match folderMaybe with
