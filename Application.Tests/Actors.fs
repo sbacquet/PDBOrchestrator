@@ -239,7 +239,7 @@ let ``State transfer`` () = test <| fun tck ->
     let aref2 = spawnOracleInstanceActor tck "server2"
 
     let state : OracleInstanceActor.StateResult = retype aref1 <? OracleInstanceActor.TransferInternalState aref2 |> run
-    state |> Result.mapError (fun error -> failwith error) |> ignore
+    state |> Result.mapError failwith |> ignore
     ()
 
 [<Fact>]
@@ -249,7 +249,7 @@ let ``API synchronizes state`` () = test <| fun tck ->
     let ok = API.enterMaintenanceMode ctx |> runQuick
     Assert.True(ok)
     let state = API.synchronizePrimaryInstanceWith ctx "server2" |> run
-    state |> Result.mapError (fun error -> failwith error) |> ignore
+    state |> Result.mapError failwith |> ignore
     ()
 
 [<Fact>]
@@ -380,7 +380,7 @@ let ``Lock master PDB`` () = test <| fun tck ->
     let (_, result) : WithRequestId<MasterPDBActor.EditionRolledBack> = 
         retype masterPDBActor <? MasterPDBActor.Rollback (newRequestId(), "me") |> run
 
-    result |> Result.mapError (fun error -> failwith error) |> ignore
+    result |> Result.mapError failwith |> ignore
 
 [<Fact>]
 let ``OracleInstance locks master PDB`` () = test <| fun tck ->
@@ -401,8 +401,20 @@ let ``API edits and rolls back master PDB`` () = test <| fun tck ->
     let request = API.prepareMasterPDBForModification ctx "me" "test1" 1 |> runQuick
     let _ = request |> throwIfRequestNotCompletedOk ctx
 
+    let editionInfo = API.getMasterPDBEditionInfo ctx "test1" |> runQuick
+    editionInfo |> Result.mapError failwith |> ignore
+    editionInfo |> Result.map (fun editionInfo ->
+        Assert.Equal("TEST1", editionInfo.MasterPDBName)
+        Assert.Equal("me", editionInfo.EditionInfo.Editor)
+        Assert.NotEmpty(editionInfo.Schemas)
+        editionInfo.Schemas |> List.iter (fun schema -> Assert.True(schema.ConnectionString |> Option.isSome))
+    ) |> ignore
+
     let request = API.rollbackMasterPDB ctx "me" "test1" |> runQuick
     request |> throwIfRequestNotCompletedOk ctx |> ignore
+
+    let editionInfo = API.getMasterPDBEditionInfo ctx "test1" |> runQuick
+    editionInfo |> Result.map (fun _ -> failwith "edition info should not be available") |> ignore
 
 [<Fact>]
 let ``API edits and commits master PDB`` () = test <| fun tck ->
@@ -414,6 +426,9 @@ let ``API edits and commits master PDB`` () = test <| fun tck ->
 
     let request = API.commitMasterPDB ctx "me" "test1" "version 2" |> runQuick
     let _ = request |> throwIfRequestNotCompletedOk ctx
+
+    let editionInfo = API.getMasterPDBEditionInfo ctx "test1" |> runQuick
+    editionInfo |> Result.map (fun _ -> failwith "edition info should not be available") |> ignore
 
     let state = API.getMasterPDBState ctx orchestratorState.PrimaryInstance "test1" |> run
     match state with
@@ -445,7 +460,7 @@ let ``OracleInstance creates a snapshot working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server1"
 
     let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "TEST1", 1, "WORKINGCOPY", true, false, false) |> run
-    result |> Result.mapError (fun error -> failwith error) |> ignore
+    result |> Result.mapError failwith |> ignore
     result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
         Assert.Equal("TEST1", masterPDBName)
         Assert.Equal(1, versionNumber)
@@ -458,7 +473,7 @@ let ``OracleInstance creates a clone working copy`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server1"
 
     let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "TEST1", 1, "WORKINGCOPY", false, false, false) |> run
-    result |> Result.mapError (fun error -> failwith error) |> ignore
+    result |> Result.mapError failwith |> ignore
     result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
         Assert.Equal("TEST1", masterPDBName)
         Assert.Equal(1, versionNumber)
@@ -471,7 +486,7 @@ let ``OracleInstance (non snapshot capable) creates a working copy`` () = test <
     let oracleActor = spawnOracleInstanceActor tck "server2"
 
     let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), "me", "TEST2", 1, "WORKINGCOPY", true, false, false) |> run
-    result |> Result.mapError (fun error -> failwith error) |> ignore
+    result |> Result.mapError failwith |> ignore
     result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
         Assert.Equal("TEST2", masterPDBName)
         Assert.Equal(1, versionNumber)

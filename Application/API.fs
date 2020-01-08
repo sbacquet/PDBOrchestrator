@@ -25,6 +25,9 @@ let getInstanceState (ctx:APIContext) (instance:string) : Async<Application.Orac
 let getMasterPDBState (ctx:APIContext) (instance:string) (pdb:string) : Async<Application.MasterPDBActor.StateResult> =
     ctx.Orchestrator <? GetMasterPDBState (instance.ToLower(), pdb.ToUpper())
 
+let getMasterPDBEditionInfo (ctx:APIContext) (pdb:string) : Async<Application.MasterPDBActor.EditionInfoResult> =
+    ctx.Orchestrator <? GetMasterPDBEditionInfo (pdb.ToUpper())
+
 let synchronizePrimaryInstanceWith (ctx:APIContext) (instance:string) : Async<Application.OracleInstanceActor.StateResult> =
     retype ctx.Orchestrator <? Synchronize (instance.ToLower())
 

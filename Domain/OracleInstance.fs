@@ -86,4 +86,8 @@ let removeWorkingCopy (name:string) (instance:OracleInstance) =
 let oracleInstancePortString port =
     port |> Option.map (fun port -> sprintf ":%d" port) |> Option.defaultValue ""
 
-let pdbService (instance:OracleInstance) = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port)
+let pdbService uri = sprintf "%s/%s" uri
+
+let oracleInstanceUri server port = sprintf "%s%s" server (oracleInstancePortString port)
+
+let pdbServiceFromInstance (instance:OracleInstance) = pdbService (oracleInstanceUri instance.Server instance.Port)

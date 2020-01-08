@@ -18,6 +18,8 @@ let json jsonStr : HttpHandler =
             return! ctx.WriteStringAsync jsonStr
         }
 
+let errorText error = sprintf "Error : %s." error |> text
+
 let withUser f : HttpHandler =
     fun next (ctx:HttpContext) -> task {
         let userNameMaybe = 
@@ -48,28 +50,35 @@ let getInstance apiCtx (name:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx name
     match stateMaybe with
     | Ok state -> return! json (OracleInstance.oracleInstanceDTOToJson state) next ctx
-    | Error error -> return! RequestErrors.notFound (text error) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
 let getMasterPDBs apiCtx (instancename:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx instancename
     match stateMaybe with
     | Ok state -> return! json (OracleInstance.masterPDBsToJson state) next ctx
-    | Error error -> return! RequestErrors.notFound (text error) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
 let getMasterPDB apiCtx (instance:string, pdb:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getMasterPDBState apiCtx instance pdb
     match stateMaybe with
     | Ok state -> return! json (MasterPDB.masterPDBStatetoJson state) next ctx
-    | Error error -> return! RequestErrors.notFound (text error) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
+}
+
+let getMasterPDBEditionInfo apiCtx (pdb:string) next (ctx:HttpContext) = task {
+    let! editionInfo = API.getMasterPDBEditionInfo apiCtx pdb
+    match editionInfo with
+    | Ok editionInfo -> return! json (MasterPDB.masterPDBEditionDTOToJson editionInfo) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
 let getMasterPDBVersions apiCtx (instance:string, pdb:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getMasterPDBState apiCtx instance pdb
     match stateMaybe with
     | Ok state -> return! json (MasterPDB.masterPDBVersionstoJson state) next ctx
-    | Error error -> return! RequestErrors.notFound (text error) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
 let getMasterPDBVersion apiCtx (instance:string, pdb:string, version:int) next (ctx:HttpContext) = task {
@@ -79,15 +88,15 @@ let getMasterPDBVersion apiCtx (instance:string, pdb:string, version:int) next (
         let versionPDB = state.Versions |> List.tryFind (fun v -> v.VersionNumber = version)
         match versionPDB with
         | Some versionPDB -> return! json (MasterPDBVersion.versionFulltoJson (Application.DTO.MasterPDB.toFullDTO state versionPDB)) next ctx
-        | None -> return! RequestErrors.notFound (sprintf "Master PDB %s has no version %d on Oracle instance %s" pdb version instance |> text) next ctx
-    | Error error -> return! RequestErrors.notFound (text error) next ctx
+        | None -> return! RequestErrors.notFound (sprintf "Master PDB %s has no version %d on Oracle instance %s." pdb version instance |> text) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
 let getWorkingCopies apiCtx (instancename:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx instancename
     match stateMaybe with
     | Ok state -> return! json (OracleInstance.workingCopiesToJson state) next ctx
-    | Error error -> return! RequestErrors.notFound (text error) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
 let getWorkingCopy apiCtx (instancename:string, workingCopyName:string) next (ctx:HttpContext) = task {
@@ -99,9 +108,9 @@ let getWorkingCopy apiCtx (instancename:string, workingCopyName:string) next (ct
         | Some workingCopy -> 
             return! json (OracleInstance.workingCopyDTOToJson workingCopy) next ctx
         | None ->
-            return! RequestErrors.notFound (sprintf "Working copy %s not found on Oracle instance %s" (workingCopyName.ToUpper()) (instancename.ToLower()) |> text) next ctx
+            return! RequestErrors.notFound (sprintf "Working copy %s not found on Oracle instance %s." (workingCopyName.ToUpper()) (instancename.ToLower()) |> text) next ctx
     | Error error -> 
-        return! RequestErrors.notFound (text error) next ctx
+        return! RequestErrors.notFound (errorText error) next ctx
 }
 
 let getRequestStatus (apiCtx:API.APIContext) (requestId:PendingRequest.RequestId) next (ctx:HttpContext) = task {
@@ -195,7 +204,7 @@ let deleteWorkingCopy apiCtx (instance:string, name:string) =
 let getPendingChanges apiCtx next (ctx:HttpContext) = task {
     let! pendingChangesMaybe = API.getPendingChanges apiCtx
     match pendingChangesMaybe with
-    | Error error -> return! ServerErrors.internalError (text error) next ctx
+    | Error error -> return! ServerErrors.internalError (errorText error) next ctx
     | Ok pendingChangesPerhaps -> 
         match pendingChangesPerhaps with
         | None -> return! Successful.NO_CONTENT next ctx

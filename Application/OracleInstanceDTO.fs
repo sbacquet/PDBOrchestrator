@@ -10,13 +10,15 @@ open Application
 
 type OracleInstanceDTO = {
     Name: string
+    ServerUri: string
     MasterPDBs: MasterPDBDTO list
     WorkingCopies: MasterPDBWorkingCopyDTO list
 }
 
-let consOracleInstanceDTO name masterPDBs workingCopies = 
+let consOracleInstanceDTO name serverUri masterPDBs workingCopies = 
     { 
         Name = name
+        ServerUri = serverUri
         MasterPDBs = masterPDBs 
         WorkingCopies = workingCopies
     }
@@ -37,11 +39,12 @@ let toDTO (masterPDBActors:Map<string, IActorRef<obj>>) (oracleInstance : Domain
             |> Async.Parallel
     let schemasByMasterPDB = masterPDBs |> Array.map (fun pdb -> (pdb.Name, pdb.Schemas)) |> Map.ofSeq
     let wcToDTO (wc:MasterPDBWorkingCopy) =
-        let wcService = pdbService oracleInstance wc.Name
+        let wcService = pdbServiceFromInstance oracleInstance wc.Name
         wc |> toWorkingCopyDTO wcService (schemasByMasterPDB |> Map.tryFind wc.MasterPDBName |> Option.defaultValue List.empty)
     return 
         consOracleInstanceDTO 
             oracleInstance.Name 
+            (oracleInstanceUri oracleInstance.Server oracleInstance.Port)
             (masterPDBs |> Array.toList)
             (oracleInstance.WorkingCopies |> Map.toList |> List.map (snd >> wcToDTO))
 }
@@ -82,7 +85,7 @@ let consOracleInstanceFullDTO name server port dbaUser dbaPassword mp dp sdp ssd
 let toFullDTO (masterPDBs:MasterPDBDTO list) (instance:Domain.OracleInstance.OracleInstance) =
     let schemasByMasterPDB = masterPDBs |> List.map (fun pdb -> (pdb.Name, pdb.Schemas)) |> Map.ofList
     let wcToDTO (wc:MasterPDBWorkingCopy) =
-        let wcService = pdbService instance wc.Name
+        let wcService = pdbServiceFromInstance instance wc.Name
         wc |> toWorkingCopyDTO wcService (schemasByMasterPDB |> Map.tryFind wc.MasterPDBName |> Option.defaultValue List.empty)
     {
         Name = instance.Name

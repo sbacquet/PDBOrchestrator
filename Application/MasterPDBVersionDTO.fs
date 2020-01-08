@@ -10,11 +10,11 @@ type SchemaDTO = {
     ConnectionString: string option
 }
 
-let toSchemaDTO (schema:Domain.MasterPDB.Schema) = { 
+let toSchemaDTO connectionString (schema:Domain.MasterPDB.Schema) = { 
     User = schema.User
     Password = schema.Password
     Type = schema.Type
-    ConnectionString = None
+    ConnectionString = connectionString
 }
 
 type MasterPDBVersionDTO = {

@@ -22,6 +22,7 @@ type Command =
 | GetState // responds with Application.DTO.Orchestrator
 | GetInstanceState of string // responds with Application.OracleInstanceActor.StateResult
 | GetMasterPDBState of string * string // responds with Application.MasterPDBActor.StateResult
+| GetMasterPDBEditionInfo of string // responds with Application.MasterPDBActor.EditionInfoResult
 | CreateMasterPDB of WithUser<CreateMasterPDBParams> // responds with RequestValidation
 | PrepareMasterPDBForModification of WithUser<string, int> // responds with RequestValidation
 | CommitMasterPDB of WithUser<string, string> // responds with RequestValidation
@@ -45,6 +46,7 @@ let private pendingChangeCommandFilter mapper = function
 | GetState
 | GetInstanceState _
 | GetMasterPDBState _
+| GetMasterPDBEditionInfo _
 | CreateWorkingCopy _
 | DeleteWorkingCopy _
 | GetDumpTransferInfo _
@@ -117,6 +119,8 @@ let describeCommand = function
     sprintf "get state of Oracle instance \"%s\"" instance
 | GetMasterPDBState (instance, pdb) ->
     sprintf "get state of master PDB \"%s\" in Oracle instance \"%s\"" pdb instance
+| GetMasterPDBEditionInfo pdb ->
+    sprintf "get edition info of master PDB \"%s\"" pdb
 | CreateMasterPDB (user, parameters) ->
     sprintf "create master PDB \"%s\" from dump \"%s\"" parameters.Name parameters.Dump
 | PrepareMasterPDBForModification (user, pdb, version) ->
@@ -258,6 +262,18 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     instance <<! OracleInstanceActor.GetMasterPDBState pdb
                 | None ->
                     sender <! MasterPDBActor.stateError (sprintf "cannot find Oracle instance %s" instanceName)
+                return! loop state
+
+            | GetMasterPDBEditionInfo pdb ->
+                let sender = ctx.Sender().Retype<MasterPDBActor.EditionInfoResult>()
+                let instanceName = getInstanceName "primary"
+                match state.Orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
+                    let instance:IActorRef<OracleInstanceActor.Command> = retype state.Collaborators.OracleInstanceActors.[instanceName]
+                    instance <<! OracleInstanceActor.GetMasterPDBEditionInfo pdb
+                | None ->
+                    let error:MasterPDBActor.EditionInfoResult = sprintf "cannot find Oracle instance %s" instanceName |> Error
+                    sender <! error
                 return! loop state
 
             | CreateMasterPDB (user, parameters) ->

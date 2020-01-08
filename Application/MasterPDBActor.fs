@@ -16,6 +16,7 @@ type Command =
 | GetState // responds with StateResult
 | GetInternalState // responds with MasterPDB
 | SetInternalState of MasterPDB // no response
+| GetEditionInfo // responds with EditionInfoResult
 | PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
 | Commit of WithRequestId<string, string> // responds with WithRequestId<EditionCommitted>
 | Rollback of WithRequestId<string> // responds with WithRequestId<EditionRolledBack>
@@ -30,6 +31,8 @@ type PrepareForModificationResult =
 type StateResult = Result<Application.DTO.MasterPDB.MasterPDBDTO, string>
 let stateOk state : StateResult = Ok state
 let stateError error : StateResult = Error error
+
+type EditionInfoResult = Result<Application.DTO.MasterPDB.MasterPDBEditionDTO, string>
 
 type EditionCommitted = Result<string * MasterPDB * int, string>
 type EditionRolledBack = Result<string * MasterPDB, string>
@@ -80,7 +83,7 @@ let private masterPDBActorBody
     (ctx : Actor<obj>) =
 
     let initialMasterPDB = initialRepository.Get()
-    let editionPDBName = sprintf "%s_EDITION" initialMasterPDB.Name
+    let editionPDBName = masterPDBEditionName initialMasterPDB.Name
 
     let rec loop state = actor {
 
@@ -138,6 +141,16 @@ let private masterPDBActorBody
 
             | SetInternalState newMasterPDB ->
                 return! loop { state with MasterPDB = newMasterPDB }
+
+            | GetEditionInfo ->
+                let sender = ctx.Sender().Retype<EditionInfoResult>()
+                let result:EditionInfoResult = 
+                    match masterPDB.EditionState with
+                    | Some _ ->
+                        Application.DTO.MasterPDB.toMasterPDBEditionDTO instance masterPDB |> Ok
+                    | None -> sprintf "master PDB %s is not being edited" masterPDB.Name |> Error 
+                sender <! result
+                return! loop state
 
             | PrepareForModification (requestId, version, user) as command ->
                 let sender = ctx.Sender().Retype<WithRequestId<PrepareForModificationResult>>()

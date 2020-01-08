@@ -26,3 +26,13 @@ let masterPDBStatetoJson (pdb:MasterPDBDTO) =
 
 let masterPDBVersionstoJson (pdb:MasterPDBDTO) =
     pdb.Versions |> Json.serializeWith (Encode.listWith encodeMasterPDBVersionDTO) JsonFormattingOptions.Pretty
+
+let encodeMasterPDBEditionDTO = Encode.buildWith (fun (x:MasterPDBEditionDTO) ->
+    Encode.required Encode.string "editedMasterPDB" x.MasterPDBName >>
+    Encode.required encodeLockInfoDTO "edition" x.EditionInfo >>
+    Encode.required (Encode.listWith encodeSchemaDTO) "schemas" x.Schemas
+)
+
+let masterPDBEditionDTOToJson (edition:MasterPDBEditionDTO) =
+    edition |> Json.serializeWith encodeMasterPDBEditionDTO JsonFormattingOptions.Pretty
+

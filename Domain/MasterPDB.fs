@@ -1,7 +1,6 @@
 ﻿module Domain.MasterPDB
 
 open Domain.MasterPDBVersion
-open Domain.MasterPDBWorkingCopy
 
 type Schema = {
     User: string
@@ -110,3 +109,5 @@ let unlock masterPDB =
     | Some _ -> Ok { masterPDB with EditionState = None }
 
 let isLockedForEdition masterPDB = masterPDB.EditionState.IsSome
+
+let masterPDBEditionName (masterPDBName:string) = sprintf "%s_EDITION" (masterPDBName.ToUpper())

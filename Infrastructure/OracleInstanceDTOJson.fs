@@ -7,6 +7,7 @@ open Application.DTO.OracleInstance
 open Domain.MasterPDBWorkingCopy
 open Application.DTO.MasterPDBWorkingCopy
 open Infrastructure.DTOJSON.MasterPDBVersion
+open Infrastructure.DTOJSON.MasterPDB
 
 let encodeMasterPDBDTOs = Encode.listWith MasterPDB.encodeMasterPDBDTO
 
@@ -34,6 +35,7 @@ let encodeWorkingCopyDTO = Encode.buildWith (fun (x:MasterPDBWorkingCopyDTO) ->
 
 let encodeOracleInstanceDTO = Encode.buildWith (fun (x:OracleInstanceDTO) ->
     Encode.required Encode.string "name" x.Name >>
+    Encode.required Encode.string "serverUri" x.ServerUri >>
     Encode.required encodeMasterPDBDTOs "masterPDBs" x.MasterPDBs >>
     Encode.ifNotEqual List.empty (Encode.listWith encodeWorkingCopyDTO) "workingCopies" x.WorkingCopies
 )
@@ -44,8 +46,9 @@ let oracleInstanceDTOToJson instanceDTO =
 let masterPDBsToJson (instanceDTO:OracleInstanceDTO) =
     instanceDTO.MasterPDBs |> Json.serializeWith encodeMasterPDBDTOs JsonFormattingOptions.Pretty
 
-let workingCopiesToJson  (instanceDTO:OracleInstanceDTO) =
+let workingCopiesToJson (instanceDTO:OracleInstanceDTO) =
     instanceDTO.WorkingCopies |> Json.serializeWith (Encode.listWith encodeWorkingCopyDTO) JsonFormattingOptions.Pretty
 
-let workingCopyDTOToJson  (wc:MasterPDBWorkingCopyDTO) =
+let workingCopyDTOToJson (wc:MasterPDBWorkingCopyDTO) =
     wc |> Json.serializeWith encodeWorkingCopyDTO JsonFormattingOptions.Pretty
+

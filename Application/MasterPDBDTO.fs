@@ -3,6 +3,8 @@
 open System
 open Domain
 open Application.DTO.MasterPDBVersion
+open Domain.OracleInstance
+open Domain.MasterPDB
 
 type EditionInfoDTO = {
     Editor: string
@@ -34,17 +36,17 @@ let consMasterPDBDTO name schemas latestVersion versions editionState editionDis
     Properties = properties
 }
 
-let toDTO (masterPDB:Domain.MasterPDB.MasterPDB) =
+let toDTO (masterPDB:MasterPDB) =
     consMasterPDBDTO
         masterPDB.Name
-        (masterPDB.Schemas |> List.map toSchemaDTO)
+        (masterPDB.Schemas |> List.map (toSchemaDTO None))
         (masterPDB |> Domain.MasterPDB.getLatestAvailableVersionNumber)
         (masterPDB.Versions |> Map.toList |> List.map (fun (_, version) -> version |> toDTO (Domain.MasterPDBVersion.manifestFile masterPDB.Name version.VersionNumber)))
         (masterPDB.EditionState |> toEditionInfoDTO)
         masterPDB.EditionDisabled
         masterPDB.Properties
 
-let fromDTO (dto:MasterPDBDTO) : Domain.MasterPDB.MasterPDB = 
+let fromDTO (dto:MasterPDBDTO) : MasterPDB = 
     MasterPDB.consMasterPDB
         dto.Name
         (dto.Schemas |> List.map (fun schema -> { User = schema.User; Password = schema.Password; Type = schema.Type }))
@@ -72,3 +74,19 @@ let toFullDTO (masterPDB:MasterPDBDTO) (version:MasterPDBVersionDTO) =
         version.Deleted
         version.Manifest
         version.Properties
+
+
+type MasterPDBEditionDTO = {
+    MasterPDBName: string
+    EditionInfo: EditionInfoDTO
+    Schemas: SchemaDTO list
+}
+
+let toMasterPDBEditionDTO (instance:OracleInstance) (masterPDB:MasterPDB) : MasterPDBEditionDTO =
+    let pdbService = pdbServiceFromInstance instance (masterPDBEditionName masterPDB.Name)
+    {
+        MasterPDBName = masterPDB.Name
+        EditionInfo = (masterPDB.EditionState |> toEditionInfoDTO).Value
+        Schemas = masterPDB.Schemas |> List.map (fun schema -> schema |> toSchemaDTO (sprintf "%s/%s@%s" schema.User schema.Password pdbService |> Some))
+    }
+

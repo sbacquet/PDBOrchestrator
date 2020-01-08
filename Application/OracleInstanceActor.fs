@@ -92,6 +92,7 @@ module private Validation =
 type Command =
 | GetState // responds with StateResult
 | GetMasterPDBState of string // responds with Application.MasterPDBActor.StateResult
+| GetMasterPDBEditionInfo of string // responds with Application.MasterPDBActor.EditionInfoResult
 | SetInternalState of OracleInstance.OracleInstanceFullDTO // responds with StateResult
 | TransferInternalState of IActorRef<obj> // responds with StateResult
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
@@ -235,6 +236,7 @@ let private oracleInstanceActorBody
         let instance = state.Instance
         let collaborators = state.Collaborators
         let requests = state.Requests
+        let pdbService = pdbServiceFromInstance instance
 
         if state.PreviousInstance <> instance then
             ctx.Log.Value.Debug("Persisted modified Oracle instance {instance}", instance.Name)
@@ -284,6 +286,17 @@ let private oracleInstanceActorBody
                     masterPDBActor <<! MasterPDBActor.GetState
                 | None ->
                     sender <! MasterPDBActor.stateError (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name)
+                return! loop state
+
+            | GetMasterPDBEditionInfo pdb ->
+                let sender = ctx.Sender().Retype<Application.MasterPDBActor.EditionInfoResult>()
+                match instance |> containsMasterPDB pdb with
+                | Some pdb ->
+                    let masterPDBActor:IActorRef<MasterPDBActor.Command> = retype (collaborators.MasterPDBActors |> getMasterPDBActor pdb)
+                    masterPDBActor <<! MasterPDBActor.GetEditionInfo
+                | None ->
+                    let error:Application.MasterPDBActor.EditionInfoResult = sprintf "master PDB %s does not exist on instance %s" pdb instance.Name |> Error
+                    sender <! error
                 return! loop state
 
             | SetInternalState newInstance -> 
@@ -378,7 +391,7 @@ let private oracleInstanceActorBody
                     let res:CreateWorkingCopyResult = 
                         match result with
                         | Ok () -> 
-                             Ok (masterPDBName, versionNumber, wcName, pdbService instance wcName, instance.Name)
+                             Ok (masterPDBName, versionNumber, wcName, pdbService wcName, instance.Name)
                         | Error error -> Error error
                     sender <! (requestId, res)
                     return! loop state
@@ -423,7 +436,7 @@ let private oracleInstanceActorBody
                     let res:CreateWorkingCopyResult = 
                         match result with
                         | Ok () -> 
-                             Ok (masterPDBName, 0, wcName, pdbService instance wcName, instance.Name)
+                             Ok (masterPDBName, 0, wcName, pdbService wcName, instance.Name)
                         | Error error -> Error error
                     sender <! (requestId, res)
                     return! loop state
@@ -510,7 +523,7 @@ let private oracleInstanceActorBody
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
-                        sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, pdbService instance wcName, instance.Name))
+                        sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, pdbService wcName, instance.Name))
                         let wc = 
                             if durable then 
                                 newDurableWorkingCopy user (SpecificVersion versionNumber) masterPDBName wcName
@@ -530,7 +543,7 @@ let private oracleInstanceActorBody
                     let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                     match result with
                     | Ok _ ->
-                        sender <! (requestId, Ok (masterPDBName, 0, wcName, pdbService instance wcName, instance.Name))
+                        sender <! (requestId, Ok (masterPDBName, 0, wcName, pdbService wcName, instance.Name))
                         let wc = 
                             if durable then 
                                 newDurableWorkingCopy user Edition masterPDBName wcName

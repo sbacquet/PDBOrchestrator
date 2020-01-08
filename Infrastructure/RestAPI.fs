@@ -12,6 +12,7 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             routef "/requests/%O" (HttpHandlers.getRequestStatus apiCtx)
             routef "/instances/%s/master-pdbs/%s/versions/%i" (HttpHandlers.getMasterPDBVersion apiCtx)
             routef "/instances/%s/master-pdbs/%s/versions" (HttpHandlers.getMasterPDBVersions apiCtx)
+            routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.getMasterPDBEditionInfo apiCtx)
             routef "/instances/%s/master-pdbs/%s" (HttpHandlers.getMasterPDB apiCtx)
             routef "/instances/%s/master-pdbs" (HttpHandlers.getMasterPDBs apiCtx)
             routef "/instances/%s/dump-import-info" (HttpHandlers.getDumpTransferInfo apiCtx)
