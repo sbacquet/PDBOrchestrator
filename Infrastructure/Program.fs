@@ -56,9 +56,15 @@ module Config =
 
 let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
     let env = app.ApplicationServices.GetService<IHostingEnvironment>()
-    (match env.IsDevelopment() with
-    | true  -> app.UseDeveloperExceptionPage()
-    | false -> app.UseGiraffeErrorHandler RestAPI.errorHandler)
+    let builder = 
+        if env.IsDevelopment() then app.UseDeveloperExceptionPage()
+        else app.UseGiraffeErrorHandler RestAPI.errorHandler
+
+    let localizationOptions = RequestLocalizationOptions()
+    localizationOptions.DefaultRequestCulture <- Microsoft.AspNetCore.Localization.RequestCulture("en-US")
+    localizationOptions.SupportedCultures <- System.Globalization.CultureInfo.GetCultures(Globalization.CultureTypes.AllCultures)
+    builder
+        .UseRequestLocalization(localizationOptions)        
         .UseStaticFiles()
         .UseSerilogRequestLogging()
         .UseGiraffe(RestAPI.webApp apiCtx) |> ignore

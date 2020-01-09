@@ -1,7 +1,7 @@
 ﻿module Infrastructure.Common
 
-let toLocalTimeString (dateTime:System.DateTime) =
-    dateTime.ToLocalTime().ToString("f")
+let toLocalTimeString culture (dateTime:System.DateTime) =
+    dateTime.ToLocalTime().ToString("f", culture)
 
 let countdownInHours (dateTime:System.DateTime) =
     let diff = dateTime - System.DateTime.UtcNow

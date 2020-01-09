@@ -20,12 +20,15 @@ let json jsonStr : HttpHandler =
 
 let errorText error = sprintf "Error : %s." error |> text
 
+let getCulture (ctx:HttpContext) =
+    ctx.Features.Get<Microsoft.AspNetCore.Localization.IRequestCultureFeature>().RequestCulture.Culture
+
 let withUser f : HttpHandler =
     fun next (ctx:HttpContext) -> task {
         let userNameMaybe = 
             if (ctx.User.Identity.Name = null) then None else Some ctx.User.Identity.Name
-            |> Option.orElse (ctx.TryGetRequestHeader "user") // TODO: remove this line when authentication implemented
-        let isAdmin = ctx.TryGetRequestHeader "admin" |> Option.contains "true" // TODO
+            |> Option.orElse (ctx.TryGetRequestHeader "User") // TODO: remove this line when authentication implemented
+        let isAdmin = ctx.TryGetRequestHeader "Admin" |> Option.contains "Yes!" // TODO
         match userNameMaybe with
         | Some userName -> 
             let user:Application.UserRights.User = { Name = userName.ToLower(); Roles = if isAdmin then [ "admin" ] else [] }
@@ -43,41 +46,42 @@ let withAdmin f : HttpHandler =
 
 let getAllInstances apiCtx next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx
-    return! json (Orchestrator.orchestratorToJson state) next ctx
+    let culture = getCulture ctx
+    return! json (Orchestrator.orchestratorToJson culture state) next ctx
 }
 
 let getInstance apiCtx (name:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx name
     match stateMaybe with
-    | Ok state -> return! json (OracleInstance.oracleInstanceDTOToJson state) next ctx
+    | Ok state -> return! json (OracleInstance.oracleInstanceDTOToJson (getCulture ctx) state) next ctx
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
 let getMasterPDBs apiCtx (instancename:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx instancename
     match stateMaybe with
-    | Ok state -> return! json (OracleInstance.masterPDBsToJson state) next ctx
+    | Ok state -> return! json (OracleInstance.masterPDBsToJson (getCulture ctx) state) next ctx
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
 let getMasterPDB apiCtx (instance:string, pdb:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getMasterPDBState apiCtx instance pdb
     match stateMaybe with
-    | Ok state -> return! json (MasterPDB.masterPDBStatetoJson state) next ctx
+    | Ok state -> return! json (MasterPDB.masterPDBStatetoJson (getCulture ctx) state) next ctx
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
 let getMasterPDBEditionInfo apiCtx (pdb:string) next (ctx:HttpContext) = task {
     let! editionInfo = API.getMasterPDBEditionInfo apiCtx pdb
     match editionInfo with
-    | Ok editionInfo -> return! json (MasterPDB.masterPDBEditionDTOToJson editionInfo) next ctx
+    | Ok editionInfo -> return! json (MasterPDB.masterPDBEditionDTOToJson (getCulture ctx) editionInfo) next ctx
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
 let getMasterPDBVersions apiCtx (instance:string, pdb:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getMasterPDBState apiCtx instance pdb
     match stateMaybe with
-    | Ok state -> return! json (MasterPDB.masterPDBVersionstoJson state) next ctx
+    | Ok state -> return! json (MasterPDB.masterPDBVersionstoJson (getCulture ctx) state) next ctx
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
@@ -87,7 +91,7 @@ let getMasterPDBVersion apiCtx (instance:string, pdb:string, version:int) next (
     | Ok state -> 
         let versionPDB = state.Versions |> List.tryFind (fun v -> v.VersionNumber = version)
         match versionPDB with
-        | Some versionPDB -> return! json (MasterPDBVersion.versionFulltoJson (Application.DTO.MasterPDB.toFullDTO state versionPDB)) next ctx
+        | Some versionPDB -> return! json (MasterPDBVersion.versionFulltoJson (getCulture ctx) (Application.DTO.MasterPDB.toFullDTO state versionPDB)) next ctx
         | None -> return! RequestErrors.notFound (sprintf "Master PDB %s has no version %d on Oracle instance %s." pdb version instance |> text) next ctx
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
@@ -95,7 +99,7 @@ let getMasterPDBVersion apiCtx (instance:string, pdb:string, version:int) next (
 let getWorkingCopies apiCtx (instancename:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx instancename
     match stateMaybe with
-    | Ok state -> return! json (OracleInstance.workingCopiesToJson state) next ctx
+    | Ok state -> return! json (OracleInstance.workingCopiesToJson (getCulture ctx) state) next ctx
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
@@ -106,7 +110,7 @@ let getWorkingCopy apiCtx (instancename:string, workingCopyName:string) next (ct
         let workingCopy = state.WorkingCopies |> List.tryFind (fun wc -> wc.Name = workingCopyName.ToUpper())
         match workingCopy with
         | Some workingCopy -> 
-            return! json (OracleInstance.workingCopyDTOToJson workingCopy) next ctx
+            return! json (OracleInstance.workingCopyDTOToJson (getCulture ctx) workingCopy) next ctx
         | None ->
             return! RequestErrors.notFound (sprintf "Working copy %s not found on Oracle instance %s." (workingCopyName.ToUpper()) (instancename.ToLower()) |> text) next ctx
     | Error error -> 
@@ -217,7 +221,7 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
                 let name, lockInfo = x
                 jObj 
                 |> Encode.required Encode.string "name" (name.ToUpper())
-                |> Encode.required MasterPDB.encodeLockInfoDTO "lock" lockInfo
+                |> Encode.required (MasterPDB.encodeLockInfoDTO (getCulture ctx)) "lock" lockInfo
             )
             let encodePendingChanges = Encode.buildWith (fun (x:OrchestratorActor.PendingChanges) jObj ->
                 jObj 
@@ -284,7 +288,7 @@ let collectGarbage apiCtx = withUser (fun user next ctx -> task {
 let synchronizePrimaryInstanceWith apiCtx instance next ctx = task {
     let! stateMaybe = API.synchronizePrimaryInstanceWith apiCtx instance
     match stateMaybe with
-    | Ok state -> return! (json <| OracleInstance.oracleInstanceDTOToJson state) next ctx
+    | Ok state -> return! (json <| OracleInstance.oracleInstanceDTOToJson (getCulture ctx) state) next ctx
     | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot synchronize %s with primary instance : %s." (instance.ToLower()) error) next ctx
 }
 

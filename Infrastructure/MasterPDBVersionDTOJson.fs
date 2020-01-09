@@ -13,29 +13,29 @@ let encodeSchemaDTO = Encode.buildWith (fun (x:SchemaDTO) ->
     Encode.optional Encode.string "connectionString" x.ConnectionString
 )
 
-let encodeMasterPDBVersionDTO = Encode.buildWith (fun (x:MasterPDBVersionDTO) ->
+let encodeMasterPDBVersionDTO culture = Encode.buildWith (fun (x:MasterPDBVersionDTO) ->
     Encode.required Encode.int "versionNumber" x.VersionNumber >>
     Encode.required Encode.string "createdBy" x.CreatedBy >>
     Encode.required Encode.dateTime "creationDate" x.CreationDate >>
-    Encode.required Encode.string "creationLocalDate" (toLocalTimeString x.CreationDate) >>
+    Encode.required Encode.string "creationLocalDate" (toLocalTimeString culture x.CreationDate) >>
     Encode.required Encode.string "comment" x.Comment >>
     Encode.ifNotEqual false Encode.bool "deleted" x.Deleted >>
     Encode.required Encode.string "manifest" x.Manifest >>
     Encode.ifNotEqual Map.empty (Encode.mapWith Encode.string) "properties" x.Properties
 )
 
-let encodeMasterPDBVersionFullDTO = Encode.buildWith (fun (x:MasterPDBVersionFullDTO) ->
+let encodeMasterPDBVersionFullDTO culture = Encode.buildWith (fun (x:MasterPDBVersionFullDTO) ->
     Encode.required Encode.string "name" x.Name >>
     Encode.required (Encode.listWith encodeSchemaDTO) "schemas" x.Schemas >>
     Encode.required Encode.int "versionNumber" x.VersionNumber >>
     Encode.required Encode.string "createdBy" x.CreatedBy >>
     Encode.required Encode.dateTime "creationDate" x.CreationDate >>
-    Encode.required Encode.string "creationLocalDate" (toLocalTimeString x.CreationDate) >>
+    Encode.required Encode.string "creationLocalDate" (toLocalTimeString culture x.CreationDate) >>
     Encode.required Encode.string "comment" x.Comment >>
     Encode.ifNotEqual false Encode.bool "deleted" x.Deleted >>
     Encode.required Encode.string "manifest" x.Manifest >>
     Encode.ifNotEqual Map.empty (Encode.mapWith Encode.string) "properties" x.Properties
 )
 
-let versionFulltoJson versionFullDTO =
-    versionFullDTO |> Json.serializeWith encodeMasterPDBVersionFullDTO JsonFormattingOptions.Pretty
+let versionFulltoJson culture versionFullDTO =
+    versionFullDTO |> Json.serializeWith (encodeMasterPDBVersionFullDTO culture) JsonFormattingOptions.Pretty

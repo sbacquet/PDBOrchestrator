@@ -9,14 +9,14 @@ open Application.DTO.MasterPDBWorkingCopy
 open Infrastructure.DTOJSON.MasterPDBVersion
 open Infrastructure.Common
 
-let encodeMasterPDBDTOs = Encode.listWith MasterPDB.encodeMasterPDBDTO
+let encodeMasterPDBDTOs culture = Encode.listWith (MasterPDB.encodeMasterPDBDTO culture)
 
-let encodeWorkingCopyDTO = Encode.buildWith (fun (x:MasterPDBWorkingCopyDTO) ->
+let encodeWorkingCopyDTO culture = Encode.buildWith (fun (x:MasterPDBWorkingCopyDTO) ->
     Encode.required Encode.string "name" x.Name >>
     Encode.required Encode.string "masterPDBName" x.MasterPDBName >>
     Encode.required Encode.string "createdBy" x.CreatedBy >>
     Encode.required Encode.dateTime "creationDate" x.CreationDate >>
-    Encode.required Encode.string "creationLocalDate" (toLocalTimeString x.CreationDate) >>
+    Encode.required Encode.string "creationLocalDate" (toLocalTimeString culture x.CreationDate) >>
     (match x.Source with
     | SpecificVersion version -> 
         Encode.required Encode.string "sourceType" "SpecificVersion" >>
@@ -28,7 +28,7 @@ let encodeWorkingCopyDTO = Encode.buildWith (fun (x:MasterPDBWorkingCopyDTO) ->
     | Temporary expiry -> 
         Encode.required Encode.string "lifetimeType" "Temporary" >>
         Encode.required Encode.dateTime "expiryDate" expiry >>
-        Encode.required Encode.string "expiryLocalDate" (toLocalTimeString expiry) >>
+        Encode.required Encode.string "expiryLocalDate" (toLocalTimeString culture expiry) >>
         Encode.required Encode.float "hoursBeforeExpiry" (countdownInHours expiry)
     | Durable ->
         Encode.required Encode.string "lifetimeType" "Durable"
@@ -36,22 +36,22 @@ let encodeWorkingCopyDTO = Encode.buildWith (fun (x:MasterPDBWorkingCopyDTO) ->
     Encode.required (Encode.listWith encodeSchemaDTO) "schemas" x.Schemas
 )
 
-let encodeOracleInstanceDTO = Encode.buildWith (fun (x:OracleInstanceDTO) ->
+let encodeOracleInstanceDTO culture = Encode.buildWith (fun (x:OracleInstanceDTO) ->
     Encode.required Encode.string "name" x.Name >>
     Encode.required Encode.string "serverUri" x.ServerUri >>
-    Encode.required encodeMasterPDBDTOs "masterPDBs" x.MasterPDBs >>
-    Encode.ifNotEqual List.empty (Encode.listWith encodeWorkingCopyDTO) "workingCopies" x.WorkingCopies
+    Encode.required (encodeMasterPDBDTOs culture) "masterPDBs" x.MasterPDBs >>
+    Encode.ifNotEqual List.empty (Encode.listWith (encodeWorkingCopyDTO culture)) "workingCopies" x.WorkingCopies
 )
 
-let oracleInstanceDTOToJson instanceDTO =
-    instanceDTO |> Json.serializeWith encodeOracleInstanceDTO JsonFormattingOptions.Pretty
+let oracleInstanceDTOToJson culture instanceDTO =
+    instanceDTO |> Json.serializeWith (encodeOracleInstanceDTO culture) JsonFormattingOptions.Pretty
 
-let masterPDBsToJson (instanceDTO:OracleInstanceDTO) =
-    instanceDTO.MasterPDBs |> Json.serializeWith encodeMasterPDBDTOs JsonFormattingOptions.Pretty
+let masterPDBsToJson culture (instanceDTO:OracleInstanceDTO) =
+    instanceDTO.MasterPDBs |> Json.serializeWith (encodeMasterPDBDTOs culture) JsonFormattingOptions.Pretty
 
-let workingCopiesToJson (instanceDTO:OracleInstanceDTO) =
-    instanceDTO.WorkingCopies |> Json.serializeWith (Encode.listWith encodeWorkingCopyDTO) JsonFormattingOptions.Pretty
+let workingCopiesToJson culture (instanceDTO:OracleInstanceDTO) =
+    instanceDTO.WorkingCopies |> Json.serializeWith (Encode.listWith (encodeWorkingCopyDTO culture)) JsonFormattingOptions.Pretty
 
-let workingCopyDTOToJson (wc:MasterPDBWorkingCopyDTO) =
-    wc |> Json.serializeWith encodeWorkingCopyDTO JsonFormattingOptions.Pretty
+let workingCopyDTOToJson culture (wc:MasterPDBWorkingCopyDTO) =
+    wc |> Json.serializeWith (encodeWorkingCopyDTO culture) JsonFormattingOptions.Pretty
 
