@@ -8,7 +8,7 @@ type Parameters = {
     NumberOfOracleShortTaskExecutors : int
     NumberOfOracleLongTaskExecutors : int
     NumberOfOracleDiskIntensiveTaskExecutors : int
-    GarbageCollectionDelay : System.TimeSpan
+    TemporaryWorkingCopyLifetime : System.TimeSpan
 }
 
 let consParameters 
@@ -19,7 +19,7 @@ let consParameters
     numberOfOracleShortTaskExecutors 
     numberOfOracleLongTaskExecutors 
     numberOfOracleDiskIntensiveTaskExecutors 
-    garbageCollectionDelay = 
+    temporaryWorkingCopyLifetime = 
     {
         ServerInstanceName = serverInstanceName
         ShortTimeout = shortTimeout
@@ -28,5 +28,5 @@ let consParameters
         NumberOfOracleShortTaskExecutors = numberOfOracleShortTaskExecutors
         NumberOfOracleLongTaskExecutors = numberOfOracleLongTaskExecutors
         NumberOfOracleDiskIntensiveTaskExecutors = numberOfOracleDiskIntensiveTaskExecutors
-        GarbageCollectionDelay = garbageCollectionDelay
+        TemporaryWorkingCopyLifetime = temporaryWorkingCopyLifetime
     }

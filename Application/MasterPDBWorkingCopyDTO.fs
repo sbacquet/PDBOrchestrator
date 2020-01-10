@@ -1,10 +1,8 @@
 ﻿module Application.DTO.MasterPDBWorkingCopy
 
 open Akkling
-open Application
 open Application.DTO.MasterPDBVersion
 open Domain.MasterPDBWorkingCopy
-open Application.DTO.MasterPDB
 
 type MasterPDBWorkingCopyDTO = {
     Name: string

@@ -30,6 +30,7 @@ type Command =
 | CreateWorkingCopy of OnInstance<string, int, string, bool, bool, bool> // responds with RequestValidation
 | CreateWorkingCopyOfEdition of WithUser<string, string, bool, bool> // responds with RequestValidation
 | DeleteWorkingCopy of OnInstance<string> // responds with RequestValidation
+| ExtendWorkingCopy of string * string // responds with Result<MasterPDBWorkingCopy, string>
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
 | GetDumpTransferInfo of string // responds with Result<Application.OracleInstanceActor.DumpTransferInfo,string>
 
@@ -49,6 +50,7 @@ let private pendingChangeCommandFilter mapper = function
 | GetMasterPDBEditionInfo _
 | CreateWorkingCopy _
 | DeleteWorkingCopy _
+| ExtendWorkingCopy _
 | GetDumpTransferInfo _
 | GetRequest _ 
   -> false
@@ -135,6 +137,8 @@ let describeCommand = function
     sprintf "delete a working copy named \"%s\" on instance \"%s\"" name instance
 | CreateWorkingCopyOfEdition (user, masterPDB, wcName, durable, force) ->
     sprintf "create a %s working copy (clone) named \"%s\" of master PDB \"%s\" edition" (if durable then "durable" else "temporary") wcName masterPDB
+| ExtendWorkingCopy (instance, name) ->
+    sprintf "extend lifetime of working copy %s on instance %s" name instance
 | GetRequest requestId ->
     sprintf "get request from id %O" requestId
 | GetDumpTransferInfo instance ->
@@ -350,6 +354,17 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
                     return! loop state
 
+            | ExtendWorkingCopy (instanceName, name) ->
+                let sender = ctx.Sender().Retype<Result<Domain.MasterPDBWorkingCopy.MasterPDBWorkingCopy, string>>()
+                let instanceName = getInstanceName instanceName
+                match state.Orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
+                    let instance:IActorRef<OracleInstanceActor.Command> = retype state.Collaborators.OracleInstanceActors.[instanceName]
+                    instance <<! OracleInstanceActor.ExtendWorkingCopy name
+                | None ->
+                    sender <! (sprintf "cannot find Oracle instance %s" instanceName |> Error)
+                return! loop state
+
             | GetRequest requestId ->
                 let sender = ctx.Sender().Retype<WithRequestId<RequestStatus>>()
                 let requestMaybe = state.PendingRequests |> Map.tryFind requestId
@@ -376,10 +391,9 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     let instance:IActorRef<OracleInstanceActor.Command> = retype state.Collaborators.OracleInstanceActors.[instanceName]
                     let! (transferInfo:OracleInstanceActor.DumpTransferInfo) = instance <? OracleInstanceActor.GetDumpTransferInfo
                     sender <! Ok transferInfo
-                    return! loop state
                 | None ->
                     sender <! (sprintf "cannot find Oracle instance %s" instanceName |> Error)
-                    return! loop state
+                return! loop state
         }
 
     and handleAdminCommand state command = 

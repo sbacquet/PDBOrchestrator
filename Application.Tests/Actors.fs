@@ -33,7 +33,7 @@ let parameters : Application.Parameters.Parameters = {
     NumberOfOracleShortTaskExecutors = 5
     NumberOfOracleLongTaskExecutors = 3
     NumberOfOracleDiskIntensiveTaskExecutors = 1
-    GarbageCollectionDelay = TimeSpan.FromMinutes(1.)
+    TemporaryWorkingCopyLifetime = TimeSpan.FromMinutes(1.)
 }
 
 #if DEBUG
@@ -696,6 +696,48 @@ let ``API deletes a working copy`` () = test <| fun tck ->
     match instanceState with
     | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC") |> Option.isNone)
     | Error error -> failwith error 
+
+[<Fact>]
+let ``API exends a temporary working copy`` () = test <| fun tck ->
+    let wc = consWorkingCopy (System.DateTime.Parse "01/01/2020") (Temporary (System.DateTime.Parse "02/01/2020")) "me" (SpecificVersion 1) "TEST1" "TEST1WC"
+    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ wc.Name, wc ] |> Map.ofList }) :> IOracleInstanceRepository
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let result = API.extendWorkingCopy ctx "server1" "test1wc" |> runQuick
+    result |> Result.mapError failwith |> ignore
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> 
+        let wc1 = instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC")
+        Assert.True(wc1.IsSome)
+        match wc1.Value.Lifetime with
+        | Temporary lifetime -> Assert.True(lifetime > System.DateTime.UtcNow)
+        | _ -> failwith "??"
+    | Error error -> 
+        failwith error 
+
+[<Fact>]
+let ``API exends a durable working copy`` () = test <| fun tck ->
+    let wc = consWorkingCopy (System.DateTime.Parse "01/01/2020") Durable "me" (SpecificVersion 1) "TEST1" "TEST1WC"
+    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ wc.Name, wc ] |> Map.ofList }) :> IOracleInstanceRepository
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let result = API.extendWorkingCopy ctx "server1" "test1wc" |> runQuick
+    result |> Result.mapError failwith |> ignore
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> 
+        let wc1 = instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC")
+        Assert.True(wc1.IsSome)
+        match wc1.Value.Lifetime with
+        | Durable -> Assert.Equal(System.DateTime.UtcNow.Date, wc1.Value.CreationDate.Date)
+        | _ -> failwith "??"
+    | Error error -> 
+        failwith error 
 
 [<Fact>]
 let ``API fails to delete a working copy`` () = test <| fun tck ->

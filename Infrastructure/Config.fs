@@ -79,8 +79,8 @@ let validateNumberOfOracleDiskIntensiveTaskExecutors (config:IConfigurationRoot)
         else Invalid [ sprintf "config entry %s must be > 0" configEntry ]
     with _ -> Invalid [ sprintf "config entry %s is not a valid integer" configEntry ] 
 
-let validateGarbageCollectionDelay (config:IConfigurationRoot) =
-    let configEntry = "GarbageCollectionDelayInHours"
+let validateTemporaryWorkingCopyLifetime (config:IConfigurationRoot) =
+    let configEntry = "TemporaryWorkingCopyLifetimeInHours"
     try
         let delayInHours = config.GetValue(configEntry, 12.)
         if (delayInHours >= 0.)
@@ -96,7 +96,7 @@ let configToApplicationParameters (config:IConfigurationRoot) =
     let numberOfOracleShortTaskExecutors = validateNumberOfOracleShortTaskExecutors config
     let numberOfOracleLongTaskExecutors = validateNumberOfOracleLongTaskExecutors config
     let numberOfOracleDiskIntensiveTaskExecutors = validateNumberOfOracleDiskIntensiveTaskExecutors config
-    let garbageCollectionDelay = validateGarbageCollectionDelay config
+    let temporaryWorkingCopyLifetime = validateTemporaryWorkingCopyLifetime config
     retn Application.Parameters.consParameters 
         <*> serverInstanceName
         <*> shortTimeout
@@ -105,7 +105,7 @@ let configToApplicationParameters (config:IConfigurationRoot) =
         <*> numberOfOracleShortTaskExecutors
         <*> numberOfOracleLongTaskExecutors
         <*> numberOfOracleDiskIntensiveTaskExecutors
-        <*> garbageCollectionDelay
+        <*> temporaryWorkingCopyLifetime
 
 let validateRoot (config:IConfigurationRoot) = 
     let configEntry = "Root"

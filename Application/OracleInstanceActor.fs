@@ -102,6 +102,7 @@ type Command =
 | CreateWorkingCopy of WithRequestId<string, string, int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | DeleteWorkingCopy of WithRequestId<string> // responds with OraclePDBResultWithReqId
 | CreateWorkingCopyOfEdition of WithRequestId<string, string, string, bool, bool> // responds with RequestValidation
+| ExtendWorkingCopy of string // responds with Result<MasterPDBWorkingCopy, string>
 | CollectGarbage // no response
 | GetDumpTransferInfo // responds with DumpTransferInfo
 
@@ -419,6 +420,21 @@ let private oracleInstanceActorBody
                     retype garbageCollector <! Akka.Actor.PoisonPill.Instance
                     return! loop { state with Requests = newRequests }
 
+            | ExtendWorkingCopy name ->
+                let sender = ctx.Sender().Retype<Result<MasterPDBWorkingCopy, string>>()
+                let workingCopy = instance |> getWorkingCopy name
+                match workingCopy with
+                | Some workingCopy -> 
+                    let extendedWorkingCopy = 
+                        match workingCopy.Lifetime with
+                        | Temporary _ -> { workingCopy with Lifetime = Temporary (System.DateTime.UtcNow + parameters.TemporaryWorkingCopyLifetime) }
+                        | Durable -> { workingCopy with CreationDate = System.DateTime.UtcNow }
+                    sender <! Ok extendedWorkingCopy
+                    return! loop { state with Instance = { state.Instance with WorkingCopies = state.Instance.WorkingCopies |> Map.add name extendedWorkingCopy } }
+                | None ->
+                    sender <! Error (sprintf "working copy %s does not exist on instance %s" name instance.Name)
+                    return! loop state
+
             | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
                 let cancel:Result<unit,string> option = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
@@ -456,10 +472,6 @@ let private oracleInstanceActorBody
                 let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
                 garbageCollector <! OracleInstanceGarbageCollector.CollectGarbage
                 retype garbageCollector <! Akka.Actor.PoisonPill.Instance
-                //if instance.SnapshotCapable then
-                //    collaborators.MasterPDBActors |> Map.iter (fun _ pdbActor -> retype pdbActor <! MasterPDBActor.CollectGarbage)
-                //else
-                //    collaborators.OracleLongTaskExecutor <! OracleLongTaskExecutor.DeleteOldPDBsInFolder (getWorkingCopyPath instance false)
                 return! loop state
 
             | GetDumpTransferInfo ->
@@ -528,7 +540,7 @@ let private oracleInstanceActorBody
                             if durable then 
                                 newDurableWorkingCopy user (SpecificVersion versionNumber) masterPDBName wcName
                             else    
-                                newTempWorkingCopy parameters.GarbageCollectionDelay user (SpecificVersion versionNumber) masterPDBName wcName
+                                newTempWorkingCopy parameters.TemporaryWorkingCopyLifetime user (SpecificVersion versionNumber) masterPDBName wcName
                         return! loop { state with Requests = newRequests; Instance = state.Instance |> addWorkingCopy wc }
                     | Error error ->
                         sender <! (requestId, Error error.Message)
@@ -548,7 +560,7 @@ let private oracleInstanceActorBody
                             if durable then 
                                 newDurableWorkingCopy user Edition masterPDBName wcName
                             else    
-                                newTempWorkingCopy parameters.GarbageCollectionDelay user Edition masterPDBName wcName
+                                newTempWorkingCopy parameters.TemporaryWorkingCopyLifetime user Edition masterPDBName wcName
                         return! loop { state with Requests = newRequests; Instance = state.Instance |> addWorkingCopy wc }
                     | Error error ->
                         sender <! (requestId, Error error.Message)

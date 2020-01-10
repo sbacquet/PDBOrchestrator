@@ -40,8 +40,11 @@ let createWorkingCopy (ctx:APIContext) (user:string) (instance:string) (masterPD
 let createWorkingCopyOfEdition (ctx:APIContext) (user:string) (masterPDBName:string) (wcName:string) durable force : Async<RequestValidation> =
     ctx.Orchestrator <? CreateWorkingCopyOfEdition (user.ToLower(), masterPDBName.ToUpper(), wcName.ToUpper(), durable, force)
 
-let deleteWorkingCopy (ctx:APIContext) (user:string) (instance:string) (snapshotName:string) : Async<RequestValidation> =
-    ctx.Orchestrator <? DeleteWorkingCopy (user.ToLower(), instance.ToLower(), snapshotName.ToUpper())
+let deleteWorkingCopy (ctx:APIContext) (user:string) (instance:string) (wcName:string) : Async<RequestValidation> =
+    ctx.Orchestrator <? DeleteWorkingCopy (user.ToLower(), instance.ToLower(), wcName.ToUpper())
+
+let extendWorkingCopy (ctx:APIContext) (instance:string) (wcName:string) : Async<Result<Domain.MasterPDBWorkingCopy.MasterPDBWorkingCopy, string>> =
+    ctx.Orchestrator <? ExtendWorkingCopy (instance.ToLower(), wcName.ToUpper())
 
 let createMasterPDB (ctx:APIContext) (pars:OracleInstanceActor.CreateMasterPDBParams) : Async<RequestValidation> =
     ctx.Orchestrator <? OrchestratorActor.CreateMasterPDB (pars.User, pars)

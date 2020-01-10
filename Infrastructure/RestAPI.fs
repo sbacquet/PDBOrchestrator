@@ -59,6 +59,8 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             route "/garbage" >=> HttpHandlers.collectGarbage apiCtx
         ]
         PATCH >=> choose [
+            // Extend lifetime of working copy
+            routef "/instances/%s/working-copies/%s" (HttpHandlers.extendWorkingCopy apiCtx)
             // Declare the given instance synchronized with primary
             routef "/instances/%s" (HttpHandlers.synchronizePrimaryInstanceWith apiCtx)
         ]

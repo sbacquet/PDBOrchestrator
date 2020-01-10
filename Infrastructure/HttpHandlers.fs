@@ -270,6 +270,15 @@ let deleteWorkingCopy apiCtx (instance:string, name:string) =
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
+let extendWorkingCopy apiCtx (instance:string, name:string) next (ctx:HttpContext) = task {
+    let! extendedWorkingCopy = API.extendWorkingCopy apiCtx instance name
+    match extendedWorkingCopy with
+    | Ok _ ->
+        return! text (sprintf "Extended lifetime of working copy %s on instance %s." name instance) next ctx
+    | Error error ->
+        return! RequestErrors.notFound (errorText error) next ctx
+}
+
 let getPendingChanges apiCtx next (ctx:HttpContext) = task {
     let! pendingChangesMaybe = API.getPendingChanges apiCtx
     match pendingChangesMaybe with
