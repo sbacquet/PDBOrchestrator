@@ -62,7 +62,9 @@ let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
 
     let localizationOptions = RequestLocalizationOptions()
     localizationOptions.DefaultRequestCulture <- Microsoft.AspNetCore.Localization.RequestCulture("en-US")
-    localizationOptions.SupportedCultures <- System.Globalization.CultureInfo.GetCultures(Globalization.CultureTypes.AllCultures)
+    let allCultures = System.Globalization.CultureInfo.GetCultures(Globalization.CultureTypes.AllCultures)
+    localizationOptions.SupportedCultures <- allCultures
+    localizationOptions.SupportedUICultures <- allCultures
     builder
         .UseRequestLocalization(localizationOptions)        
         .UseStaticFiles()
