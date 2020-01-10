@@ -49,8 +49,10 @@ let oracleInstanceDTOToJson culture instanceDTO =
 let masterPDBsToJson culture (instanceDTO:OracleInstanceDTO) =
     instanceDTO.MasterPDBs |> Json.serializeWith (encodeMasterPDBDTOs culture) JsonFormattingOptions.Pretty
 
-let workingCopiesToJson culture (instanceDTO:OracleInstanceDTO) =
-    instanceDTO.WorkingCopies |> Json.serializeWith (Encode.listWith (encodeWorkingCopyDTO culture)) JsonFormattingOptions.Pretty
+let workingCopiesToJson culture filter (instanceDTO:OracleInstanceDTO) =
+    instanceDTO.WorkingCopies
+    |> List.filter (filter |> Option.defaultValue (fun _ -> true))
+    |> Json.serializeWith (Encode.listWith (encodeWorkingCopyDTO culture)) JsonFormattingOptions.Pretty
 
 let workingCopyDTOToJson culture (wc:MasterPDBWorkingCopyDTO) =
     wc |> Json.serializeWith (encodeWorkingCopyDTO culture) JsonFormattingOptions.Pretty

@@ -10,9 +10,15 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
     choose [
         GET >=> choose [
             routef "/requests/%O" (HttpHandlers.getRequestStatus apiCtx)
+            routef "/instances/%s/master-pdbs/%s/versions/%i/working-copies/%s" (HttpHandlers.getWorkingCopyForMasterPDBVersion apiCtx)
+            routef "/instances/%s/master-pdbs/%s/versions/%i/working-copies" (HttpHandlers.getWorkingCopiesForMasterPDBVersion apiCtx)
             routef "/instances/%s/master-pdbs/%s/versions/%i" (HttpHandlers.getMasterPDBVersion apiCtx)
             routef "/instances/%s/master-pdbs/%s/versions" (HttpHandlers.getMasterPDBVersions apiCtx)
+            routef "/instances/primary/master-pdbs/%s/edition/working-copies/%s" (HttpHandlers.getWorkingCopyForMasterPDBEdition apiCtx)
+            routef "/instances/primary/master-pdbs/%s/edition/working-copies" (HttpHandlers.getWorkingCopiesForMasterPDBEdition apiCtx)
             routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.getMasterPDBEditionInfo apiCtx)
+            routef "/instances/%s/master-pdbs/%s/working-copies/%s" (HttpHandlers.getWorkingCopyForMasterPDB apiCtx)
+            routef "/instances/%s/master-pdbs/%s/working-copies" (HttpHandlers.getWorkingCopiesForMasterPDB apiCtx)
             routef "/instances/%s/master-pdbs/%s" (HttpHandlers.getMasterPDB apiCtx)
             routef "/instances/%s/master-pdbs" (HttpHandlers.getMasterPDBs apiCtx)
             routef "/instances/%s/dump-import-info" (HttpHandlers.getDumpTransferInfo apiCtx)

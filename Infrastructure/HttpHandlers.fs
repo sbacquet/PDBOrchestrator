@@ -10,6 +10,7 @@ open Microsoft.Net.Http.Headers
 open Infrastructure.DTOJSON
 open Application.DTO
 open Chiron
+open Application.DTO.MasterPDBWorkingCopy
 
 let json jsonStr : HttpHandler =
     fun _ (ctx : HttpContext) ->
@@ -99,7 +100,71 @@ let getMasterPDBVersion apiCtx (instance:string, pdb:string, version:int) next (
 let getWorkingCopies apiCtx (instancename:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx instancename
     match stateMaybe with
-    | Ok state -> return! json (OracleInstance.workingCopiesToJson (getCulture ctx) state) next ctx
+    | Ok state -> return! json (state |> OracleInstance.workingCopiesToJson (getCulture ctx) None) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
+}
+
+let getWorkingCopiesForMasterPDB apiCtx (instancename:string, pdb:string) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getInstanceState apiCtx instancename
+    match stateMaybe with
+    | Ok state -> 
+        let filter (wc:MasterPDBWorkingCopyDTO) = wc.MasterPDBName = pdb.ToUpper()
+        return! json (state |> OracleInstance.workingCopiesToJson (getCulture ctx) (Some filter)) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
+}
+
+let getWorkingCopyForMasterPDB apiCtx (instancename:string, pdb:string, name:string) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getInstanceState apiCtx instancename
+    match stateMaybe with
+    | Ok state -> 
+        let filter (wc:MasterPDBWorkingCopyDTO) = wc.Name = name.ToUpper() && wc.MasterPDBName = pdb.ToUpper()
+        return! json (state |> OracleInstance.workingCopiesToJson (getCulture ctx) (Some filter)) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
+}
+
+let getWorkingCopiesForMasterPDBVersion apiCtx (instancename:string, pdb:string, version:int) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getInstanceState apiCtx instancename
+    match stateMaybe with
+    | Ok state -> 
+        let filter (wc:MasterPDBWorkingCopyDTO) = 
+            wc.MasterPDBName = pdb.ToUpper() && 
+            (match wc.Source with | Domain.MasterPDBWorkingCopy.SpecificVersion v -> v = version | _ -> false)
+        return! json (state |> OracleInstance.workingCopiesToJson (getCulture ctx) (Some filter)) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
+}
+
+let getWorkingCopyForMasterPDBVersion apiCtx (instancename:string, pdb:string, version:int, name:string) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getInstanceState apiCtx instancename
+    match stateMaybe with
+    | Ok state -> 
+        let filter (wc:MasterPDBWorkingCopyDTO) = 
+            wc.Name = name.ToUpper() && 
+            wc.MasterPDBName = pdb.ToUpper() && 
+            (match wc.Source with | Domain.MasterPDBWorkingCopy.SpecificVersion v -> v = version | _ -> false)
+        return! json (state |> OracleInstance.workingCopiesToJson (getCulture ctx) (Some filter)) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
+}
+
+let getWorkingCopiesForMasterPDBEdition apiCtx (pdb:string) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getInstanceState apiCtx "primary"
+    match stateMaybe with
+    | Ok state -> 
+        let filter (wc:MasterPDBWorkingCopyDTO) = 
+            wc.MasterPDBName = pdb.ToUpper() && 
+            (match wc.Source with | Domain.MasterPDBWorkingCopy.Edition -> true | _ -> false)
+        return! json (state |> OracleInstance.workingCopiesToJson (getCulture ctx) (Some filter)) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
+}
+
+let getWorkingCopyForMasterPDBEdition apiCtx (pdb:string, name:string) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getInstanceState apiCtx "primary"
+    match stateMaybe with
+    | Ok state -> 
+        let filter (wc:MasterPDBWorkingCopyDTO) = 
+            wc.Name = name.ToUpper() &&
+            wc.MasterPDBName = pdb.ToUpper() && 
+            (match wc.Source with | Domain.MasterPDBWorkingCopy.Edition -> true | _ -> false)
+        return! json (state |> OracleInstance.workingCopiesToJson (getCulture ctx) (Some filter)) next ctx
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
