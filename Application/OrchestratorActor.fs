@@ -361,9 +361,10 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 | Some instanceName ->
                     let instance:IActorRef<OracleInstanceActor.Command> = retype state.Collaborators.OracleInstanceActors.[instanceName]
                     instance <<! OracleInstanceActor.ExtendWorkingCopy name
+                    return! loop state
                 | None ->
                     sender <! (sprintf "cannot find Oracle instance %s" instanceName |> Error)
-                return! loop state
+                    return! loop state
 
             | GetRequest requestId ->
                 let sender = ctx.Sender().Retype<WithRequestId<RequestStatus>>()
@@ -391,9 +392,10 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     let instance:IActorRef<OracleInstanceActor.Command> = retype state.Collaborators.OracleInstanceActors.[instanceName]
                     let! (transferInfo:OracleInstanceActor.DumpTransferInfo) = instance <? OracleInstanceActor.GetDumpTransferInfo
                     sender <! Ok transferInfo
+                    return! loop state
                 | None ->
                     sender <! (sprintf "cannot find Oracle instance %s" instanceName |> Error)
-                return! loop state
+                    return! loop state
         }
 
     and handleAdminCommand state command = 
