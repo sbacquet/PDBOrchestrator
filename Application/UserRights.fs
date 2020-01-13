@@ -15,4 +15,4 @@ let isAdmin (user:User) =
 let canLockPDB (_:Domain.MasterPDB.MasterPDB) _ = true
 
 let canUnlockPDB (lockInfo:Domain.MasterPDB.EditionInfo) user =
-    isAdmin user || lockInfo.Editor = user.Name
+    isAdmin user || lockInfo.Editor = user.Name || lockInfo.Editor = "anonymous"

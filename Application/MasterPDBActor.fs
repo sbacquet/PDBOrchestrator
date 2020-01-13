@@ -110,12 +110,8 @@ let private masterPDBActorBody
                 let! editionPDBExists = pdbExists editionPDBName
                 match editionPDBExists, masterPDB.EditionState.IsSome with
                 | Ok true, false ->
-                    ctx.Log.Value.Warning("Master PDB {pdb} is not locked whereas its edition PDB exists on server => deleting the PDB...", masterPDB.Name)
-                    let deletePDB pdb : Exceptional<string> = 
-                        oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
-                        |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
-                    deletePDB editionPDBName |> ignore
-                    return! loop state
+                    ctx.Log.Value.Warning("Master PDB {pdb} is not locked whereas its edition PDB exists on server => locked it (anonymous editor)", masterPDB.Name)
+                    return! loop { state with MasterPDB = { masterPDB with EditionState = Some (newEditionInfo "anonymous") } }
                 | Ok false, true ->
                     ctx.Log.Value.Warning("Master PDB {pdb} is declared as locked whereas its edition PDB does not exist on server => unlocked it", masterPDB.Name)
                     return! loop { state with MasterPDB = { masterPDB with EditionState = None } }
