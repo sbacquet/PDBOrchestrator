@@ -134,13 +134,13 @@ let describeCommand = function
 | RollbackMasterPDB (user, pdb) ->
     sprintf "roll back modifications done in \"%s\"" pdb
 | CreateWorkingCopy (user, instance, pdb, version, name, snapshot, durable, force) ->
-    sprintf "create a %s working copy (%s) named \"%s\" of master PDB \"%s\" version %d on instance \"%s\"" (if durable then "durable" else "temporary") (if snapshot then "snapshot" else "clone") name pdb version instance
+    sprintf "create a %s working copy (%s) named \"%s\" of master PDB \"%s\" version %d on Oracle instance \"%s\"" (if durable then "durable" else "temporary") (if snapshot then "snapshot" else "clone") name pdb version instance
 | DeleteWorkingCopy (user, instance, name) ->
-    sprintf "delete a working copy named \"%s\" on instance \"%s\"" name instance
+    sprintf "delete a working copy named \"%s\" on Oracle instance \"%s\"" name instance
 | CreateWorkingCopyOfEdition (user, masterPDB, wcName, durable, force) ->
     sprintf "create a %s working copy (clone) named \"%s\" of master PDB \"%s\" edition" (if durable then "durable" else "temporary") wcName masterPDB
 | ExtendWorkingCopy (instance, name) ->
-    sprintf "extend lifetime of working copy %s on instance %s" name instance
+    sprintf "extend lifetime of working copy %s on Oracle instance %s" name instance
 | GetRequest requestId ->
     sprintf "get request from id %O" requestId
 | GetDumpTransferInfo instance ->
@@ -160,9 +160,9 @@ let describeAdminCommand = function
 | CollectGarbage ->
     "collect garbage"
 | Synchronize withInstance ->
-    sprintf "synchronize \"%s\" instance with primary" withInstance
+    sprintf "synchronize \"%s\" Oracle instance with primary" withInstance
 | SetPrimaryOracleInstance instance ->
-    sprintf "switch primary instance to \"%s\"" instance
+    sprintf "switch primary Oracle instance to \"%s\"" instance
 
 let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) (ctx : Actor<_>) =
 
@@ -482,7 +482,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                             let target = state.Collaborators.OracleInstanceActors.[targetInstance]
                             retype primaryInstance <<! TransferInternalState target
                         | Ok (Ok (Some _)) ->
-                            ctx.Sender() <! stateError "primary instance has pending changes"
+                            ctx.Sender() <! stateError "primary Oracle instance has pending changes"
                         | Ok (Error error)
                         | Error error ->
                             ctx.Sender() <! stateError (sprintf "cannot get pending changes : %s" error)
@@ -508,7 +508,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                             sender <! Ok newPrimary
                             return! loop { state with Orchestrator = { state.Orchestrator with PrimaryInstance = newPrimary } }
                         | Ok (Some _) ->
-                            sender <! Error ("primary instance has pending changes", state.Orchestrator.PrimaryInstance)
+                            sender <! Error ("primary Oracle instance has pending changes", state.Orchestrator.PrimaryInstance)
                             return! loop state
                         | Error error ->
                             sender <! Error (sprintf "cannot get pending changes : %s" error, state.Orchestrator.PrimaryInstance)

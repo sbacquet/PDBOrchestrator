@@ -469,7 +469,7 @@ let private oracleInstanceActorBody
                         return! loop { state with Requests = newRequests }
 
             | CollectGarbage ->
-                ctx.Log.Value.Info("Garbage collection of instance {instance} requested.", instance.Name)
+                ctx.Log.Value.Info("Garbage collection of Oracle instance {instance} requested.", instance.Name)
                 let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
                 garbageCollector <! OracleInstanceGarbageCollector.CollectGarbage
                 retype garbageCollector <! Akka.Actor.PoisonPill.Instance
@@ -501,7 +501,7 @@ let private oracleInstanceActorBody
                         let masterPDBActor:IActorRef<MasterPDBActor.Command> = retype (collaborators.MasterPDBActors |> getMasterPDBActor pdb)
                         masterPDBActor <<! MasterPDBActor.DeleteVersion version
                     | _::_, false ->
-                        sender <! Error (sprintf "version %d of master PDB %s cannot de deleted on Oracle instance %s because working copies exist and 'force' was not specified" version pdb instance.Name)
+                        sender <! Error "working copies exist and 'force' was not specified"
                 | None ->
                     sender <! Error (sprintf "master PDB %s does not exist on Oracle instance %s" pdb instance.Name)
                 return! loop state
