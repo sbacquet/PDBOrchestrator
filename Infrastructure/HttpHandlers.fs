@@ -445,3 +445,15 @@ let getDumpTransferInfo apiCtx instance next (ctx:HttpContext) = task {
     | Ok dumpTransferInfo -> return! (json <| dumpTransferInfoToJson dumpTransferInfo) next ctx
     | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot get dump transfer info for instance %s : %s." (instance.ToLower()) error) next ctx
 }
+
+let deleteMasterPDBVersion apiCtx (masterPDB:string, version:int) =
+    withAdmin (fun user next ctx -> task {
+        let parsedOk, force = ctx.TryGetQueryStringValue "force" |> Option.defaultValue bool.FalseString |> bool.TryParse
+        if not parsedOk then 
+            return! RequestErrors.badRequest (text "When provided, the \"force\" query parameter must be \"true\" or \"false\".") next ctx
+        else
+            let! result = API.deleteMasterPDBVersion apiCtx user.Name masterPDB version force
+            match result with
+            | Ok _ -> return! (text <| sprintf "Version %d of master PDB %s deleted." version (masterPDB.ToUpper())) next ctx
+            | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot delete version %d of master PDB %s : %s." version (masterPDB.ToUpper()) error) next ctx
+    })

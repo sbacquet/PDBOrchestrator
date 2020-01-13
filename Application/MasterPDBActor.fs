@@ -23,6 +23,7 @@ type Command =
 | CreateWorkingCopy of WithRequestId<int, string, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | CreateWorkingCopyOfEdition of WithRequestId<string> // WithRequest<CreateWorkingCopyResult>
 | CollectVersionsGarbage of int list // no response
+| DeleteVersion of int // responds with DeleteVersionResult
 
 type PrepareForModificationResult = 
 | Prepared of string * MasterPDB * string * string * (string * string) list
@@ -38,6 +39,8 @@ type EditionCommitted = Result<string * MasterPDB * int, string>
 type EditionRolledBack = Result<string * MasterPDB, string>
 
 type CreateWorkingCopyResult = Result<string * int * string, string>
+
+type DeleteVersionResult = Result<string * string * int, string> // instance * pdb * version
 
 type private Collaborators = {
     MasterPDBVersionActors: Map<int, IActorRef<MasterPDBVersionActor.Command>>
@@ -255,6 +258,21 @@ let private masterPDBActorBody
                         collabs
                 let newCollabs = versions |> List.fold collectVersionGarbage state.Collaborators
                 return loop { state with Collaborators = newCollabs }
+
+            | DeleteVersion version ->
+                let sender = ctx.Sender().Retype<DeleteVersionResult>()
+                let result = state.MasterPDB |> deleteVersion version
+                match result with
+                | Ok newMasterPDB ->
+                    sender <! Ok (instance.Name, masterPDB.Name, version)
+                    collaborators.MasterPDBVersionActors 
+                    |> Map.tryFind version 
+                    |> Option.map (fun versionActor -> versionActor <! MasterPDBVersionActor.Delete)
+                    |> ignore
+                    return! loop { state with MasterPDB = newMasterPDB }
+                | Error error ->
+                    sender <! Error error
+                    return! loop state
 
         | :? MasterPDBVersionActor.CommandToParent as commandToParent->
             match commandToParent with

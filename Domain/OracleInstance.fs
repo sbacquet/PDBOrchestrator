@@ -77,6 +77,12 @@ let containsMasterPDB (pdb:string) (instance:OracleInstance) =
 let getWorkingCopy (name:string) (instance:OracleInstance) =
     instance.WorkingCopies |> Map.tryFind (name.ToUpper())
 
+let getWorkingCopiesOfVersion (masterPDB:string) (version:int) (instance:OracleInstance) =
+    instance.WorkingCopies 
+    |> Map.filter (fun _ wc -> wc.MasterPDBName = masterPDB && (match wc.Source with | SpecificVersion v -> v = version | _ -> false))
+    |> Map.toList
+    |> List.map snd
+
 let addWorkingCopy (wc:MasterPDBWorkingCopy) (instance:OracleInstance) =
     { instance with WorkingCopies = instance.WorkingCopies |> Map.add (wc.Name.ToUpper()) wc }
 

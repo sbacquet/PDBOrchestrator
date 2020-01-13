@@ -168,8 +168,6 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
         member this.GetPDBNamesLike (like:string) = raise (System.NotImplementedException())
         member this.GetPDBFilesFolder name = async { return Ok (Some "fake") }
  
-let fakeOracleAPI = FakeOracleAPI(Set.empty)
-
 type FakeOracleInstanceRepo(instance) =
     interface IOracleInstanceRepository with
         member __.Get () = instance
@@ -190,9 +188,10 @@ type FakeMasterPDBRepo(pdb: MasterPDB) =
         member __.Put newPDB = upcast FakeMasterPDBRepo newPDB
 
 let masterPDBMap1 =
+    let test2 = newMasterPDB "TEST2" [ consSchema "toto" "toto" "Invest" ] "me" "new comment2"
     [ 
         "TEST1", newMasterPDB "TEST1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
-        "TEST2", newMasterPDB "TEST2" [ consSchema "toto" "toto" "Invest" ] "me" "new comment2"
+        "TEST2", test2 |> addVersionToMasterPDB "me" "tata" |> fst
     ] |> Map.ofList
 
 let masterPDBMap2 =
@@ -220,8 +219,8 @@ type FakeOrchestratorRepo(orchestrator) =
 
 let orchestratorRepo = FakeOrchestratorRepo(orchestratorState)
 
-let spawnOrchestratorActor = OrchestratorActor.spawn parameters (fun _ -> fakeOracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-let spawnOracleInstanceActor = OracleInstanceActor.spawn parameters (fun _ -> fakeOracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo
+let spawnOrchestratorActor = OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI(Set.empty)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+let spawnOracleInstanceActor = OracleInstanceActor.spawn parameters (fun _ -> FakeOracleAPI(Set.empty)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo
 let spawnMasterPDBActor = MasterPDBActor.spawn parameters
 
 [<Fact>]
@@ -351,7 +350,7 @@ let ``API fails to create a PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``Lock master PDB`` () = test <| fun tck ->
-    let fakeOracleAPI = FakeOracleAPI([ "test1_EDITION" ] |> Set.ofList)
+    let fakeOracleAPI = FakeOracleAPI(Set.empty)
     let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
@@ -427,7 +426,26 @@ let ``API edits and commits master PDB`` () = test <| fun tck ->
     | Error error -> failwith error
 
 [<Fact>]
+let ``API deletes a version of master PDB`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let state = API.getMasterPDBState ctx orchestratorState.PrimaryInstance "test2" |> run
+    match state with
+    | Ok pdb -> Assert.Equal(false, (pdb.Versions |> List.find (fun v -> v.VersionNumber = 2)).Deleted)
+    | Error error -> failwith error
+
+    let result = API.deleteMasterPDBVersion ctx "me" "test2" 2 false |> runQuick
+    result |> Result.mapError failwith |> ignore
+
+    let state = API.getMasterPDBState ctx orchestratorState.PrimaryInstance "test2" |> run
+    match state with
+    | Ok pdb -> Assert.Equal(true, (pdb.Versions |> List.find (fun v -> v.VersionNumber = 2)).Deleted)
+    | Error error -> failwith error
+
+[<Fact>]
 let ``MasterPDB creates a clone working copy`` () = test <| fun tck ->
+    let fakeOracleAPI = FakeOracleAPI(Set.empty)
     let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
@@ -438,6 +456,7 @@ let ``MasterPDB creates a clone working copy`` () = test <| fun tck ->
 
 [<Fact>]
 let ``MasterPDB creates a snapshot working copy`` () = test <| fun tck ->
+    let fakeOracleAPI = FakeOracleAPI(Set.empty)
     let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
@@ -500,6 +519,28 @@ let ``API creates a snapshot working copy`` () = test <| fun tck ->
     match instanceState with
     | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me") |> Option.isSome)
     | Error error -> failwith error 
+
+[<Fact>]
+let ``API cannot delete a version with working copy if not forcing`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test2" 2 "workingcopy" true false false |> runQuick
+    request |> throwIfRequestNotCompletedOk ctx |> ignore
+
+    let result = API.deleteMasterPDBVersion ctx "me" "test2" 2 false |> runQuick
+    result |> Result.map (fun _ -> failwith "version should not be deletable") |> ignore
+
+[<Fact>]
+let ``API can delete a version with working copy if forcing`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test2" 2 "workingcopy" true false false |> runQuick
+    request |> throwIfRequestNotCompletedOk ctx |> ignore
+
+    let result = API.deleteMasterPDBVersion ctx "me" "test2" 2 true |> runQuick
+    result |> Result.mapError failwith |> ignore
 
 [<Fact>]
 let ``API skips creation of a snapshot working copy`` () = test <| fun tck ->
@@ -666,7 +707,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
     // Enqueue a read-only request
     API.createWorkingCopy ctx "me" "server1" "test1" 1 "snap1" true false false |> runQuick |> ignore
     // Enqueue a change request
-    API.prepareMasterPDBForModification ctx "me" "test2" 1 |> runQuick |> ignore
+    API.prepareMasterPDBForModification ctx "me" "test2" 2 |> runQuick |> ignore
     // At that point, the requests above should still be pending (100 ms long)
     let pendingChangesMaybe = API.getPendingChanges ctx |> runQuick
     match pendingChangesMaybe with

@@ -16,6 +16,7 @@ type Command =
 | CreateWorkingCopy of WithRequestId<string, bool> // responds with OraclePDBResultWithReqId
 | CollectGarbage // no response
 | HaraKiri // no response
+| Delete
 
 type CommandToParent =
 | KillVersion of int
@@ -85,11 +86,22 @@ let private masterPDBVersionActorBody
                 }
                 return! loop ()
             else
+                retype (ctx.Parent()) <! KillVersion masterPDBVersion.VersionNumber
                 return! loop ()
 
         | HaraKiri ->
             ctx.Log.Value.Info("Stop of actor for version {pdbversion} of {pdb} requested", masterPDBVersion.VersionNumber, masterPDBName)
             retype ctx.Self <! Akka.Actor.PoisonPill.Instance
+            return! loop ()
+
+        | Delete ->
+            ctx.Log.Value.Info("Deleting version {pdbversion} of {pdb}", masterPDBVersion.VersionNumber, masterPDBName)
+            let sourceManifest = Domain.MasterPDBVersion.manifestFile masterPDBName masterPDBVersion.VersionNumber
+            // TODO : read manifest file and get Oracle files location
+            // TODO : delete Oracle files
+            // TODO : delete manifest file
+            if instance.SnapshotCapable then deletePDB snapshotSourceName |> ignore else ()
+            retype (ctx.Parent()) <! KillVersion masterPDBVersion.VersionNumber
             return! loop ()
     }
 

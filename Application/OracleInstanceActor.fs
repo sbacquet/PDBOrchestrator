@@ -105,6 +105,7 @@ type Command =
 | ExtendWorkingCopy of string // responds with Result<MasterPDBWorkingCopy, string>
 | CollectGarbage // no response
 | GetDumpTransferInfo // responds with DumpTransferInfo
+| DeleteVersion of string * int * bool // responds with Application.MasterPDBActor.DeleteVersionResult
 
 type StateResult = Result<OracleInstance.OracleInstanceDTO, string>
 let stateOk state : StateResult = Ok state
@@ -286,7 +287,7 @@ let private oracleInstanceActorBody
                     let masterPDBActor:IActorRef<MasterPDBActor.Command> = retype (collaborators.MasterPDBActors |> getMasterPDBActor pdb)
                     masterPDBActor <<! MasterPDBActor.GetState
                 | None ->
-                    sender <! MasterPDBActor.stateError (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name)
+                    sender <! MasterPDBActor.stateError (sprintf "master PDB %s does not exist on Oracle instance %s" pdb instance.Name)
                 return! loop state
 
             | GetMasterPDBEditionInfo pdb ->
@@ -296,7 +297,7 @@ let private oracleInstanceActorBody
                     let masterPDBActor:IActorRef<MasterPDBActor.Command> = retype (collaborators.MasterPDBActors |> getMasterPDBActor pdb)
                     masterPDBActor <<! MasterPDBActor.GetEditionInfo
                 | None ->
-                    let error:Application.MasterPDBActor.EditionInfoResult = sprintf "master PDB %s does not exist on instance %s" pdb instance.Name |> Error
+                    let error:Application.MasterPDBActor.EditionInfoResult = sprintf "master PDB %s does not exist on Oracle instance %s" pdb instance.Name |> Error
                     sender <! error
                 return! loop state
 
@@ -340,7 +341,7 @@ let private oracleInstanceActorBody
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.PrepareForModificationResult>>()
                 match instance |> containsMasterPDB pdb with
                 | None ->
-                    sender <! (requestId, MasterPDBActor.PreparationFailure (pdb, sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
+                    sender <! (requestId, MasterPDBActor.PreparationFailure (pdb, sprintf "master PDB %s does not exist on Oracle instance %s" pdb instance.Name))
                     return! loop state
                 | Some pdb ->
                     let masterPDBActor = collaborators.MasterPDBActors |> getMasterPDBActor pdb
@@ -352,7 +353,7 @@ let private oracleInstanceActorBody
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionCommitted>>()
                 match instance |> containsMasterPDB pdb with
                 | None ->
-                    sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
+                    sender <! (requestId, Error (sprintf "master PDB %s does not exist on Oracle instance %s" pdb instance.Name))
                     return! loop state
                 | Some pdb ->
                     let masterPDBActor = collaborators.MasterPDBActors |> getMasterPDBActor pdb
@@ -364,7 +365,7 @@ let private oracleInstanceActorBody
                 let sender = ctx.Sender().Retype<WithRequestId<MasterPDBActor.EditionRolledBack>>()
                 match instance |> containsMasterPDB pdb with
                 | None ->
-                    sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" pdb instance.Name))
+                    sender <! (requestId, Error (sprintf "master PDB %s does not exist on Oracle instance %s" pdb instance.Name))
                     return! loop state
                 | Some pdb ->
                     let masterPDBActor = collaborators.MasterPDBActors |> getMasterPDBActor pdb
@@ -399,7 +400,7 @@ let private oracleInstanceActorBody
                 | None ->
                     match instance |> containsMasterPDB masterPDBName with
                     | None ->
-                        sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
+                        sender <! (requestId, Error (sprintf "master PDB %s does not exist on Oracle instance %s" masterPDBName instance.Name))
                         return! loop state
                     | Some masterPDBName ->
                         let masterPDBActor = collaborators.MasterPDBActors |> getMasterPDBActor masterPDBName
@@ -411,7 +412,7 @@ let private oracleInstanceActorBody
                 let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
                 match instance |> getWorkingCopy wcName with
                 | None ->
-                    sender <! (requestId, sprintf "working copy %s does not exist on instance %s" wcName instance.Name |> exn |> Error)
+                    sender <! (requestId, sprintf "working copy %s does not exist on Oracle instance %s" wcName instance.Name |> exn |> Error)
                     return! loop state
                 | Some workingCopy ->
                     let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
@@ -432,7 +433,7 @@ let private oracleInstanceActorBody
                     sender <! Ok extendedWorkingCopy
                     return! loop { state with Instance = { state.Instance with WorkingCopies = state.Instance.WorkingCopies |> Map.add name extendedWorkingCopy } }
                 | None ->
-                    sender <! Error (sprintf "working copy %s does not exist on instance %s" name instance.Name)
+                    sender <! Error (sprintf "working copy %s does not exist on Oracle instance %s" name instance.Name)
                     return! loop state
 
             | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force) ->
@@ -459,7 +460,7 @@ let private oracleInstanceActorBody
                 | None ->
                     match instance |> containsMasterPDB masterPDBName with
                     | None ->
-                        sender <! (requestId, Error (sprintf "master PDB %s does not exist on instance %s" masterPDBName instance.Name))
+                        sender <! (requestId, Error (sprintf "master PDB %s does not exist on Oracle instance %s" masterPDBName instance.Name))
                         return! loop state
                     | Some masterPDBName ->
                         let masterPDBActor = collaborators.MasterPDBActors |> getMasterPDBActor masterPDBName
@@ -488,6 +489,23 @@ let private oracleInstanceActorBody
                 }
                 ctx.Sender() <! transferInfo
                 return! loop state
+
+            | DeleteVersion (pdb, version, force) ->
+                let sender = ctx.Sender().Retype<Application.MasterPDBActor.DeleteVersionResult>()
+                match instance |> containsMasterPDB pdb with
+                | Some pdb ->
+                    let workingCopiesOfThisVersion = instance |> getWorkingCopiesOfVersion pdb version
+                    match workingCopiesOfThisVersion, force with
+                    | [], _
+                    | _::_, true ->
+                        let masterPDBActor:IActorRef<MasterPDBActor.Command> = retype (collaborators.MasterPDBActors |> getMasterPDBActor pdb)
+                        masterPDBActor <<! MasterPDBActor.DeleteVersion version
+                    | _::_, false ->
+                        sender <! Error (sprintf "version %d of master PDB %s cannot de deleted on Oracle instance %s because working copies exist and 'force' was not specified" version pdb instance.Name)
+                | None ->
+                    sender <! Error (sprintf "master PDB %s does not exist on Oracle instance %s" pdb instance.Name)
+                return! loop state
+
                 
         // Callback from Oracle executor
         | :? OraclePDBResultWithReqId as requestResponse ->
@@ -615,7 +633,7 @@ let private oracleInstanceActorBody
                 if (instance.MasterPDBs |> List.contains masterPDBName) then
                     retype (state.Collaborators.MasterPDBActors |> getMasterPDBActor masterPDBName) <! MasterPDBActor.CollectVersionsGarbage versions
                 else
-                    ctx.Log.Value.Warning("Cannot collect garbage for {pdb} because it does not exist on instance {instance}", masterPDBName, instance.Name)
+                    ctx.Log.Value.Warning("Cannot collect garbage for {pdb} because it does not exist on Oracle instance {instance}", masterPDBName, instance.Name)
                 return! loop state
 
             | OracleInstanceGarbageCollector.WorkingCopiesDeleted deletionResults ->

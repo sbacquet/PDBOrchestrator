@@ -79,6 +79,10 @@ let addVersionToMasterPDB createdBy comment masterPDB =
     let version = consPDBVersion newVersionNumber false createdBy System.DateTime.Now comment Map.empty
     { masterPDB with Versions = masterPDB.Versions |> Map.add newVersionNumber version }, newVersionNumber
 
+// /!\ versionNumber must exist in masterPDB's versions
+let markVersionDeleted versionNumber masterPDB =
+    { masterPDB with Versions = masterPDB.Versions |> Map.add versionNumber { (masterPDB.Versions |> Map.find versionNumber) with Deleted = true } }
+
 let deleteVersion versionNumber masterPDB =
     if (versionNumber = 1) 
     then 
@@ -88,11 +92,13 @@ let deleteVersion versionNumber masterPDB =
         match versionMaybe with
         | Some version ->
             if not version.Deleted then
-                Ok { 
-                    masterPDB with 
-                        Versions = masterPDB.Versions 
-                        |> Map.map (fun number version -> if (number = versionNumber) then { version with Deleted = true } else version)
-                }
+                match masterPDB.EditionState, (masterPDB |> getLatestAvailableVersionNumber) with
+                | None, _ -> 
+                    masterPDB |> markVersionDeleted versionNumber |> Ok
+                | Some _, latestVersion when latestVersion <> version.VersionNumber ->
+                    masterPDB |> markVersionDeleted versionNumber |> Ok
+                | Some _, _ ->
+                    Error (sprintf "version %d of master PDB %s is currently being edited" versionNumber masterPDB.Name)
             else
                 Error (sprintf "version %d of master PDB %s is already deleted" versionNumber masterPDB.Name)
         | None -> 

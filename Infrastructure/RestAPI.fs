@@ -53,6 +53,8 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
         DELETE >=> choose [
             // Rollback edition
             routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
+            // Delete master PDB version
+            routef "/instances/primary/master-pdbs/%s/versions/%d" (HttpHandlers.deleteMasterPDBVersion apiCtx)
             // Delete working copy
             routef "/instances/%s/working-copies/%s" (HttpHandlers.deleteWorkingCopy apiCtx)
             // Collect garbage
