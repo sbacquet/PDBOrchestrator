@@ -19,8 +19,9 @@ open Giraffe
 module Config =
     let private invalidConfig (errors:string list) =
         Serilog.Log.Logger.Error("The configuration is invalid : {0}", String.Join("; ", errors))
-        Serilog.Log.Logger.Information("Exiting.")
+        Serilog.Log.Logger.Information("Server stopped.")
         Serilog.Log.CloseAndFlush()
+        Console.WriteLine("Server stopped.")
         #if DEBUG
         Console.WriteLine("Press a key to exit...")
         Console.ReadKey() |> ignore
@@ -150,9 +151,11 @@ let main args =
             system.Stop(untyped orchestratorActor)
             system.Terminate().Wait()
             Serilog.Log.CloseAndFlush()
+            Console.WriteLine("Server stopped.")
             0
         else
             Serilog.Log.CloseAndFlush()
+            Console.WriteLine("Server stopped.")
             #if DEBUG
             Console.WriteLine("Press a key to exit...")
             Console.ReadKey() |> ignore
@@ -163,6 +166,7 @@ let main args =
         System.Console.WriteLine "Aborting..."
         system.Terminate().Wait()
         Serilog.Log.CloseAndFlush()
+        Console.WriteLine("Server stopped.")
         #if DEBUG
         Console.WriteLine("Press a key to exit...")
         Console.ReadKey() |> ignore
