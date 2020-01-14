@@ -57,8 +57,10 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             routef "/instances/primary/master-pdbs/%s/versions/%i" (HttpHandlers.deleteMasterPDBVersion apiCtx)
             // Delete working copy
             routef "/instances/%s/working-copies/%s" (HttpHandlers.deleteWorkingCopy apiCtx)
-            // Collect garbage
-            route "/garbage" >=> HttpHandlers.collectGarbage apiCtx
+            // Collect global garbage
+            route "/instances/all/garbage" >=> HttpHandlers.collectGarbage apiCtx
+            // Collect garbage of an instance
+            routef "/instances/%s/garbage" (HttpHandlers.collectInstanceGarbage apiCtx)
         ]
         PATCH >=> choose [
             // Extend lifetime of working copy

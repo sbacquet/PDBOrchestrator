@@ -76,6 +76,9 @@ let isMaintenanceMode (ctx:APIContext) : Async<bool> =
 let collectGarbage (ctx:APIContext) =
     retype ctx.Orchestrator <! OrchestratorActor.CollectGarbage
 
+let collectInstanceGarbage (ctx:APIContext) (instance:string) =
+    retype ctx.Orchestrator <! OrchestratorActor.CollectInstanceGarbage instance
+
 let switchPrimaryOracleInstanceWith (ctx:APIContext) (instance:string) : Async<Result<string,string*string>> =
     retype ctx.Orchestrator <? SetPrimaryOracleInstance (instance.ToLower())
 

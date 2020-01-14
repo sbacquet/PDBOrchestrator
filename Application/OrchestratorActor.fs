@@ -44,6 +44,7 @@ type AdminCommand =
 | Synchronize of string // responds with OracleInstanceActor.StateSet
 | SetPrimaryOracleInstance of string // responds with Result<string, string*string> = Result<new instance, (error, current instance)>
 | DeleteMasterPDBVersion of string * int * bool // responds with Application.MasterPDBActor.DeleteVersionResult
+| CollectInstanceGarbage of string // no response
 
 let private pendingChangeCommandFilter mapper = function
 | GetState
@@ -159,7 +160,9 @@ let describeAdminCommand = function
 | IsMaintenanceMode ->
     "is maintenance mode ?"
 | CollectGarbage ->
-    "collect garbage"
+    "collect garbage of all Oracle instances"
+| CollectInstanceGarbage instance ->
+    sprintf "collect garbage of Oracle instance %s" instance
 | Synchronize withInstance ->
     sprintf "synchronize \"%s\" Oracle instance with primary" withInstance
 | SetPrimaryOracleInstance instance ->
@@ -188,6 +191,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
     let instanceActor state instanceName : IActorRef<OracleInstanceActor.Command> = 
         retype state.Collaborators.OracleInstanceActors.[instanceName]
     let primaryInstance state = instanceActor state state.Orchestrator.PrimaryInstance
+    let getInstanceName state instanceName = if instanceName = "primary" then state.Orchestrator.PrimaryInstance else instanceName
 
     let rec loop state = 
         actor {
@@ -241,6 +245,9 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
     and handleCommand state command = 
         let sender = ctx.Sender().Retype<RequestValidation>()
         let pendingChangeCommandAcceptable user = UserRights.isAdmin (UserRights.normalUser user)
+        let instanceActor = instanceActor state
+        let primaryInstance = primaryInstance state
+        let getInstanceName = getInstanceName state
         actor {
             // Check if command is compatible with maintenance mode
             if state.InMaintenanceMode && pendingChangeCommandFilter (not << pendingChangeCommandAcceptable) command then
@@ -248,8 +255,6 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 return! loop state
             else
 
-            let getInstanceName instanceName = if instanceName = "primary" then state.Orchestrator.PrimaryInstance else instanceName
-            
             match command with
             | GetState ->
                 let orchestratorDTO = state.Orchestrator |> DTO.Orchestrator.toDTO
@@ -261,7 +266,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let instanceName = getInstanceName instanceName
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
-                    let instance = instanceActor state instanceName
+                    let instance = instanceActor instanceName
                     instance <<! OracleInstanceActor.GetState
                 | None ->
                     sender <! OracleInstanceActor.stateError (sprintf "cannot find Oracle instance %s" instanceName)
@@ -272,7 +277,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let instanceName = getInstanceName instanceName
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
-                    let instance = instanceActor state instanceName
+                    let instance = instanceActor instanceName
                     instance <<! OracleInstanceActor.GetBasicState
                 | None ->
                     sender <! Error (sprintf "cannot find Oracle instance %s" instanceName)
@@ -283,7 +288,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let instanceName = getInstanceName instanceName
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
-                    let instance = instanceActor state instanceName
+                    let instance = instanceActor instanceName
                     instance <<! OracleInstanceActor.GetMasterPDBState pdb
                 | None ->
                     sender <! MasterPDBActor.stateError (sprintf "cannot find Oracle instance %s" instanceName)
@@ -294,7 +299,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let instanceName = getInstanceName "primary"
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
-                    let instance = instanceActor state instanceName
+                    let instance = instanceActor instanceName
                     instance <<! OracleInstanceActor.GetMasterPDBEditionInfo pdb
                 | None ->
                     let error:MasterPDBActor.EditionInfoResult = sprintf "cannot find Oracle instance %s" instanceName |> Error
@@ -304,28 +309,28 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | CreateMasterPDB (user, parameters) ->
                 let requestId = newRequestId()
                 let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
-                retype (primaryInstance state) <! Application.OracleInstanceActor.CreateMasterPDB (requestId, parameters)
+                retype primaryInstance <! Application.OracleInstanceActor.CreateMasterPDB (requestId, parameters)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
 
             | PrepareMasterPDBForModification (user, pdb, version) ->
                 let requestId = newRequestId()
                 let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
-                retype (primaryInstance state) <! Application.OracleInstanceActor.PrepareMasterPDBForModification (requestId, pdb, version, user)
+                retype primaryInstance <! Application.OracleInstanceActor.PrepareMasterPDBForModification (requestId, pdb, version, user)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
 
             | CommitMasterPDB (user, pdb, comment) ->
                 let requestId = newRequestId()
                 let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
-                retype (primaryInstance state) <! Application.OracleInstanceActor.CommitMasterPDB (requestId, pdb, user, comment)
+                retype primaryInstance <! Application.OracleInstanceActor.CommitMasterPDB (requestId, pdb, user, comment)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
 
             | RollbackMasterPDB (user, pdb) ->
                 let requestId = newRequestId()
                 let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
-                retype (primaryInstance state) <! Application.OracleInstanceActor.RollbackMasterPDB (requestId, user, pdb)
+                retype primaryInstance <! Application.OracleInstanceActor.RollbackMasterPDB (requestId, user, pdb)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
 
@@ -333,7 +338,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let instanceName = getInstanceName instanceName
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
-                    let instance = instanceActor state instanceName
+                    let instance = instanceActor instanceName
                     let requestId = newRequestId()
                     let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
                     instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force)
@@ -347,7 +352,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let instanceName = getInstanceName instanceName
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
-                    let instance = instanceActor state instanceName
+                    let instance = instanceActor instanceName
                     let requestId = newRequestId()
                     let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
                     instance <! Application.OracleInstanceActor.DeleteWorkingCopy (requestId, wcName)
@@ -361,7 +366,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let instanceName = getInstanceName "primary"
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
-                    let instance = instanceActor state instanceName
+                    let instance = instanceActor instanceName
                     let requestId = newRequestId()
                     let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
                     instance <! Application.OracleInstanceActor.CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force)
@@ -376,7 +381,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let instanceName = getInstanceName instanceName
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
-                    let instance = instanceActor state instanceName
+                    let instance = instanceActor instanceName
                     instance <<! OracleInstanceActor.ExtendWorkingCopy name
                     return! loop state
                 | None ->
@@ -406,7 +411,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let instanceName = getInstanceName instanceName
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
-                    let instance = instanceActor state instanceName
+                    let instance = instanceActor instanceName
                     let! (transferInfo:OracleInstanceActor.DumpTransferInfo) = instance <? OracleInstanceActor.GetDumpTransferInfo
                     sender <! Ok transferInfo
                     return! loop state
@@ -417,6 +422,11 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 
     and handleAdminCommand state command = 
         ctx.Log.Value.Info("Received admin command : {0}", describeAdminCommand command)
+
+        let instanceActor = instanceActor state
+        let primaryInstance = primaryInstance state
+        let getInstanceName = getInstanceName state
+
         let getPendingChanges () = async {
             let pendingChangeCommands = 
                 state.PendingRequests 
@@ -424,7 +434,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 |> Seq.map (fun (_, request) -> request.Command)
                 |> Seq.filter (pendingChangeCommandFilter (fun _ -> true))
                 
-            let! (primaryInstanceState:OracleInstanceActor.StateResult) = (primaryInstance state) <? OracleInstanceActor.GetState
+            let! (primaryInstanceState:OracleInstanceActor.StateResult) = primaryInstance <? OracleInstanceActor.GetState
             return
                 primaryInstanceState 
                 |> Result.map (fun state -> 
@@ -460,8 +470,19 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 ctx.Sender() <! state.InMaintenanceMode
                 return! loop state
 
+            | CollectInstanceGarbage instanceName ->
+                let instanceName = getInstanceName instanceName
+                match state.Orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
+                    let instance = instanceActor instanceName
+                    instance <! OracleInstanceActor.CollectGarbage
+                    return! loop state
+                | None ->
+                    ctx.Log.Value.Warning(sprintf "cannot find Oracle instance %s" instanceName)
+                    return! loop state
+
             | CollectGarbage ->
-                ctx.Log.Value.Info("Garbage collection requested")
+                ctx.Log.Value.Info("Garbage collection of all Oracle instances requested")
                 state.Collaborators.OracleInstanceActors |> Map.iter (fun _ actor -> retype actor <! OracleInstanceActor.CollectGarbage)
                 return! loop state
 
@@ -524,7 +545,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                             return! loop state
 
             | DeleteMasterPDBVersion (pdb, version, force) ->
-                (primaryInstance state) <<! OracleInstanceActor.DeleteVersion (pdb, version, force)
+                primaryInstance <<! OracleInstanceActor.DeleteVersion (pdb, version, force)
                 return! loop state
          }
 

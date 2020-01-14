@@ -361,9 +361,14 @@ let rollbackMasterPDB apiCtx (pdb:string) = withUser (fun user next ctx -> task 
     return! returnRequest apiCtx.Endpoint requestValidation next ctx
 })
 
-let collectGarbage apiCtx = withUser (fun user next ctx -> task {
+let collectGarbage apiCtx = withAdmin (fun _ next ctx -> task {
     API.collectGarbage apiCtx
-    return! text "Garbage collecting initiated." next ctx
+    return! text "Garbage collecting of all Oracle instance initiated." next ctx
+})
+
+let collectInstanceGarbage apiCtx (instance:string) = withAdmin (fun _ next ctx -> task {
+    API.collectInstanceGarbage apiCtx instance
+    return! text (sprintf "Garbage collecting of Oracle instance %s initiated." instance) next ctx
 })
 
 let synchronizePrimaryInstanceWith apiCtx instance next ctx = task {
