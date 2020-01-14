@@ -87,3 +87,6 @@ let getDumpTransferInfo (ctx:APIContext) (instance:string) : Async<Result<Applic
 
 let deleteMasterPDBVersion (ctx:APIContext) (pdb:string) (version:int) (force:bool) : Async<Application.MasterPDBActor.DeleteVersionResult> =
     retype ctx.Orchestrator <? DeleteMasterPDBVersion (pdb.ToUpper(), version, force)
+
+let switchLock (ctx:APIContext) (pdb:string) : Async<Result<bool,string>> =
+    retype ctx.Orchestrator <? OrchestratorActor.SwitchLock (pdb.ToUpper())

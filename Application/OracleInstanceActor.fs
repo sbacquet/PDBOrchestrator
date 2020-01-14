@@ -107,6 +107,7 @@ type Command =
 | CollectGarbage // no response
 | GetDumpTransferInfo // responds with DumpTransferInfo
 | DeleteVersion of string * int * bool // responds with Application.MasterPDBActor.DeleteVersionResult
+| SwitchLock of string
 
 type StateResult = Result<OracleInstance.OracleInstanceDTO, string>
 let stateOk state : StateResult = Ok state
@@ -515,6 +516,15 @@ let private oracleInstanceActorBody
                     sender <! Error (sprintf "master PDB %s does not exist on Oracle instance %s" pdb instance.Name)
                 return! loop state
 
+            | SwitchLock pdb ->
+                let sender = ctx.Sender().Retype<Result<bool,string>>()
+                match instance |> containsMasterPDB pdb with
+                | Some pdb -> 
+                    let masterPDBActor:IActorRef<MasterPDBActor.Command> = retype (collaborators.MasterPDBActors |> getMasterPDBActor pdb)
+                    masterPDBActor <<! MasterPDBActor.SwitchLock
+                | None ->
+                    sender <! Error (sprintf "master PDB %s does not exist on Oracle instance %s" pdb instance.Name)
+                return! loop state
                 
         // Callback from Oracle executor
         | :? OraclePDBResultWithReqId as requestResponse ->

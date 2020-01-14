@@ -24,6 +24,7 @@ type Command =
 | CreateWorkingCopyOfEdition of WithRequestId<string> // WithRequest<CreateWorkingCopyResult>
 | CollectVersionsGarbage of int list // no response
 | DeleteVersion of int // responds with DeleteVersionResult
+| SwitchLock // responds with Result<bool,string>
 
 type PrepareForModificationResult = 
 | Prepared of string * MasterPDB * string * string * (string * string) list
@@ -277,6 +278,12 @@ let private masterPDBActorBody
                 | Error error ->
                     sender <! Error error
                     return! loop state
+            
+            | SwitchLock ->
+                let sender = ctx.Sender().Retype<Result<bool,string>>()
+                let newLock = not state.MasterPDB.EditionDisabled
+                sender <! Ok newLock
+                return! loop { state with MasterPDB = { state.MasterPDB with EditionDisabled = newLock } }
 
         | :? MasterPDBVersionActor.CommandToParent as commandToParent->
             match commandToParent with

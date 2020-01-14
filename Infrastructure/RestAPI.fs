@@ -65,6 +65,8 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
         PATCH >=> choose [
             // Extend lifetime of working copy
             routef "/instances/%s/working-copies/%s" (HttpHandlers.extendWorkingCopy apiCtx)
+            // Switch edition lock
+            routef "/instances/primary/master-pdbs/%s" (HttpHandlers.switchLock apiCtx)
             // Declare the given instance synchronized with primary
             routef "/instances/%s" (HttpHandlers.synchronizePrimaryInstanceWith apiCtx)
         ]

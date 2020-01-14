@@ -45,6 +45,7 @@ type AdminCommand =
 | SetPrimaryOracleInstance of string // responds with Result<string, string*string> = Result<new instance, (error, current instance)>
 | DeleteMasterPDBVersion of string * int * bool // responds with Application.MasterPDBActor.DeleteVersionResult
 | CollectInstanceGarbage of string // no response
+| SwitchLock of string // responds with Result<bool,string>
 
 let private pendingChangeCommandFilter mapper = function
 | GetState
@@ -169,6 +170,8 @@ let describeAdminCommand = function
     sprintf "switch primary Oracle instance to \"%s\"" instance
 | DeleteMasterPDBVersion (pdb, version, force) ->
     sprintf "delete version %d of master PDB \"%s\"" version pdb
+| SwitchLock pdb ->
+    sprintf "switch lock of master PDB %s" pdb
 
 let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) (ctx : Actor<_>) =
 
@@ -546,6 +549,10 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 
             | DeleteMasterPDBVersion (pdb, version, force) ->
                 primaryInstance <<! OracleInstanceActor.DeleteVersion (pdb, version, force)
+                return! loop state
+
+            | SwitchLock pdb ->
+                primaryInstance <<! OracleInstanceActor.SwitchLock pdb
                 return! loop state
          }
 
