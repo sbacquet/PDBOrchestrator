@@ -437,7 +437,7 @@ let ``API deletes a version of master PDB`` () = test <| fun tck ->
     | Ok pdb -> Assert.Equal(false, (pdb.Versions |> List.find (fun v -> v.VersionNumber = 2)).Deleted)
     | Error error -> failwith error
 
-    let result = API.deleteMasterPDBVersion ctx "me" "test2" 2 false |> runQuick
+    let result = API.deleteMasterPDBVersion ctx "test2" 2 false |> runQuick
     result |> Result.mapError failwith |> ignore
 
     let state = API.getMasterPDBState ctx orchestratorState.PrimaryInstance "test2" |> run
@@ -530,7 +530,7 @@ let ``API cannot delete a version with working copy if not forcing`` () = test <
     let request = API.createWorkingCopy ctx "me" "server1" "test2" 2 "workingcopy" true false false |> runQuick
     request |> throwIfRequestNotCompletedOk ctx |> ignore
 
-    let result = API.deleteMasterPDBVersion ctx "me" "test2" 2 false |> runQuick
+    let result = API.deleteMasterPDBVersion ctx "test2" 2 false |> runQuick
     result |> Result.map (fun _ -> failwith "version should not be deletable") |> ignore
 
 [<Fact>]
@@ -541,7 +541,7 @@ let ``API can delete a version with working copy if forcing`` () = test <| fun t
     let request = API.createWorkingCopy ctx "me" "server1" "test2" 2 "workingcopy" true false false |> runQuick
     request |> throwIfRequestNotCompletedOk ctx |> ignore
 
-    let result = API.deleteMasterPDBVersion ctx "me" "test2" 2 true |> runQuick
+    let result = API.deleteMasterPDBVersion ctx "test2" 2 true |> runQuick
     result |> Result.mapError failwith |> ignore
 
 [<Fact>]

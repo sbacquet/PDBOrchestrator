@@ -459,7 +459,7 @@ let deleteMasterPDBVersion apiCtx (masterPDB:string, version:int) =
         if not parsedOk then 
             return! RequestErrors.badRequest (text "When provided, the \"force\" query parameter must be \"true\" or \"false\".") next ctx
         else
-            let! result = API.deleteMasterPDBVersion apiCtx user.Name masterPDB version force
+            let! result = API.deleteMasterPDBVersion apiCtx masterPDB version force
             match result with
             | Ok _ -> return! (text <| sprintf "Version %d of master PDB %s deleted." version (masterPDB.ToUpper())) next ctx
             | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot delete version %d of master PDB %s : %s." version (masterPDB.ToUpper()) error) next ctx
