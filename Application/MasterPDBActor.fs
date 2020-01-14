@@ -222,10 +222,14 @@ let private masterPDBActorBody
                 | None -> 
                     sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name |> exn))
                     return! loop state
-                | Some version -> 
-                    let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators ctx
-                    versionActor <<! MasterPDBVersionActor.CreateWorkingCopy (requestId, name, snapshot)
-                    return! loop { state with Collaborators = newCollabs }
+                | Some version ->
+                    if version.Deleted then
+                        sender <! (requestId, Error (sprintf "version %d of master PDB %s is deleted" versionNumber masterPDB.Name |> exn))
+                        return! loop state
+                    else
+                        let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators ctx
+                        versionActor <<! MasterPDBVersionActor.CreateWorkingCopy (requestId, name, snapshot)
+                        return! loop { state with Collaborators = newCollabs }
 
             | CreateWorkingCopyOfEdition (requestId, workingCopyName) ->
                 let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
@@ -235,7 +239,7 @@ let private masterPDBActorBody
                     sender <! (requestId, Error (sprintf "the master PDB %s is not being edited" masterPDB.Name |> exn))
                     return! loop state
                 | Some _ ->
-                    if (state.EditionOperationInProgress) then
+                    if state.EditionOperationInProgress then
                         sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name |> exn))
                         return! loop state
                     else
