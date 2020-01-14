@@ -8,6 +8,21 @@ open Domain.MasterPDBWorkingCopy
 open Domain.OracleInstance
 open Application
 
+type OracleInstanceBasicDTO = {
+    Name: string
+    ServerUri: string
+    MasterPDBNames: string list
+    WorkingCopyNames: string list
+}
+
+let consOracleInstanceBasicDTO name serverUri masterPDBs workingCopies = 
+    { 
+        Name = name
+        ServerUri = serverUri
+        MasterPDBNames = masterPDBs 
+        WorkingCopyNames = workingCopies
+    }
+
 type OracleInstanceDTO = {
     Name: string
     ServerUri: string
@@ -23,11 +38,17 @@ let consOracleInstanceDTO name serverUri masterPDBs workingCopies =
         WorkingCopies = workingCopies
     }
 
-
 let getResult (state:MasterPDBActor.StateResult) : MasterPDBDTO =
     match state with
     | Ok result -> result
     | Error _ -> failwith "should never happen" // TODO
+
+let toBasicDTO (oracleInstance : Domain.OracleInstance.OracleInstance) =
+        consOracleInstanceBasicDTO 
+            oracleInstance.Name 
+            (oracleInstanceUri oracleInstance.Server oracleInstance.Port)
+            (oracleInstance.MasterPDBs)
+            (oracleInstance.WorkingCopies |> Map.toList |> List.map fst)
 
 let toDTO (masterPDBActors:Map<string, IActorRef<obj>>) (oracleInstance : Domain.OracleInstance.OracleInstance) = async {
     let! masterPDBs = 

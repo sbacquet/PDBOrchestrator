@@ -91,6 +91,7 @@ module private Validation =
 
 type Command =
 | GetState // responds with StateResult
+| GetBasicState // responds with BasicStateResult
 | GetMasterPDBState of string // responds with Application.MasterPDBActor.StateResult
 | GetMasterPDBEditionInfo of string // responds with Application.MasterPDBActor.EditionInfoResult
 | SetInternalState of OracleInstance.OracleInstanceFullDTO // responds with StateResult
@@ -110,6 +111,8 @@ type Command =
 type StateResult = Result<OracleInstance.OracleInstanceDTO, string>
 let stateOk state : StateResult = Ok state
 let stateError error : StateResult = Error error
+
+type BasicStateResult = Result<OracleInstance.OracleInstanceBasicDTO, string>
 
 type MasterPDBCreationResult = 
 | InvalidRequest of string list
@@ -278,6 +281,12 @@ let private oracleInstanceActorBody
                 let sender = ctx.Sender().Retype<StateResult>()
                 let! instanceDTO = instance |> OracleInstance.toDTO collaborators.MasterPDBActors
                 sender <! stateOk instanceDTO
+                return! loop state
+
+            | GetBasicState ->
+                let sender = ctx.Sender().Retype<BasicStateResult>()
+                let instanceDTO = instance |> Application.DTO.OracleInstance.toBasicDTO
+                sender <! Ok instanceDTO
                 return! loop state
 
             | GetMasterPDBState pdb ->

@@ -36,12 +36,22 @@ let encodeWorkingCopyDTO culture = Encode.buildWith (fun (x:MasterPDBWorkingCopy
     Encode.required (Encode.listWith encodeSchemaDTO) "schemas" x.Schemas
 )
 
+let encodeOracleInstanceBasicDTO culture = Encode.buildWith (fun (x:OracleInstanceBasicDTO) ->
+    Encode.required Encode.string "name" x.Name >>
+    Encode.required Encode.string "serverUri" x.ServerUri >>
+    Encode.required Encode.stringList "masterPDBs" x.MasterPDBNames >>
+    Encode.ifNotEqual List.empty Encode.stringList "workingCopies" x.WorkingCopyNames
+)
+
 let encodeOracleInstanceDTO culture = Encode.buildWith (fun (x:OracleInstanceDTO) ->
     Encode.required Encode.string "name" x.Name >>
     Encode.required Encode.string "serverUri" x.ServerUri >>
     Encode.required (encodeMasterPDBDTOs culture) "masterPDBs" x.MasterPDBs >>
     Encode.ifNotEqual List.empty (Encode.listWith (encodeWorkingCopyDTO culture)) "workingCopies" x.WorkingCopies
 )
+
+let oracleInstanceBasicDTOToJson culture instanceDTO =
+    instanceDTO |> Json.serializeWith (encodeOracleInstanceBasicDTO culture) JsonFormattingOptions.Pretty
 
 let oracleInstanceDTOToJson culture instanceDTO =
     instanceDTO |> Json.serializeWith (encodeOracleInstanceDTO culture) JsonFormattingOptions.Pretty

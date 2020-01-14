@@ -21,6 +21,7 @@ type RequestValidation = Validation<RequestId, string>
 type Command =
 | GetState // responds with Application.DTO.Orchestrator
 | GetInstanceState of string // responds with Application.OracleInstanceActor.StateResult
+| GetInstanceBasicState of string // responds with Application.OracleInstanceActor.BasicStateResult
 | GetMasterPDBState of string * string // responds with Application.MasterPDBActor.StateResult
 | GetMasterPDBEditionInfo of string // responds with Application.MasterPDBActor.EditionInfoResult
 | CreateMasterPDB of WithUser<CreateMasterPDBParams> // responds with RequestValidation
@@ -47,6 +48,7 @@ type AdminCommand =
 let private pendingChangeCommandFilter mapper = function
 | GetState
 | GetInstanceState _
+| GetInstanceBasicState _
 | GetMasterPDBState _
 | GetMasterPDBEditionInfo _
 | CreateWorkingCopy _
@@ -121,6 +123,8 @@ let describeCommand = function
     "get PDB orchestrator state"
 | GetInstanceState instance ->
     sprintf "get state of Oracle instance \"%s\"" instance
+| GetInstanceBasicState instance ->
+    sprintf "get basic state of Oracle instance \"%s\"" instance
 | GetMasterPDBState (instance, pdb) ->
     sprintf "get state of master PDB \"%s\" in Oracle instance \"%s\"" pdb instance
 | GetMasterPDBEditionInfo pdb ->
@@ -249,7 +253,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             
             match command with
             | GetState ->
-                let! orchestratorDTO = state.Orchestrator |> DTO.Orchestrator.toDTO (state.Collaborators.OracleInstanceActors |> Map.map (fun _ a -> a.Retype<OracleInstanceActor.Command>()))
+                let orchestratorDTO = state.Orchestrator |> DTO.Orchestrator.toDTO
                 ctx.Sender() <! orchestratorDTO
                 return! loop state
 
@@ -262,6 +266,17 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     instance <<! OracleInstanceActor.GetState
                 | None ->
                     sender <! OracleInstanceActor.stateError (sprintf "cannot find Oracle instance %s" instanceName)
+                return! loop state
+
+            | GetInstanceBasicState instanceName ->
+                let sender = ctx.Sender().Retype<Application.OracleInstanceActor.BasicStateResult>()
+                let instanceName = getInstanceName instanceName
+                match state.Orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
+                    let instance = instanceActor instanceName
+                    instance <<! OracleInstanceActor.GetBasicState
+                | None ->
+                    sender <! Error (sprintf "cannot find Oracle instance %s" instanceName)
                 return! loop state
 
             | GetMasterPDBState (instanceName, pdb) ->

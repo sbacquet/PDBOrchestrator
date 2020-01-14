@@ -16,11 +16,14 @@ type APIContext = {
 let consAPIContext system orchestratorActor (loggerFactory:ILoggerFactory) endpoint =
     { System = system; Orchestrator = orchestratorActor; Logger = loggerFactory.CreateLogger("API"); Endpoint = endpoint }
 
-let getState (ctx:APIContext) : Async<Application.DTO.Orchestrator.OrchestratorState> =
+let getState (ctx:APIContext) : Async<Application.DTO.Orchestrator.OrchestratorDTO> =
     ctx.Orchestrator <? GetState
 
 let getInstanceState (ctx:APIContext) (instance:string) : Async<Application.OracleInstanceActor.StateResult> =
     ctx.Orchestrator <? GetInstanceState (instance.ToLower())
+
+let getInstanceBasicState (ctx:APIContext) (instance:string) : Async<Application.OracleInstanceActor.BasicStateResult> =
+    ctx.Orchestrator <? GetInstanceBasicState (instance.ToLower())
 
 let getMasterPDBState (ctx:APIContext) (instance:string) (pdb:string) : Async<Application.MasterPDBActor.StateResult> =
     ctx.Orchestrator <? GetMasterPDBState (instance.ToLower(), pdb.ToUpper())

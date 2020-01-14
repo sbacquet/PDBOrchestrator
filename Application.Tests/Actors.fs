@@ -312,8 +312,9 @@ let ``API creates PDB`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
-    let stateBefore = API.getState ctx |> runQuick
-    Assert.Equal(2, stateBefore.OracleInstances.[0].MasterPDBs.Length)
+    let stateBefore = API.getInstanceState ctx "primary" |> runQuick
+    stateBefore |> Result.mapError failwith |> ignore
+    stateBefore |> Result.map (fun instance -> Assert.Equal(2, instance.MasterPDBs.Length)) |> ignore
 
     let request = 
         let pars = 
@@ -328,8 +329,9 @@ let ``API creates PDB`` () = test <| fun tck ->
         |> runQuick
     let _ = request |> throwIfRequestNotCompletedOk ctx
 
-    let stateAfter = API.getState ctx |> runQuick
-    Assert.Equal(3, stateAfter.OracleInstances.[0].MasterPDBs.Length)
+    let stateAfter = API.getInstanceState ctx "primary" |> runQuick
+    stateAfter |> Result.mapError failwith |> ignore
+    stateAfter |> Result.map (fun instance -> Assert.Equal(3, instance.MasterPDBs.Length)) |> ignore
 
 [<Fact>]
 let ``API fails to create a PDB`` () = test <| fun tck ->

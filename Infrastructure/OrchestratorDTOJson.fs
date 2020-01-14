@@ -5,9 +5,9 @@ open Chiron.Serialization.Json
 open Chiron.JsonTransformer
 open Application.DTO.Orchestrator
 
-let encodeOrchestrator culture = Encode.buildWith (fun (x:OrchestratorState) ->
-    Encode.required Encode.string "primaryInstance" x.PrimaryInstance >>
-    Encode.required (Encode.listWith (OracleInstance.encodeOracleInstanceDTO culture)) "instances" x.OracleInstances
+let encodeOrchestrator culture = Encode.buildWith (fun (x:OrchestratorDTO) ->
+    Encode.required Encode.stringList "instances" x.OracleInstances >>
+    Encode.required Encode.string "primaryInstance" x.PrimaryInstance
 )
 
 let orchestratorToJson culture pdb =

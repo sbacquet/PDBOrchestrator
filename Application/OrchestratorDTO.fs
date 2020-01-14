@@ -3,13 +3,13 @@
 open Akkling
 open Application
 
-type OrchestratorState = {
-    OracleInstances : OracleInstance.OracleInstanceDTO list
+type OrchestratorDTO = {
+    OracleInstances : string list
     PrimaryInstance : string
 }
 
-let consOrchestratorState instances primary = { 
-    OracleInstances = instances |> Seq.toList
+let consOrchestratorDTO instances primary = { 
+    OracleInstances = instances
     PrimaryInstance = primary
 }
 
@@ -18,13 +18,5 @@ let getResult (state:OracleInstanceActor.StateResult) : OracleInstance.OracleIns
     | Ok result -> result
     | Error _ -> failwith "should never happen" // TODO
 
-let toDTO (instanceActors:Map<string, IActorRef<_>>) (orchestrator:Domain.Orchestrator.Orchestrator) = async {
-    let! instances = 
-        orchestrator.OracleInstanceNames 
-        |> List.map (fun instance -> async {
-            let! (state:OracleInstanceActor.StateResult) = instanceActors.[instance] <? Application.OracleInstanceActor.GetState
-            return getResult state
-           })
-        |> Async.Parallel
-    return consOrchestratorState instances orchestrator.PrimaryInstance
-}
+let toDTO (orchestrator:Domain.Orchestrator.Orchestrator) =
+    consOrchestratorDTO orchestrator.OracleInstanceNames orchestrator.PrimaryInstance

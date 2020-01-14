@@ -58,6 +58,13 @@ let getInstance apiCtx (name:string) next (ctx:HttpContext) = task {
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
+let getBasicInstance apiCtx (name:string) next (ctx:HttpContext) = task {
+    let! stateMaybe = API.getInstanceBasicState apiCtx name
+    match stateMaybe with
+    | Ok state -> return! json (OracleInstance.oracleInstanceBasicDTOToJson (getCulture ctx) state) next ctx
+    | Error error -> return! RequestErrors.notFound (errorText error) next ctx
+}
+
 let getMasterPDBs apiCtx (instancename:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx instancename
     match stateMaybe with
@@ -382,7 +389,7 @@ open Application.OracleInstanceActor
 let decodeCreateMasterPDBParams user = jsonDecoder {
     let! name = Decode.required Decode.string "Name" 
     let! dump = Decode.required Decode.string "Dump" 
-    let! schemas = Decode.required (Decode.listWith Decode.string) "Schemas"
+    let! schemas = Decode.required Decode.stringList "Schemas"
     let! targetSchemas = Decode.required (Decode.listWith (Decode.tuple3With Decode.string Decode.string Decode.string)) "TargetSchemas"
     let! date = Decode.optional Decode.dateTime "Date"
     let! comment = Decode.required Decode.string "Comment"
@@ -400,7 +407,7 @@ let decodeCreateMasterPDBParams user = jsonDecoder {
 let encodeCreateMasterPDBParams = Encode.buildWith (fun (x:CreateMasterPDBParams) ->
     Encode.required Encode.string "Name" x.Name >>
     Encode.required Encode.string "Dump" x.Dump>>
-    Encode.required (Encode.listWith Encode.string) "Schemas" x.Schemas >>
+    Encode.required Encode.stringList "Schemas" x.Schemas >>
     Encode.required (Encode.listWith (Encode.tuple3 Encode.string Encode.string Encode.string)) "TargetSchemas" x.TargetSchemas >>
     Encode.required Encode.string "User" x.User >>
     Encode.required Encode.dateTime "Date" x.Date >>
