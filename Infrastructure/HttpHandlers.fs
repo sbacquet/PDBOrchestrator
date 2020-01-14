@@ -111,7 +111,7 @@ let getWorkingCopies apiCtx (instancename:string) next (ctx:HttpContext) = task 
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
-let getWorkingCopiesForMasterPDB apiCtx (instancename:string, pdb:string) next (ctx:HttpContext) = task {
+let getWorkingCopiesOfMasterPDB apiCtx (instancename:string, pdb:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx instancename
     match stateMaybe with
     | Ok state -> 
@@ -120,7 +120,7 @@ let getWorkingCopiesForMasterPDB apiCtx (instancename:string, pdb:string) next (
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
-let getWorkingCopyForMasterPDB apiCtx (instancename:string, pdb:string, name:string) next (ctx:HttpContext) = task {
+let getWorkingCopyOfMasterPDB apiCtx (instancename:string, pdb:string, name:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx instancename
     match stateMaybe with
     | Ok state -> 
@@ -129,7 +129,7 @@ let getWorkingCopyForMasterPDB apiCtx (instancename:string, pdb:string, name:str
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
-let getWorkingCopiesForMasterPDBVersion apiCtx (instancename:string, pdb:string, version:int) next (ctx:HttpContext) = task {
+let getWorkingCopiesOfMasterPDBVersion apiCtx (instancename:string, pdb:string, version:int) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx instancename
     match stateMaybe with
     | Ok state -> 
@@ -140,7 +140,7 @@ let getWorkingCopiesForMasterPDBVersion apiCtx (instancename:string, pdb:string,
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
-let getWorkingCopyForMasterPDBVersion apiCtx (instancename:string, pdb:string, version:int, name:string) next (ctx:HttpContext) = task {
+let getWorkingCopyOfMasterPDBVersion apiCtx (instancename:string, pdb:string, version:int, name:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx instancename
     match stateMaybe with
     | Ok state -> 
@@ -152,7 +152,7 @@ let getWorkingCopyForMasterPDBVersion apiCtx (instancename:string, pdb:string, v
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
-let getWorkingCopiesForMasterPDBEdition apiCtx (pdb:string) next (ctx:HttpContext) = task {
+let getWorkingCopiesOfMasterPDBEdition apiCtx (pdb:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx "primary"
     match stateMaybe with
     | Ok state -> 
@@ -163,7 +163,7 @@ let getWorkingCopiesForMasterPDBEdition apiCtx (pdb:string) next (ctx:HttpContex
     | Error error -> return! RequestErrors.notFound (errorText error) next ctx
 }
 
-let getWorkingCopyForMasterPDBEdition apiCtx (pdb:string, name:string) next (ctx:HttpContext) = task {
+let getWorkingCopyOfMasterPDBEdition apiCtx (pdb:string, name:string) next (ctx:HttpContext) = task {
     let! stateMaybe = API.getInstanceState apiCtx "primary"
     match stateMaybe with
     | Ok state -> 
