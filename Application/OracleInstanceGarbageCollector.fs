@@ -7,10 +7,11 @@ open Application.PendingRequest
 open Domain.Common.Exceptional
 open Application.Common
 open Domain.MasterPDBWorkingCopy
+open Domain.Common
 
 type Command =
 | CollectGarbage // responds with CommandToParent.WorkingCopiesDeleted
-| DeleteWorkingCopy of WithRequestId<MasterPDBWorkingCopy> // responds with OraclePDBResultWithReqId
+| DeleteWorkingCopy of WithRequestId<string> // responds with OraclePDBResultWithReqId
 
 type CommandToParent =
 | CollectVersionsGarbage of (string * int list)
@@ -29,6 +30,12 @@ let private masterPDBGarbageCollectorBody
     let getPDBNamesLike like : Exceptional<string list> = 
         oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBNamesLike like
         |> runWithin parameters.ShortTimeout id (fun () -> "cannot get PDB names : timeout exceeded" |> exn |> Error)
+    let isWorkingCopy (pdb:string) : Exceptional<bool> = result {
+        let! (folder:string option) = 
+            oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
+            |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
+        return folder |> Option.map (fun folder -> folder.StartsWith instance.WorkingCopyDestPath) |> Option.defaultValue false
+    }
     let toErrorMaybe result = match result with | Ok _ -> None | Error error -> Some error
 
     let rec loop () = actor {
@@ -66,9 +73,16 @@ let private masterPDBGarbageCollectorBody
             return! loop ()
 
         | DeleteWorkingCopy (requestId, workingCopy) ->
-            let result = deletePDB workingCopy.Name
-            //ctx.Sender() <! WorkingCopiesDeleted (Some requestId, [ (workingCopy, result) ])
-            ctx.Sender() <! (requestId, result)
+            ctx.Log.Value.Info("Deleting working copy {pdb} on instance {instance} requested", workingCopy, instance.Name)
+            let sender = ctx.Sender().Retype<Application.Oracle.OraclePDBResultWithReqId>()
+            let result = result {
+                let! isWorkingCopy = isWorkingCopy workingCopy
+                if isWorkingCopy then
+                    return! deletePDB workingCopy
+                else
+                    return! sprintf "PDB %s is not a working copy" workingCopy |> exn |> Error
+            }
+            sender <! (requestId, result)
             return! loop ()
 
     }

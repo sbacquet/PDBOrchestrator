@@ -419,17 +419,11 @@ let private oracleInstanceActorBody
                         return! loop { state with Requests = newRequests }
 
             | DeleteWorkingCopy (requestId, wcName) ->
-                let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
-                match instance |> getWorkingCopy wcName with
-                | None ->
-                    sender <! (requestId, sprintf "working copy %s does not exist on Oracle instance %s" wcName instance.Name |> exn |> Error)
-                    return! loop state
-                | Some workingCopy ->
-                    let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                    let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
-                    garbageCollector <! OracleInstanceGarbageCollector.DeleteWorkingCopy (requestId, workingCopy)
-                    retype garbageCollector <! Akka.Actor.PoisonPill.Instance
-                    return! loop { state with Requests = newRequests }
+                let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
+                let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
+                garbageCollector <! OracleInstanceGarbageCollector.DeleteWorkingCopy (requestId, wcName)
+                retype garbageCollector <! Akka.Actor.PoisonPill.Instance
+                return! loop { state with Requests = newRequests }
 
             | ExtendWorkingCopy name ->
                 let sender = ctx.Sender().Retype<Result<MasterPDBWorkingCopy, string>>()

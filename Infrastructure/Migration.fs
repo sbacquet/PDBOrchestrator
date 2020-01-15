@@ -119,7 +119,7 @@ let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword u
                 "" "" "" "" // paths to edit manually in the instance JSON file
                 "DP_DIR" "/u01/app/intcdb_dumps" 
                 snapshotCapable
-        let repo = Infrastructure.OracleInstanceRepository.NewOracleInstanceRepository(".", instance) :> Application.Common.IOracleInstanceRepository
+        let repo = Infrastructure.OracleInstanceRepository.NewOracleInstanceRepository(".", instance, "A") :> Application.Common.IOracleInstanceRepository
         repo.Put instance |> ignore
         sprintf "%s imported properly from %s" instanceName fromServer |> Validation.Valid
     

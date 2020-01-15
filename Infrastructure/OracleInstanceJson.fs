@@ -90,6 +90,7 @@ let encodeWorkingCopy = Encode.buildWith (fun (x:MasterPDBWorkingCopy) ->
     )
 )
 
+let decodeWorkingCopies = Decode.listWith decodeWorkingCopy
 
 let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
     let! version = Decode.required Decode.int "_version"
@@ -121,7 +122,7 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
         let! oracleDirectoryForDumps = Decode.required Decode.string "oracleDirectoryForDumps" 
         let! oracleDirectoryPathForDumps = Decode.required Decode.string "oracleDirectoryPathForDumps" 
         let! masterPDBs = Decode.required Decode.stringList "masterPDBs"
-        let! workingCopies = Decode.optional (Decode.listWith decodeWorkingCopy) "workingCopies"
+        let! workingCopies = Decode.optional decodeWorkingCopies "workingCopies" // for compatibility, now stored in a dedicated file
         return 
             consOracleInstance 
                 masterPDBs
@@ -162,7 +163,6 @@ let encodeOracleInstance (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:Or
     Encode.required Encode.string "oracleDirectoryForDumps" x.OracleDirectoryForDumps >>
     Encode.required Encode.string "oracleDirectoryPathForDumps" x.OracleDirectoryPathForDumps >>
     Encode.required Encode.stringList "masterPDBs" x.MasterPDBs >>
-    Encode.ifNotEqual List.empty (Encode.listWith encodeWorkingCopy) "workingCopies" (x.WorkingCopies |> Map.toList |> List.map snd) >>
     Encode.required Encode.int "_version" cCurrentJsonVersion >>
     Encode.required Encode.bytes "_iv" algo.IV
 )
@@ -174,3 +174,9 @@ let jsonToOracleInstance json =
 let oracleInstanceToJson pdb =
     use aesAlg = Aes.Create()
     pdb |> Json.serializeWith (encodeOracleInstance aesAlg) JsonFormattingOptions.Pretty
+
+let jsonToWorkingCopies json =
+    json |> Json.deserializeWith decodeWorkingCopies
+
+let workingCopiesToJson workingCopies =
+    workingCopies |> Json.serializeWith (Encode.listWith encodeWorkingCopy) JsonFormattingOptions.Pretty

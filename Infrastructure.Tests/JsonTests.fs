@@ -44,7 +44,9 @@ let ``Serialize and deserialize Oracle instance`` () =
     let json = instance1 |> OracleInstanceJson.oracleInstanceToJson
     let instance1' = json |> OracleInstanceJson.jsonToOracleInstance
     match instance1' with
-    | JPass i -> Assert.Equal(instance1, i)
+    | JPass i -> 
+        let wcMap = wc |> List.map (fun w -> w.Name, w) |> Map.ofList
+        Assert.Equal(instance1, { i with WorkingCopies = wcMap })
     | JFail e -> e |> JsonFailure.summarize |> failwith
 
 [<Fact>]
