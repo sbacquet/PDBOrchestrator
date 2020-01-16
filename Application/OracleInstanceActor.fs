@@ -139,6 +139,7 @@ type private Collaborators = {
     OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
     OracleDiskIntensiveTaskExecutor : IActorRef<Application.OracleDiskIntensiveActor.Command>
     MasterPDBActors: Map<string, IActorRef<obj>>
+    GarbageCollector: IActorRef<OracleInstanceGarbageCollector.Command>
 }
 
 // Spawn actor for a new master PDBs
@@ -200,6 +201,7 @@ let private spawnCollaborators parameters oracleAPI (getMasterPDBRepo:OracleInst
     let oracleShortTaskExecutor = ctx |> OracleShortTaskExecutor.spawn parameters oracleAPI
     let oracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn parameters oracleAPI
     let oracleDiskIntensiveTaskExecutor = ctx |> Application.OracleDiskIntensiveActor.spawn parameters oracleAPI
+    let garbageCollector = ctx |> OracleInstanceGarbageCollector.spawn parameters oracleShortTaskExecutor oracleLongTaskExecutor instance
     let collaborators = {
         OracleShortTaskExecutor = oracleShortTaskExecutor
         OracleLongTaskExecutor = oracleLongTaskExecutor
@@ -208,9 +210,9 @@ let private spawnCollaborators parameters oracleAPI (getMasterPDBRepo:OracleInst
             instance.MasterPDBs 
             |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn parameters instance oracleShortTaskExecutor oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo pdb))
             |> Map.ofList
+        GarbageCollector = garbageCollector
     }
-    collaborators.OracleLongTaskExecutor |> monitor ctx |> ignore
-    collaborators.OracleDiskIntensiveTaskExecutor |> monitor ctx |> ignore
+    // Monitor death of master PDB actors : if one of them dies, this Oracle instance will be disabled
     collaborators.MasterPDBActors |> Map.iter (fun _ actor -> actor |> monitor ctx |> ignore)
     collaborators
 
@@ -385,14 +387,14 @@ let private oracleInstanceActorBody
 
             | CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
-                let cancel:Result<unit,string> option = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
+                let cancel = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
                     if not (wc.MasterPDBName =~ masterPDBName) || not (wc.CreatedBy =~ user) then
                         sprintf "working copy %s already exists but for a different master PDB/user (%s/%s)" wcName wc.MasterPDBName wc.CreatedBy |> Error |> Some
                     else
                         match wc.Source with
                         | SpecificVersion version ->
                             if version = versionNumber then
-                                if force then None else Some (Ok ())
+                                if force then None else Some (Ok wc)
                             else
                                 sprintf "working copy %s of %s already exists but for a different version (%d)" wcName wc.MasterPDBName version |> Error |> Some
                         | Edition ->
@@ -400,13 +402,13 @@ let private oracleInstanceActorBody
                 )
                 match cancel with
                 | Some result ->
-                    let res:CreateWorkingCopyResult = 
-                        match result with
-                        | Ok () -> 
-                             Ok (masterPDBName, versionNumber, wcName, pdbService wcName, instance.Name)
-                        | Error error -> Error error
-                    sender <! (requestId, res)
-                    return! loop state
+                    match result with
+                    | Ok wc -> 
+                        sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, pdbService wcName, instance.Name))
+                        return! loop { state with Instance = state.Instance |> addWorkingCopy (wc |> extendWorkingCopy parameters.TemporaryWorkingCopyLifetime) }
+                    | Error error -> 
+                        sender <! (requestId, Error error)
+                        return! loop state
                 | None ->
                     match instance |> containsMasterPDB masterPDBName with
                     | None ->
@@ -420,9 +422,7 @@ let private oracleInstanceActorBody
 
             | DeleteWorkingCopy (requestId, wcName) ->
                 let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
-                garbageCollector <! OracleInstanceGarbageCollector.DeleteWorkingCopy (requestId, wcName)
-                retype garbageCollector <! Akka.Actor.PoisonPill.Instance
+                state.Collaborators.GarbageCollector <! OracleInstanceGarbageCollector.DeleteWorkingCopy (requestId, wcName)
                 return! loop { state with Requests = newRequests }
 
             | ExtendWorkingCopy name ->
@@ -430,10 +430,7 @@ let private oracleInstanceActorBody
                 let workingCopy = instance |> getWorkingCopy name
                 match workingCopy with
                 | Some workingCopy -> 
-                    let extendedWorkingCopy = 
-                        match workingCopy.Lifetime with
-                        | Temporary _ -> { workingCopy with Lifetime = Temporary (System.DateTime.UtcNow + parameters.TemporaryWorkingCopyLifetime) }
-                        | Durable -> { workingCopy with CreationDate = System.DateTime.UtcNow }
+                    let extendedWorkingCopy = workingCopy |> extendWorkingCopy parameters.TemporaryWorkingCopyLifetime
                     sender <! Ok extendedWorkingCopy
                     return! loop { state with Instance = { state.Instance with WorkingCopies = state.Instance.WorkingCopies |> Map.add name extendedWorkingCopy } }
                 | None ->
@@ -442,25 +439,25 @@ let private oracleInstanceActorBody
 
             | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force) ->
                 let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
-                let cancel:Result<unit,string> option = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
+                let cancel = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
                     if not (wc.MasterPDBName =~ masterPDBName) || not (wc.CreatedBy =~ user) then
                         sprintf "working copy %s already exists but for a different master PDB/user (%s/%s)" wcName wc.MasterPDBName wc.CreatedBy |> Error |> Some
                     else
                         match wc.Source with
                         | Edition ->
-                            if force then None else Some (Ok ())
+                            if force then None else Some (Ok wc)
                         | SpecificVersion version ->
                             sprintf "working copy %s already exists but for a specific version (%d) of %s" wcName version wc.MasterPDBName |> Error |> Some
                 )
                 match cancel with
                 | Some result ->
-                    let res:CreateWorkingCopyResult = 
-                        match result with
-                        | Ok () -> 
-                             Ok (masterPDBName, 0, wcName, pdbService wcName, instance.Name)
-                        | Error error -> Error error
-                    sender <! (requestId, res)
-                    return! loop state
+                    match result with
+                    | Ok wc -> 
+                        sender <! (requestId, Ok (masterPDBName, 0, wcName, pdbService wcName, instance.Name))
+                        return! loop { state with Instance = state.Instance |> addWorkingCopy (wc |> extendWorkingCopy parameters.TemporaryWorkingCopyLifetime) }
+                    | Error error -> 
+                        sender <! (requestId, Error error)
+                        return! loop state
                 | None ->
                     match instance |> containsMasterPDB masterPDBName with
                     | None ->
@@ -474,9 +471,7 @@ let private oracleInstanceActorBody
 
             | CollectGarbage ->
                 ctx.Log.Value.Info("Garbage collection of Oracle instance {instance} requested.", instance.Name)
-                let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
-                garbageCollector <! OracleInstanceGarbageCollector.CollectGarbage
-                retype garbageCollector <! Akka.Actor.PoisonPill.Instance
+                state.Collaborators.GarbageCollector <! OracleInstanceGarbageCollector.CollectGarbage
                 return! loop state
 
             | GetDumpTransferInfo ->

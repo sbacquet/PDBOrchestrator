@@ -566,7 +566,7 @@ let ``API skips creation of a snapshot working copy`` () = test <| fun tck ->
         match instanceState with
         | Ok instance -> instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me")
         | Error error -> failwith error
-    Assert.Equal(firstWC.Value, firstWC'.Value)
+    Assert.Equal(firstWC.Value.MasterPDBName, firstWC'.Value.MasterPDBName)
 
 [<Fact>]
 let ``API overwrites an existing working copy`` () = test <| fun tck ->

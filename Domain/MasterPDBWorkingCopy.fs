@@ -34,3 +34,8 @@ let newTempWorkingCopy expiryDelay =
     consWorkingCopy now (computeWorkingCopyExpiry now expiryDelay |> Temporary)
 
 let newDurableWorkingCopy = consWorkingCopy System.DateTime.Now Durable
+
+let extendWorkingCopy (temporaryWorkingCopyLifetime:System.TimeSpan) workingCopy = 
+    match workingCopy.Lifetime with
+    | Temporary _ -> { workingCopy with Lifetime = Temporary (System.DateTime.UtcNow + temporaryWorkingCopyLifetime) }
+    | Durable -> { workingCopy with CreationDate = System.DateTime.UtcNow }
