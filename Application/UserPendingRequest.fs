@@ -7,6 +7,7 @@ type PendingUserRequest<'C> = {
     Command: 'C
     User: string
     StartTime: System.DateTime
+    Deleted: bool
 }
 
 type WithUser<'T> = string * 'T
@@ -26,7 +27,8 @@ let registerUserRequest<'C> log id (command : 'C) user requests : PendingUserReq
         Id = id
         Command = command
         User = user
-        StartTime = System.DateTime.Now 
+        StartTime = System.DateTime.Now
+        Deleted = false
        }
 
 type CompletedUserRequest<'S> = {
@@ -50,3 +52,5 @@ let completeUserRequest<'C, 'S> log (pendingRequests : PendingUserRequestMap<'C>
     let newCompletedRequests = completedRequests |> Map.add pendingRequest.Id completedRequest
     (newPendingRequests, newCompletedRequests)
 
+let deletePendingRequest<'C> (pendingRequests : PendingUserRequestMap<'C>) (pendingRequest:PendingUserRequest<'C>) : PendingUserRequestMap<'C> =
+    pendingRequests |> Map.add pendingRequest.Id { pendingRequest with Deleted = true }

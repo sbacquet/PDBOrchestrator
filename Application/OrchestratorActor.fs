@@ -37,6 +37,7 @@ type Command =
 
 type AdminCommand =
 | GetPendingChanges // responds with Result<PendingChanges option,string> = Result<pending changes if any, error>
+| GetPendingWorkingCopyCommands // responds with Command list
 | EnterMaintenanceMode // responds with bool = mode changes
 | EnterNormalMode // responds with bool = mode changed
 | IsMaintenanceMode // responds with bool = is maintenance mode
@@ -154,6 +155,8 @@ let describeCommand = function
 let describeAdminCommand = function
 | GetPendingChanges ->
     "get pending changes"
+| GetPendingWorkingCopyCommands ->
+    "get pending commands relative to working copies"
 | EnterMaintenanceMode ->
     "set maintenance mode"
 | EnterNormalMode ->
@@ -430,13 +433,14 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
         let primaryInstance = primaryInstance state
         let getInstanceName = getInstanceName state
 
+        let getPendingCommands filter =
+            state.PendingRequests 
+            |> Map.toSeq
+            |> Seq.filter (fun (_, request) -> not request.Deleted)
+            |> Seq.map (fun (_, request) -> request.Command)
+            |> Seq.filter filter
         let getPendingChanges () = async {
-            let pendingChangeCommands = 
-                state.PendingRequests 
-                |> Map.toSeq
-                |> Seq.map (fun (_, request) -> request.Command)
-                |> Seq.filter (pendingChangeCommandFilter (fun _ -> true))
-                
+            let pendingChangeCommands = getPendingCommands (pendingChangeCommandFilter (fun _ -> true))
             let! (primaryInstanceState:OracleInstanceActor.StateResult) = primaryInstance <? OracleInstanceActor.GetState
             return
                 primaryInstanceState 
@@ -457,6 +461,21 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | GetPendingChanges ->
                 let! result = getPendingChanges()
                 ctx.Sender() <! result
+                return! loop state
+
+            | GetPendingWorkingCopyCommands ->
+                let sender = ctx.Sender().Retype<Command list>()
+
+                let filter = function
+                | CreateWorkingCopy _
+                | DeleteWorkingCopy _
+                | ExtendWorkingCopy _
+                | CreateWorkingCopyOfEdition _
+                  -> true
+                | _ -> false
+
+                let commands = getPendingCommands filter |> Seq.toList
+                sender <! commands
                 return! loop state
 
             | EnterMaintenanceMode ->

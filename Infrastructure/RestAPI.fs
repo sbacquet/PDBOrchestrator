@@ -29,6 +29,8 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
 
             // Routes for admins
             route "/pending-changes" >=> HttpHandlers.getPendingChanges apiCtx
+            route "/pending-commands/working-copies/count" >=> HttpHandlers.getPendingWorkingCopyCommandsCount apiCtx
+            route "/pending-commands/working-copies" >=> HttpHandlers.getPendingWorkingCopyCommands apiCtx
             route "/mode" >=> HttpHandlers.getMode apiCtx
         ]
         POST >=> choose [
