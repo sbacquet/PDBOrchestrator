@@ -2,13 +2,13 @@
   "name": "intcdb2",
   "server": "fr1psl010716.misys.global.ad",
   "dbaUser": "sys",
-  "dbaPassword": "a4VEpy3TaKb6A3xm4D11lA==",
+  "dbaPassword": "yYq7yyw6vmZBzrqZfCf5DQ==",
   "userForImport": "system",
-  "userForImportPassword": "a4VEpy3TaKb6A3xm4D11lA==",
+  "userForImportPassword": "yYq7yyw6vmZBzrqZfCf5DQ==",
   "userForFileTransfer": "oracle",
-  "userForFileTransferPassword": "/c50/368kW+Sg/2MQ1Srvw==",
-  "serverHostkeySHA256": "XzXMpTwI1A8IMt+KCn6nLeriYSLsdw7uvRm8UZ0ajq6b4rAjQsvUeyL+hr9UFLMgBNi+yXKWJPQ8QYGVG1QCSXZSHKdGyYWBlxrpeiaxvBdSkoR45Wahup6SPe5MDNuvlWbEfcAehRXV18PxCQ6bQgR/WBsaH3Mtp/NHFubd6LY=",
-  "serverHostkeyMD5": "XzXMpTwI1A8IMt+KCn6nLeriYSLsdw7uvRm8UZ0ajq56Tmwd+KwkwElnQtjR0sz0nj7AlfFmaTRFPL910MLceYLebAJXfcNLm/JDtc0Okpy2lWI8dOQqVgQEQWDJzqsYKnI4datv9klSlc9YQDGnx++l+cbSO3n+63d3023E9WM=",
+  "userForFileTransferPassword": "y4O6GW7UeKyKvr7N57sZXQ==",
+  "serverHostkeySHA256": "X0njyPNh0S3Uy7DK7Oop6NuIAH5VYgE2WqUR9oXbRxfzx/r1jh8jmqOwugyR6pDjEgNjL+HAM8jm1f3sSg4jcgWTWz+5jfX/xWDBhJbiL8eBbVCdvI12jFcOzzkle4iOf4CxaOkUBKjUwXrxNjbppYk6zW9k4PvYMkuiCxZLLAY=",
+  "serverHostkeyMD5": "X0njyPNh0S3Uy7DK7Oop6NuIAH5VYgE2WqUR9oXbRxcwdBELEszbRu1pQKYOiCPqUX+aiSuciTPmQp3FYRg74vtxqz1UTJ0NY8gG/M6evH3O6OJL4nR2tsBbLx9tCzZhdStSaRDCAWXmUfsGN22QyGuz6iRGmyjKIYy/tOneenc=",
   "masterPDBManifestsPath": "/u01/app/oracle/oradata/MasterDBs",
   "masterPDBDestPath": "/u01/app/oracle/oradata/MasterDBs",
   "snapshotSourcePDBDestPath": "/u01/app/oracle/oradata/SnapshotSources",
@@ -16,9 +16,10 @@
   "oracleDirectoryForDumps": "DP_DIR",
   "oracleDirectoryPathForDumps": "/u01/app/intcdb_dumps",
   "masterPDBs": [
-    "OFI7210_FLA",
+    "BSG",
+    "GOLDEN",
     "NORTHVIEW"
   ],
   "_version": 1,
-  "_iv": "si82grfl9+JRor1PolJ8mw=="
+  "_iv": "/6OJxpDxz6H9tJIpWlnZ5Q=="
 }

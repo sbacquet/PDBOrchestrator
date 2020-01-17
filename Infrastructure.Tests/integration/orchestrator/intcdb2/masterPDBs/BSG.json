@@ -1,0 +1,25 @@
+{
+  "name": "BSG",
+  "schemas": [
+    {
+      "user": "demo_72_am",
+      "password": "YD0kCK0tus38cnXL01Adjg==",
+      "type": "Invest"
+    },
+    {
+      "user": "demo_72_af",
+      "password": "YD0kCK0tus38cnXL01Adjg==",
+      "type": "SRM"
+    }
+  ],
+  "versions": [
+    {
+      "versionNumber": 4,
+      "createdBy": "sbacquet",
+      "creationDate": "2018-07-11T22:00:00.0000000Z",
+      "comment": "Added mapping between FFDC Azure AD accounts and Value users + upgraded DB"
+    }
+  ],
+  "_version": 1,
+  "_iv": "SfMQ8xKoofZ043wxfCbu5Q=="
+}
