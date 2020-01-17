@@ -49,11 +49,7 @@ let private masterPDBGarbageCollectorBody
             let deletionResults =
                 instance.WorkingCopies
                 |> Map.toList |> List.map snd
-                |> List.choose (fun wc -> 
-                    match wc.Lifetime with 
-                    | Temporary expiry -> if (expiry <= System.DateTime.Now) then Some wc else None 
-                    | _ -> None
-                )
+                |> List.filter isExpired
                 |> List.map (fun wc -> (wc, deletePDB wc.Name |> toErrorMaybe))
             ctx.Sender() <! WorkingCopiesDeleted deletionResults
             
@@ -70,7 +66,7 @@ let private masterPDBGarbageCollectorBody
                 | Error error -> 
                     ctx.Log.Value.Error(error.ToString())
             instance.MasterPDBs |> List.iter collectMasterPDBGarbage
-            return! loop ()
+            return! stop () // short-lived actor
 
         | DeleteWorkingCopy (requestId, workingCopy) ->
             ctx.Log.Value.Info("Deleting working copy {pdb} on instance {instance} requested", workingCopy, instance.Name)
@@ -83,7 +79,7 @@ let private masterPDBGarbageCollectorBody
                     return! sprintf "PDB %s is not a working copy" workingCopy |> exn |> Error
             }
             sender <! (requestId, result)
-            return! loop ()
+            return! stop () // short-lived actor
 
     }
 
@@ -91,7 +87,7 @@ let private masterPDBGarbageCollectorBody
 
 let spawn parameters shortTaskExecutor longTaskExecutor (instance:Domain.OracleInstance.OracleInstance) (actorFactory:IActorRefFactory) =
 
-    (Akkling.Spawn.spawn actorFactory "GarbageCollector"
+    (Akkling.Spawn.spawnAnonymous actorFactory
         <| props (
             masterPDBGarbageCollectorBody 
                 parameters

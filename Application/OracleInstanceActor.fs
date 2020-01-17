@@ -139,7 +139,6 @@ type private Collaborators = {
     OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
     OracleDiskIntensiveTaskExecutor : IActorRef<Application.OracleDiskIntensiveActor.Command>
     MasterPDBActors: Map<string, IActorRef<obj>>
-    GarbageCollector: IActorRef<OracleInstanceGarbageCollector.Command>
 }
 
 // Spawn actor for a new master PDBs
@@ -201,7 +200,6 @@ let private spawnCollaborators parameters oracleAPI (getMasterPDBRepo:OracleInst
     let oracleShortTaskExecutor = ctx |> OracleShortTaskExecutor.spawn parameters oracleAPI
     let oracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn parameters oracleAPI
     let oracleDiskIntensiveTaskExecutor = ctx |> Application.OracleDiskIntensiveActor.spawn parameters oracleAPI
-    let garbageCollector = ctx |> OracleInstanceGarbageCollector.spawn parameters oracleShortTaskExecutor oracleLongTaskExecutor instance
     let collaborators = {
         OracleShortTaskExecutor = oracleShortTaskExecutor
         OracleLongTaskExecutor = oracleLongTaskExecutor
@@ -210,7 +208,6 @@ let private spawnCollaborators parameters oracleAPI (getMasterPDBRepo:OracleInst
             instance.MasterPDBs 
             |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn parameters instance oracleShortTaskExecutor oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo pdb))
             |> Map.ofList
-        GarbageCollector = garbageCollector
     }
     // Monitor death of master PDB actors : if one of them dies, this Oracle instance will be disabled
     collaborators.MasterPDBActors |> Map.iter (fun _ actor -> actor |> monitor ctx |> ignore)
@@ -422,7 +419,8 @@ let private oracleInstanceActorBody
 
             | DeleteWorkingCopy (requestId, wcName) ->
                 let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                state.Collaborators.GarbageCollector <! OracleInstanceGarbageCollector.DeleteWorkingCopy (requestId, wcName)
+                let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
+                garbageCollector <! OracleInstanceGarbageCollector.DeleteWorkingCopy (requestId, wcName)
                 return! loop { state with Requests = newRequests }
 
             | ExtendWorkingCopy name ->
@@ -471,7 +469,8 @@ let private oracleInstanceActorBody
 
             | CollectGarbage ->
                 ctx.Log.Value.Info("Garbage collection of Oracle instance {instance} requested.", instance.Name)
-                state.Collaborators.GarbageCollector <! OracleInstanceGarbageCollector.CollectGarbage
+                let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
+                garbageCollector <! OracleInstanceGarbageCollector.CollectGarbage
                 return! loop state
 
             | GetDumpTransferInfo ->
