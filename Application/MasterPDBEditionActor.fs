@@ -7,7 +7,6 @@ open Application.Oracle
 open Application.Parameters
 open Domain.Common
 open Domain.Common.Exceptional
-open Domain.Common.Validation
 open Domain.OracleInstance
 open Application.Common
 
@@ -32,6 +31,12 @@ let private masterPDBEditionActorBody
     let cloneEditionPDB name : OraclePDBResult =
         oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ClonePDB (None, editionPDBName, instance.WorkingCopyDestPath, name)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot clone PDB %s to %s : timeout exceeded" editionPDBName name |> exn |> Error)
+    let isWorkingCopy (pdb:string) : Exceptional<bool> = result {
+        let! (folder:string option) = 
+            oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
+            |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
+        return folder |> Option.map (fun folder -> folder |> isWorkingCopyFolder instance) |> Option.defaultValue false
+    }
 
     let rec loop () = actor {
 
@@ -43,7 +48,14 @@ let private masterPDBEditionActorBody
             let result = result {
                 let! wcExists = pdbExists workingCopyName
                 let! _ = 
-                    if wcExists then deletePDB workingCopyName // force creation
+                    if wcExists then
+                        result {
+                            let! isWorkingCopy = isWorkingCopy workingCopyName
+                            if isWorkingCopy then
+                                return! deletePDB workingCopyName // force creation
+                            else
+                                return! Error <| (sprintf "PDB %s exists and is not a working copy, hence cannot be overwritten" workingCopyName |> exn)
+                        }
                     else Ok ""
                 return! cloneEditionPDB workingCopyName
             }

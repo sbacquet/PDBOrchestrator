@@ -97,3 +97,5 @@ let pdbService uri = sprintf "%s/%s" uri
 let oracleInstanceUri server port = sprintf "%s%s" server (oracleInstancePortString port)
 
 let pdbServiceFromInstance (instance:OracleInstance) = pdbService (oracleInstanceUri instance.Server instance.Port)
+
+let isWorkingCopyFolder instance (folder:string) = folder.StartsWith(instance.WorkingCopyDestPath)

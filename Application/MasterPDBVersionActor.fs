@@ -40,6 +40,12 @@ let private masterPDBVersionActorBody
     let deletePDB pdb : Exceptional<string> = 
         oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
         |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
+    let isWorkingCopy (pdb:string) : Exceptional<bool> = result {
+        let! (folder:string option) = 
+            oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
+            |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
+        return folder |> Option.map (fun folder -> folder |> isWorkingCopyFolder instance) |> Option.defaultValue false
+    }
 
     let rec loop () = actor {
 
@@ -51,7 +57,14 @@ let private masterPDBVersionActorBody
             let result:OraclePDBResult = result {
                 let! wcExists = pdbExists workingCopyName
                 let! _ = 
-                    if wcExists then deletePDB workingCopyName // force creation
+                    if wcExists then
+                        result {
+                            let! isWorkingCopy = isWorkingCopy workingCopyName
+                            if isWorkingCopy then
+                                return! deletePDB workingCopyName // force creation
+                            else
+                                return! Error <| (sprintf "PDB %s exists and is not a working copy, hence cannot be overwritten" workingCopyName |> exn)
+                        }
                     else Ok ""
                 let sourceManifest = Domain.MasterPDBVersion.manifestFile masterPDBName masterPDBVersion.VersionNumber
                 let destPath = instance.WorkingCopyDestPath

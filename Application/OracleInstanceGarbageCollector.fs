@@ -8,6 +8,7 @@ open Domain.Common.Exceptional
 open Application.Common
 open Domain.MasterPDBWorkingCopy
 open Domain.Common
+open Domain.OracleInstance
 
 type Command =
 | CollectGarbage // responds with CommandToParent.WorkingCopiesDeleted
@@ -21,7 +22,7 @@ let private masterPDBGarbageCollectorBody
     (parameters:Parameters)
     (oracleShortTaskExecutor:IActorRef<Application.OracleShortTaskExecutor.Command>)
     (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 
-    (instance:Domain.OracleInstance.OracleInstance)
+    (instance:OracleInstance)
     (ctx : Actor<Command>) =
 
     let deletePDB pdb : Exceptional<string> = 
@@ -34,7 +35,7 @@ let private masterPDBGarbageCollectorBody
         let! (folder:string option) = 
             oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
             |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
-        return folder |> Option.map (fun folder -> folder.StartsWith instance.WorkingCopyDestPath) |> Option.defaultValue false
+        return folder |> Option.map (fun folder -> folder |> isWorkingCopyFolder instance) |> Option.defaultValue false
     }
     let toErrorMaybe result = match result with | Ok _ -> None | Error error -> Some error
 
@@ -85,7 +86,7 @@ let private masterPDBGarbageCollectorBody
 
     loop ()
 
-let spawn parameters shortTaskExecutor longTaskExecutor (instance:Domain.OracleInstance.OracleInstance) (actorFactory:IActorRefFactory) =
+let spawn parameters shortTaskExecutor longTaskExecutor (instance:OracleInstance) (actorFactory:IActorRefFactory) =
 
     (Akkling.Spawn.spawnAnonymous actorFactory
         <| props (
