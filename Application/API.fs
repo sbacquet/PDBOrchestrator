@@ -37,6 +37,9 @@ let synchronizePrimaryInstanceWith (ctx:APIContext) (instance:string) : Async<Ap
 let getRequestStatus (ctx:APIContext) requestId : Async<WithRequestId<RequestStatus>> =
     ctx.Orchestrator <? GetRequest requestId
 
+let deleteRequest (ctx:APIContext) requestId : unit =
+    ctx.Orchestrator <! DeleteRequest requestId
+
 let createWorkingCopy (ctx:APIContext) (user:string) (instance:string) (masterPDBName:string) versionNumber (wcName:string) snapshot durable force : Async<RequestValidation> =
     ctx.Orchestrator <? CreateWorkingCopy (user.ToLower(), instance.ToLower(), masterPDBName.ToUpper(), versionNumber, wcName.ToUpper(), snapshot, durable, force)
 

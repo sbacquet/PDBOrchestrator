@@ -485,3 +485,9 @@ let switchLock apiCtx (masterPDB:string) = withAdmin (fun _ next ctx -> task {
     | Ok locked -> return! (text <| sprintf "Master PDB edition %s is now %s." masterPDB (if locked then "locked" else "unlocked")) next ctx
     | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot switch lock for master PDB %s : %s." (masterPDB.ToUpper()) error) next ctx
 })
+
+let deleteRequest apiCtx (requestId:System.Guid) next (ctx:HttpContext) = task {
+    API.deleteRequest apiCtx requestId
+    return! text (sprintf "The request %O has been deleted, if any." requestId) next ctx
+}
+

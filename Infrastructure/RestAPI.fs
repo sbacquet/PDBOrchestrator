@@ -53,6 +53,8 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             route "/instances/primary" >=> HttpHandlers.switchPrimaryOracleInstanceWith apiCtx
         ]
         DELETE >=> choose [
+            // Delete request
+            routef "/requests/%O" (HttpHandlers.deleteRequest apiCtx)
             // Rollback edition
             routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.rollbackMasterPDB apiCtx)
             // Delete master PDB version

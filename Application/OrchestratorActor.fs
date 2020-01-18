@@ -33,6 +33,7 @@ type Command =
 | DeleteWorkingCopy of OnInstance<string> // responds with RequestValidation
 | ExtendWorkingCopy of string * string // responds with Result<MasterPDBWorkingCopy, string>
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
+| DeleteRequest of RequestId // no response
 | GetDumpTransferInfo of string // responds with Result<Application.OracleInstanceActor.DumpTransferInfo,string>
 
 type AdminCommand =
@@ -59,7 +60,8 @@ let private pendingChangeCommandFilter mapper = function
 | ExtendWorkingCopy _
 | GetDumpTransferInfo _
 | GetRequest _ 
-  -> false
+| DeleteRequest _
+    -> false
 | CreateMasterPDB (user, _)
 | PrepareMasterPDBForModification (user, _, _)
 | CommitMasterPDB (user, _, _)
@@ -149,6 +151,8 @@ let describeCommand = function
     sprintf "extend lifetime of working copy %s on Oracle instance %s" name instance
 | GetRequest requestId ->
     sprintf "get request from id %O" requestId
+| DeleteRequest requestId ->
+    sprintf "delete request with id %O" requestId
 | GetDumpTransferInfo instance ->
     sprintf "get dump transfer info for Oracle instance \"%s\"" instance
 
@@ -178,25 +182,40 @@ let describeAdminCommand = function
 
 let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) (ctx : Actor<_>) =
 
-    let logRequest id command = ctx.Log.Value.Info("<< Command {0} : {1}", id, describeCommand command)
-    let logRequestResponse id command completedRequest = 
-        match completedRequest.Status with
-        | CompletedOk _ -> 
-            ctx.Log.Value.Info(
-                ">> Command {0} completed in {1} s. ({2})", 
+    let registerUserRequest = 
+        let logRequest id command = ctx.Log.Value.Info("<< Command {0} : {1}", id, describeCommand command)
+        registerUserRequest logRequest
+
+    let requestDone state = 
+        let logRequestResponse id command completedRequest = 
+            match completedRequest.Status with
+            | CompletedOk _ -> 
+                ctx.Log.Value.Info(
+                    ">> Command {0} completed in {1} s. ({2})", 
+                    id, 
+                    completedRequest.Duration.TotalSeconds, 
+                    describeCommand command)
+            | CompletedWithError _ -> 
+                ctx.Log.Value.Info(
+                    ">> Command {0} completed with error in {1} s. ({2})", 
+                    id, 
+                    completedRequest.Duration.TotalSeconds, 
+                    describeCommand command)
+        completeUserRequest logRequestResponse state.PendingRequests state.CompletedRequests
+
+    let deleteRequest state =
+        let logRequestDeleted id command = 
+            ctx.Log.Value.Warning(
+                ">> Command {0} deleted. ({1})", 
                 id, 
-                completedRequest.Duration.TotalSeconds, 
                 describeCommand command)
-        | CompletedWithError _ -> 
-            ctx.Log.Value.Info(
-                ">> Command {0} completed with error in {1} s. ({2})", 
-                id, 
-                completedRequest.Duration.TotalSeconds, 
-                describeCommand command)
-    let requestDone state = completeUserRequest logRequestResponse state.PendingRequests state.CompletedRequests
+        deletePendingRequest logRequestDeleted state.PendingRequests state.CompletedRequests
+
     let instanceActor state instanceName : IActorRef<OracleInstanceActor.Command> = 
         retype state.Collaborators.OracleInstanceActors.[instanceName]
+
     let primaryInstance state = instanceActor state state.Orchestrator.PrimaryInstance
+
     let getInstanceName state instanceName = if instanceName = "primary" then state.Orchestrator.PrimaryInstance else instanceName
 
     let rec loop state = 
@@ -206,8 +225,11 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 return! loop { state with Repository = state.Repository.Put state.Orchestrator; PreviousOrchestrator = state.Orchestrator }
             else
 
-            if state.PendingRequests.Count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", state.PendingRequests.Count)
-            if state.CompletedRequests.Count > 0 then ctx.Log.Value.Debug("Number of completed requests : {0}", state.CompletedRequests.Count)
+            if ctx.Log.Value.IsDebugEnabled then
+                let count = state.PendingRequests |> alivePendingRequests |> Seq.length in 
+                    if count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", count)
+                let count = state.CompletedRequests.Count in 
+                    if count > 0 then ctx.Log.Value.Debug("Number of completed requests : {0}", count)
 
             let! (msg:obj) = ctx.Receive()
 
@@ -314,28 +336,28 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 
             | CreateMasterPDB (user, parameters) ->
                 let requestId = newRequestId()
-                let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
+                let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.CreateMasterPDB (requestId, parameters)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
 
             | PrepareMasterPDBForModification (user, pdb, version) ->
                 let requestId = newRequestId()
-                let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
+                let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.PrepareMasterPDBForModification (requestId, pdb, version, user)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
 
             | CommitMasterPDB (user, pdb, comment) ->
                 let requestId = newRequestId()
-                let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
+                let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.CommitMasterPDB (requestId, pdb, user, comment)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
 
             | RollbackMasterPDB (user, pdb) ->
                 let requestId = newRequestId()
-                let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
+                let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
                 retype primaryInstance <! Application.OracleInstanceActor.RollbackMasterPDB (requestId, user, pdb)
                 sender <! Valid requestId
                 return! loop { state with PendingRequests = newPendingRequests }
@@ -346,7 +368,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 | Some instanceName ->
                     let instance = instanceActor instanceName
                     let requestId = newRequestId()
-                    let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
+                    let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
                     instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
@@ -360,7 +382,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 | Some instanceName ->
                     let instance = instanceActor instanceName
                     let requestId = newRequestId()
-                    let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
+                    let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
                     instance <! Application.OracleInstanceActor.DeleteWorkingCopy (requestId, wcName)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
@@ -374,7 +396,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 | Some instanceName ->
                     let instance = instanceActor instanceName
                     let requestId = newRequestId()
-                    let newPendingRequests = state.PendingRequests |> registerUserRequest logRequest requestId command user
+                    let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
                     instance <! Application.OracleInstanceActor.CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
@@ -412,6 +434,10 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         ctx.Log.Value.Debug("Request {requestId} completed => removed from the list", requestId)
                         return! loop { state with CompletedRequests = state.CompletedRequests |> Map.remove requestId }
 
+            | DeleteRequest requestId ->
+                let (newPendingRequests, newCompletedRequests) = requestId |> deleteRequest state
+                return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
+
             | GetDumpTransferInfo instanceName ->
                 let sender = ctx.Sender().Retype<Result<OracleInstanceActor.DumpTransferInfo, string>>()
                 let instanceName = getInstanceName instanceName
@@ -435,9 +461,8 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 
         let getPendingCommands filter =
             state.PendingRequests 
-            |> Map.toSeq
-            |> Seq.filter (fun (_, request) -> not request.Deleted)
-            |> Seq.map (fun (_, request) -> request.Command)
+            |> alivePendingRequests
+            |> Seq.map (fun request -> request.Command)
             |> Seq.filter filter
         let getPendingChanges () = async {
             let pendingChangeCommands = getPendingCommands (pendingChangeCommandFilter (fun _ -> true))
