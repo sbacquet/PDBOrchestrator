@@ -59,7 +59,7 @@ let private masterPDBGarbageCollectorBody
                 match sourceVersionPDBsMaybe with
                 | Ok sourceVersionPDBs -> 
                     if not (sourceVersionPDBs |> List.isEmpty) then
-                        let regex = System.Text.RegularExpressions.Regex((sprintf "^%s_V([\\d]+)_.+$" masterPDBName))
+                        let regex = System.Text.RegularExpressions.Regex((sprintf "^%s_V(\\d{3})_.+$" masterPDBName))
                         let parseResults = sourceVersionPDBs |> List.map (fun sourceVersionPDB -> System.Int32.TryParse(regex.Replace(sourceVersionPDB, "$1")))
                         let versions = parseResults |> List.filter fst |> List.map snd
                         if not (versions |> List.isEmpty) then

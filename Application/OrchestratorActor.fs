@@ -276,6 +276,17 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
         let instanceActor = instanceActor state
         let primaryInstance = primaryInstance state
         let getInstanceName = getInstanceName state
+        let validateWorkingCopyName (name:string) : Validation<string, string> =
+            let name = name.ToUpper()
+            let regex = [
+                System.Text.RegularExpressions.Regex("^.+_EDITION$")
+                System.Text.RegularExpressions.Regex("^.+_V\\d{3}_.+$")
+            ]
+            if regex |> List.exists (fun regex -> regex.IsMatch(name)) then
+                Invalid [ sprintf "%s is not a valid working copy PDB name : \"*_EDITION\" and \"*_Vnnn_*\" are reserved" name ]
+            else
+                Valid name
+
         actor {
             // Check if command is compatible with maintenance mode
             if state.InMaintenanceMode && pendingChangeCommandFilter (not << pendingChangeCommandAcceptable) command then
@@ -363,17 +374,23 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 return! loop { state with PendingRequests = newPendingRequests }
 
             | CreateWorkingCopy (user, instanceName, masterPDBName, versionNumber, wcName, snapshot, durable, force) ->
-                let instanceName = getInstanceName instanceName
-                match state.Orchestrator |> containsOracleInstance instanceName with
-                | Some instanceName ->
-                    let instance = instanceActor instanceName
-                    let requestId = newRequestId()
-                    let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
-                    instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force)
-                    sender <! Valid requestId
-                    return! loop { state with PendingRequests = newPendingRequests }
-                | None ->
-                    sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
+                let validatedName = validateWorkingCopyName wcName
+                match validatedName with
+                | Valid wcName ->
+                    let instanceName = getInstanceName instanceName
+                    match state.Orchestrator |> containsOracleInstance instanceName with
+                    | Some instanceName ->
+                        let instance = instanceActor instanceName
+                        let requestId = newRequestId()
+                        let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
+                        instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force)
+                        sender <! Valid requestId
+                        return! loop { state with PendingRequests = newPendingRequests }
+                    | None ->
+                        sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
+                        return! loop state
+                | Invalid errors ->
+                    sender <! RequestValidation.Invalid errors
                     return! loop state
 
             | DeleteWorkingCopy (user, instanceName, wcName) ->
@@ -391,17 +408,23 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     return! loop state
 
             | CreateWorkingCopyOfEdition (user, masterPDBName, wcName, durable, force) ->
-                let instanceName = getInstanceName "primary"
-                match state.Orchestrator |> containsOracleInstance instanceName with
-                | Some instanceName ->
-                    let instance = instanceActor instanceName
-                    let requestId = newRequestId()
-                    let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
-                    instance <! Application.OracleInstanceActor.CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force)
-                    sender <! Valid requestId
-                    return! loop { state with PendingRequests = newPendingRequests }
-                | None ->
-                    sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
+                let validatedName = validateWorkingCopyName wcName
+                match validatedName with
+                | Valid wcName ->
+                    let instanceName = getInstanceName "primary"
+                    match state.Orchestrator |> containsOracleInstance instanceName with
+                    | Some instanceName ->
+                        let instance = instanceActor instanceName
+                        let requestId = newRequestId()
+                        let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
+                        instance <! Application.OracleInstanceActor.CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force)
+                        sender <! Valid requestId
+                        return! loop { state with PendingRequests = newPendingRequests }
+                    | None ->
+                        sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
+                        return! loop state
+                | Invalid errors ->
+                    sender <! RequestValidation.Invalid errors
                     return! loop state
 
             | ExtendWorkingCopy (instanceName, name) ->
