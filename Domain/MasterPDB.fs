@@ -105,8 +105,8 @@ let deleteVersion versionNumber masterPDB =
             Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name)
 
 let lockForEdition user masterPDB =
-    if masterPDB.EditionDisabled then failwith (sprintf "master PDB %s cannot be edited !" masterPDB.Name)
-    if masterPDB.EditionState.IsSome then failwith (sprintf "master PDB %s should not already be edited !" masterPDB.Name)
+    if masterPDB.EditionDisabled then failwith (sprintf "master PDB %s cannot be edited !" masterPDB.Name) // TODO: no exception
+    if masterPDB.EditionState.IsSome then failwith (sprintf "master PDB %s should not already be edited !" masterPDB.Name) // TODO: no exception
     { masterPDB with EditionState = Some (consEditionInfo user System.DateTime.Now) }
 
 let unlock masterPDB =

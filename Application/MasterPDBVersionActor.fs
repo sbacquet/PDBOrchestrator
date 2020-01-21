@@ -11,9 +11,11 @@ open Domain.Common.Exceptional
 open Domain.OracleInstance
 open Application.Common
 open Application
+open Domain.MasterPDBWorkingCopy
 
 type Command =
-| CreateWorkingCopy of WithRequestId<string, bool> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopy of WithRequestId<string, bool, bool> // responds with OraclePDBResultWithReqId
+| DeleteWorkingCopy of WithRequestId<MasterPDBWorkingCopy>
 | CollectGarbage // no response
 | HaraKiri // no response
 | Delete
@@ -40,34 +42,38 @@ let private masterPDBVersionActorBody
     let deletePDB pdb : Exceptional<string> = 
         oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
         |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
-    let isWorkingCopy (pdb:string) : Exceptional<bool> = result {
+    let isTempWorkingCopy (pdb:string) : Exceptional<bool> = result {
         let! (folder:string option) = 
             oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
             |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
-        return folder |> Option.map (fun folder -> folder |> isWorkingCopyFolder instance) |> Option.defaultValue false
+        return folder |> Option.map (fun folder -> folder |> isTemporaryWorkingCopyFolder instance) |> Option.defaultValue false
     }
 
-    let rec loop () = actor {
+    let rec loop () =
+        
+        actor {
 
         let! command = ctx.Receive()
         let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
 
         match command with
-        | CreateWorkingCopy (requestId, workingCopyName, snapshot) -> 
+        | CreateWorkingCopy (requestId, workingCopyName, snapshot, durable) -> 
             let result:OraclePDBResult = result {
                 let! wcExists = pdbExists workingCopyName
                 let! _ = 
                     if wcExists then
                         result {
-                            let! isWorkingCopy = isWorkingCopy workingCopyName
-                            if isWorkingCopy then
+                            let! canDelete = 
+                                if durable then Ok true
+                                else isTempWorkingCopy workingCopyName
+                            if canDelete then
                                 return! deletePDB workingCopyName // force creation
                             else
-                                return! Error <| (sprintf "PDB %s exists and is not a working copy, hence cannot be overwritten" workingCopyName |> exn)
+                                return! Error <| (sprintf "PDB %s exists and is not a temporary working copy, hence cannot be overwritten" workingCopyName |> exn)
                         }
                     else Ok ""
                 let sourceManifest = Domain.MasterPDBVersion.manifestFile masterPDBName masterPDBVersion.VersionNumber
-                let destPath = instance.WorkingCopyDestPath
+                let destPath = instance |> getWorkingCopyFolder durable
                 if (instance.SnapshotCapable && snapshot) then
                     let! snapshotSourceExists = pdbExists snapshotSourceName
                     let! _ = 
@@ -87,6 +93,13 @@ let private masterPDBVersionActorBody
                         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot create PDB clone %s : timeout exceeded" workingCopyName |> exn |> Error)
                     return! result
             }
+            sender <! (requestId, result)
+            return! loop ()
+
+        | DeleteWorkingCopy (requestId, workingCopy) ->
+            ctx.Log.Value.Info("Deleting working copy {pdb} on instance {instance} requested", workingCopy.Name, instance.Name)
+            let sender = ctx.Sender().Retype<Application.Oracle.OraclePDBResultWithReqId>()
+            let result = deletePDB workingCopy.Name
             sender <! (requestId, result)
             return! loop ()
 
@@ -116,7 +129,8 @@ let private masterPDBVersionActorBody
             if instance.SnapshotCapable then deletePDB snapshotSourceName |> ignore else ()
             retype (ctx.Parent()) <! KillVersion masterPDBVersion.VersionNumber
             return! loop ()
-    }
+        
+        }
 
     loop ()
 

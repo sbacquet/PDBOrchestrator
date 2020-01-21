@@ -273,8 +273,12 @@ let createWorkingCopyOfEdition apiCtx (masterPDB:string, name:string) =
 
 let deleteWorkingCopy apiCtx (instance:string, name:string) =
     withUser (fun user next ctx -> task {
-        let! requestValidation = API.deleteWorkingCopy apiCtx user.Name instance name
-        return! returnRequest apiCtx.Endpoint requestValidation next ctx
+        let parsedOk, durable = ctx.TryGetQueryStringValue "durable" |> Option.defaultValue bool.FalseString |> bool.TryParse
+        if not parsedOk then 
+            return! RequestErrors.badRequest (text "When provided, the \"durable\" query parameter must be \"true\" or \"false\".") next ctx
+        else
+            let! requestValidation = API.deleteWorkingCopy apiCtx user.Name instance name durable
+            return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
 let extendWorkingCopy apiCtx (instance:string, name:string) next (ctx:HttpContext) = task {

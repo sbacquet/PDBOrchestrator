@@ -30,7 +30,7 @@ type Command =
 | RollbackMasterPDB of WithUser<string> // responds with RequestValidation
 | CreateWorkingCopy of OnInstance<string, int, string, bool, bool, bool> // responds with RequestValidation
 | CreateWorkingCopyOfEdition of WithUser<string, string, bool, bool> // responds with RequestValidation
-| DeleteWorkingCopy of OnInstance<string> // responds with RequestValidation
+| DeleteWorkingCopy of OnInstance<string, bool> // responds with RequestValidation
 | ExtendWorkingCopy of string * string // responds with Result<MasterPDBWorkingCopy, string>
 | GetRequest of RequestId // responds with WithRequestId<RequestStatus>
 | DeleteRequest of RequestId // no response
@@ -50,24 +50,30 @@ type AdminCommand =
 | SwitchLock of string // responds with Result<bool,string>
 
 let private pendingChangeCommandFilter mapper = function
+// Commands that do not impact Oracle instances and master PDBs
 | GetState
 | GetInstanceState _
 | GetInstanceBasicState _
 | GetMasterPDBState _
 | GetMasterPDBEditionInfo _
-| CreateWorkingCopy _
-| DeleteWorkingCopy _
 | ExtendWorkingCopy _
 | GetDumpTransferInfo _
 | GetRequest _ 
 | DeleteRequest _
     -> false
+// Commands that impact Oracle instances and master PDBs
 | CreateMasterPDB (user, _)
 | PrepareMasterPDBForModification (user, _, _)
 | CommitMasterPDB (user, _, _)
 | RollbackMasterPDB (user, _)
-| CreateWorkingCopyOfEdition (user, _, _, _, _) 
   -> mapper user
+// Requests for durable copies are considered as pending changes,
+// so that there is no risk they are lost when switching servers (server is then in maintenance mode)
+// Only temporary copies can be created when in maintenance mode, so that continuous integration is not blocked.
+| CreateWorkingCopy (user, _, _, _, _, _, durable, _)
+| CreateWorkingCopyOfEdition (user, _, _, durable, _) 
+| DeleteWorkingCopy (user, _, _, durable)
+  -> durable && mapper user
 
 type PendingChanges = {
     Commands : Command list
@@ -143,8 +149,9 @@ let describeCommand = function
     sprintf "roll back modifications done in \"%s\"" pdb
 | CreateWorkingCopy (user, instance, pdb, version, name, snapshot, durable, force) ->
     sprintf "create a %s working copy (%s) named \"%s\" of master PDB \"%s\" version %d on Oracle instance \"%s\"" (if durable then "durable" else "temporary") (if snapshot then "snapshot" else "clone") name pdb version instance
-| DeleteWorkingCopy (user, instance, name) ->
-    sprintf "delete a working copy named \"%s\" on Oracle instance \"%s\"" name instance
+| DeleteWorkingCopy (user, instance, name, durable) ->
+    let durability = if durable then "durable" else "temporary"
+    sprintf "delete a %s working copy named \"%s\" on Oracle instance \"%s\"" durability name instance
 | CreateWorkingCopyOfEdition (user, masterPDB, wcName, durable, force) ->
     sprintf "create a %s working copy (clone) named \"%s\" of master PDB \"%s\" edition" (if durable then "durable" else "temporary") wcName masterPDB
 | ExtendWorkingCopy (instance, name) ->
@@ -219,54 +226,50 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
     let getInstanceName state instanceName = if instanceName = "primary" then state.Orchestrator.PrimaryInstance else instanceName
 
     let rec loop state = 
-        actor {
-            if state.PreviousOrchestrator <> state.Orchestrator then
-                ctx.Log.Value.Debug("Persisted modified orchestrator")
-                return! loop { state with Repository = state.Repository.Put state.Orchestrator; PreviousOrchestrator = state.Orchestrator }
-            else
 
-            if ctx.Log.Value.IsDebugEnabled then
-                let count = state.PendingRequests |> alivePendingRequests |> Seq.length in 
-                    if count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", count)
-                let count = state.CompletedRequests.Count in 
-                    if count > 0 then ctx.Log.Value.Debug("Number of completed requests : {0}", count)
+        if ctx.Log.Value.IsDebugEnabled then
+            let count = state.PendingRequests |> alivePendingRequests |> Seq.length in 
+                if count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", count)
+            let count = state.CompletedRequests.Count in 
+                if count > 0 then ctx.Log.Value.Debug("Number of completed requests : {0}", count)
+
+        if state.PreviousOrchestrator <> state.Orchestrator then
+            ctx.Log.Value.Debug("Persisted modified orchestrator")
+            loop { state with Repository = state.Repository.Put state.Orchestrator; PreviousOrchestrator = state.Orchestrator }
+
+        else actor {
 
             let! (msg:obj) = ctx.Receive()
 
-            try
-                match msg with
-                | :? Command as command ->
-                    return! command |> handleCommand state
+            match msg with
+            | :? Command as command ->
+                return! command |> handleCommand state
 
-                | :? AdminCommand as command ->
-                    return! command |> handleAdminCommand state
+            | :? AdminCommand as command ->
+                return! command |> handleAdminCommand state
 
-                | :? WithRequestId<MasterPDBCreationResult> as response ->
-                    return! response |> handleResponseToCreateMasterPDB state
+            | :? WithRequestId<MasterPDBCreationResult> as response ->
+                return! response |> handleResponseToCreateMasterPDB state
 
-                | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as response ->
-                    return! response |> handleResponseToPrepareMasterPDBForModification state
+            | :? WithRequestId<MasterPDBActor.PrepareForModificationResult> as response ->
+                return! response |> handleResponseToPrepareMasterPDBForModification state
 
-                | :? WithRequestId<MasterPDBActor.EditionCommitted> as response ->
-                    return! response |> handleResponseToMasterPDBEditionCommit state
+            | :? WithRequestId<MasterPDBActor.EditionCommitted> as response ->
+                return! response |> handleResponseToMasterPDBEditionCommit state
 
-                | :? WithRequestId<MasterPDBActor.EditionRolledBack> as response ->
-                    return! response |> handleResponseToMasterPDBEditionRollback state
+            | :? WithRequestId<MasterPDBActor.EditionRolledBack> as response ->
+                return! response |> handleResponseToMasterPDBEditionRollback state
 
-                | :? WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> as response ->
-                    return! response |> handleResponseToCreateWorkingCopy state
+            | :? WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> as response ->
+                return! response |> handleResponseToCreateWorkingCopy state
 
-                | :? Application.Oracle.OraclePDBResultWithReqId as response ->
-                    return! response |> handleResponseToDeleteWorkingCopy state
+            | :? Application.Oracle.OraclePDBResultWithReqId as response ->
+                return! response |> handleResponseToDeleteWorkingCopy state
 
-                | Terminated (child, _, _) -> // Message sent when an Oracle instance actor died (could not initialize)
-                    return! child |> terminatedOracleInstanceActor state
+            | Terminated (child, _, _) -> // Message sent when an Oracle instance actor died (could not initialize)
+                return! child |> terminatedOracleInstanceActor state
                 
-                | _ -> 
-                    return! loop state
-
-            with ex -> 
-                ctx.Log.Value.Error("Unexpected error : {0}", ex)
+            | _ -> 
                 return! loop state
         }
 
@@ -393,14 +396,14 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     sender <! RequestValidation.Invalid errors
                     return! loop state
 
-            | DeleteWorkingCopy (user, instanceName, wcName) ->
+            | DeleteWorkingCopy (user, instanceName, wcName, durable) ->
                 let instanceName = getInstanceName instanceName
                 match state.Orchestrator |> containsOracleInstance instanceName with
                 | Some instanceName ->
                     let instance = instanceActor instanceName
                     let requestId = newRequestId()
                     let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
-                    instance <! Application.OracleInstanceActor.DeleteWorkingCopy (requestId, wcName)
+                    instance <! Application.OracleInstanceActor.DeleteWorkingCopy (requestId, wcName, durable)
                     sender <! Valid requestId
                     return! loop { state with PendingRequests = newPendingRequests }
                 | None ->

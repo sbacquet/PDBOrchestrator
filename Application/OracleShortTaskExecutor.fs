@@ -12,7 +12,9 @@ type Command =
 
 let private oracleShortTaskExecutorBody (parameters:Parameters) (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
-    let rec loop () = actor {
+    let rec loop () =
+
+        actor {
 
         let! n = ctx.Receive()
 
@@ -28,7 +30,9 @@ let private oracleShortTaskExecutorBody (parameters:Parameters) (oracleAPI : IOr
         | GetPDBNamesLike like ->
             let! names = oracleAPI.GetPDBNamesLike like
             ctx.Sender() <! names
-    }
+        
+        }
+    
     loop ()
 
 let [<Literal>]cOracleShortTaskExecutorName = "OracleShortTaskExecutor"

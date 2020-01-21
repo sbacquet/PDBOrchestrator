@@ -83,6 +83,11 @@ let (loggerFactory : ILoggerFactory) = new Microsoft.Extensions.Logging.Abstract
 let run cont = runWithinElseTimeoutException parameters.ShortTimeout cont
 let runQuick cont = runWithinElseTimeoutException quickTimeout cont
 
+let [<Literal>]cManifestsPath = "/manifests"
+let [<Literal>]cMasterDataPath = "/master-data"
+let [<Literal>]cWorkingCopiesPath = "/working-copies"
+let [<Literal>]cSnapshotSourcesPath = "/snapshot-sources"
+
 let instance1 = 
     consOracleInstance
         [ "test1"; "test2" ]
@@ -91,10 +96,10 @@ let instance1 =
         "xxx" "xxx"
         "xxx" ""
         "xxx" "" "" ""
-        ""
-        ""
-        ""
-        ""
+        cManifestsPath
+        cMasterDataPath
+        cWorkingCopiesPath
+        cSnapshotSourcesPath
         "" ""
         true
 
@@ -106,17 +111,20 @@ let instance2 =
         "xxx" "xxx"
         "xxx" ""
         "xxx" "" "" ""
-        ""
-        ""
-        ""
-        ""
+        cManifestsPath
+        cMasterDataPath
+        cWorkingCopiesPath
+        cSnapshotSourcesPath
         "" ""
         false
 
 type FakeOracleAPI(existingPDBs : Set<string>) = 
     let mutable _existingPDBs = existingPDBs |> Set.map (fun pdb -> pdb.ToUpper())
+    let mutable _pdbFolderMap : Map<string, string> = Map.empty
     member __.Logger = loggerFactory.CreateLogger("Fake Oracle API")
     member val ExistingPDBs = _existingPDBs with get, set
+    member this.AddPDBFolder (pdb:string) folder = _pdbFolderMap <- _pdbFolderMap |> Map.add (pdb.ToUpper()) folder
+    member this.RemovePDBFolder (pdb:string) = _pdbFolderMap <- _pdbFolderMap |> Map.remove (pdb.ToUpper())
     interface IOracleAPI with
         member this.NewPDBFromDump _ name _ _ _ = async {
             this.Logger.LogDebug("Creating new PDB {PDB}...", name)
@@ -135,25 +143,29 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
             else
                 this.Logger.LogDebug("Deleting PDB {PDB}...", name)
                 this.ExistingPDBs <- this.ExistingPDBs |> Set.remove (name.ToUpper())
+                this.RemovePDBFolder name
                 return Ok name 
         }
         member this.ExportPDB _ name = async { 
             this.Logger.LogDebug("Exporting PDB {PDB}...", name)
             return Ok name 
         }
-        member this.ImportPDB _ _ name = async { 
+        member this.ImportPDB _ folder name = async { 
             this.Logger.LogDebug("Importing PDB {PDB}...", name)
             this.ExistingPDBs <- this.ExistingPDBs.Add (name.ToUpper())
+            this.AddPDBFolder name folder
             return Ok name 
         }
-        member this.SnapshotPDB sourcePDB _ name = async { 
+        member this.SnapshotPDB sourcePDB folder name = async { 
             this.Logger.LogDebug("Snapshoting PDB {sourcePDB} to {snapshotCopy}...", sourcePDB, name)
             this.ExistingPDBs <- this.ExistingPDBs.Add (name.ToUpper())
+            this.AddPDBFolder name folder
             return Ok name 
         }
-        member this.ClonePDB sourcePDB _ name = async { 
+        member this.ClonePDB sourcePDB folder name = async { 
             this.Logger.LogDebug("Cloning PDB {sourcePDB} to {destPDB}...", sourcePDB, name)
             this.ExistingPDBs <- this.ExistingPDBs.Add (name.ToUpper())
+            this.AddPDBFolder name folder
             return Ok name 
         }
         member this.PDBHasSnapshots _ = async { 
@@ -166,7 +178,9 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
             return Ok []
         }
         member this.GetPDBNamesLike (like:string) = raise (System.NotImplementedException())
-        member this.GetPDBFilesFolder name = async { return Ok (Some "fake") }
+        member this.GetPDBFilesFolder name = async { 
+            return _pdbFolderMap |> Map.tryFind (name.ToUpper()) |> Ok
+        }
  
 type FakeOracleInstanceRepo(instance) =
     interface IOracleInstanceRepository with
@@ -453,7 +467,7 @@ let ``MasterPDB creates a clone working copy`` () = test <| fun tck ->
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
     let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
-    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "WORKINGCOPY", false) |> run
+    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "WORKINGCOPY", false, false) |> run
     result |> Result.mapError raise |> ignore
 
 [<Fact>]
@@ -464,7 +478,7 @@ let ``MasterPDB creates a snapshot working copy`` () = test <| fun tck ->
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
     let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
     
-    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "WORKINGCOPY", true) |> run
+    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "WORKINGCOPY", true, false) |> run
     result |> Result.mapError raise |> ignore
 
 [<Fact>]
@@ -593,12 +607,18 @@ let ``API overwrites an existing working copy`` () = test <| fun tck ->
     Assert.NotEqual(firstWC.Value, firstWC'.Value)
 
 [<Fact>]
-let ``API fails to overwrite an existing working copy`` () = test <| fun tck ->
+let ``API fails to overwrite an existing temporary working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
     let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true false false |> runQuick
     request |> throwIfRequestNotCompletedOk ctx |> ignore
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true true false |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true true true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
 
     let request = API.createWorkingCopy ctx "me" "server1" "test1" 2 "workingcopy" true false true |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx |> ignore
@@ -607,6 +627,32 @@ let ``API fails to overwrite an existing working copy`` () = test <| fun tck ->
     request |> throwIfRequestNotCompletedWithError ctx |> ignore
 
     let request = API.createWorkingCopy ctx "someoneElse" "server1" "test1" 1 "workingcopy" true false true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+
+    let request = API.createWorkingCopyOfEdition ctx "me" "test1" "workingcopy" true true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+
+[<Fact>]
+let ``API fails to overwrite an existing durable working copy`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true true false |> runQuick
+    request |> throwIfRequestNotCompletedOk ctx |> ignore
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true false false |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "workingcopy" true false true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 2 "workingcopy" true true true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test2" 1 "workingcopy" true true true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+
+    let request = API.createWorkingCopy ctx "someoneElse" "server1" "test1" 1 "workingcopy" true true true |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx |> ignore
 
     let request = API.createWorkingCopyOfEdition ctx "me" "test1" "workingcopy" true true |> runQuick
@@ -721,7 +767,46 @@ let ``API gets pending changes`` () = test <| fun tck ->
     | Error error -> failwith error
 
 [<Fact>]
-let ``API deletes a working copy`` () = test <| fun tck ->
+let ``API can delete an existing temp working copy`` () = test <| fun tck ->
+    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "TEST1WC", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" "TEST1WC" ] |> Map.ofList }) :> IOracleInstanceRepository
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC" && wc.CreatedBy = "me") |> Option.isSome)
+    | Error error -> failwith error 
+
+    let request = API.deleteWorkingCopy ctx "me" "server1" "test1wc" false |> runQuick
+    let data = request |> throwIfRequestNotCompletedOk ctx
+    Assert.True(data |> List.contains (PDBName "TEST1WC"))
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC") |> Option.isNone)
+    | Error error -> failwith error 
+
+[<Fact>]
+let ``API cannot delete a working copy of different durability than requested`` () = test <| fun tck ->
+    let getInstanceRepo _ = 
+        FakeOracleInstanceRepo (
+            { instance1 with 
+                WorkingCopies = [ 
+                    "TEST1WC", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" "TEST1WC" 
+                    "TEST1WC_durable", newDurableWorkingCopy "me" (SpecificVersion 1) "TEST1" "TEST1WC_durable"
+                ] |> Map.ofList }
+        ) :> IOracleInstanceRepository
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc"; "TEST1WC_durable" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.deleteWorkingCopy ctx "me" "server1" "TEST1WC_durable" false |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx
+
+    let request = API.deleteWorkingCopy ctx "me" "server1" "TEST1WC" true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx
+
+[<Fact>]
+let ``API can delete an existing durable working copy`` () = test <| fun tck ->
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "TEST1WC", newDurableWorkingCopy "me" (SpecificVersion 1) "TEST1" "TEST1WC" ] |> Map.ofList }) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
@@ -731,13 +816,110 @@ let ``API deletes a working copy`` () = test <| fun tck ->
     | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC" && wc.CreatedBy = "me") |> Option.isSome)
     | Error error -> failwith error 
 
-    let request = API.deleteWorkingCopy ctx "me" "server1" "test1wc" |> runQuick
+    let request = API.deleteWorkingCopy ctx "me" "server1" "test1wc" true |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
     Assert.True(data |> List.contains (PDBName "TEST1WC"))
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
     | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC") |> Option.isNone)
+    | Error error -> failwith error 
+
+[<Fact>]
+let ``API can delete a temp working copy even if not registered`` () = test <| fun tck ->
+    let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
+    oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder false)
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.deleteWorkingCopy ctx "me" "server1" "test1wc" false |> runQuick
+    let data = request |> throwIfRequestNotCompletedOk ctx
+    Assert.True(data |> List.contains (PDBName "TEST1WC"))
+
+[<Fact>]
+let ``API cannot delete a durable working copy if not registered`` () = test <| fun tck ->
+    let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
+    oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder true)
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let request = API.deleteWorkingCopy ctx "me" "server1" "test1wc" true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx
+
+[<Fact>]
+let ``API can overwrite a temp working copy that exists but is not registered`` () = test <| fun tck ->
+    let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
+    oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder false)
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC" && wc.CreatedBy = "me") |> Option.isNone)
+    | Error error -> failwith error 
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "TEST1WC" true false false |> runQuick
+    let data = request |> throwIfRequestNotCompletedOk ctx
+    Assert.True(data |> List.contains (PDBName "TEST1WC"))
+
+    // Test also with force
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "TEST1WC" true false true |> runQuick
+    let data = request |> throwIfRequestNotCompletedOk ctx
+    Assert.True(data |> List.contains (PDBName "TEST1WC"))
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC") |> Option.isSome)
+    | Error error -> failwith error 
+
+[<Fact>]
+let ``API cannot create a temp working copy if durable copy exists with same name and is not registered`` () = test <| fun tck ->
+    let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
+    oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder true)
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC" && wc.CreatedBy = "me") |> Option.isNone)
+    | Error error -> failwith error 
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "TEST1WC" true false false |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx
+
+    // Not possible even if forcing
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "TEST1WC" true false true |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC" && wc.CreatedBy = "me") |> Option.isNone)
+    | Error error -> failwith error 
+
+[<Fact>]
+let ``API can create a durable working copy if temp copy exists with same name and is not registered`` () = test <| fun tck ->
+    let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
+    oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder false)
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC" && wc.CreatedBy = "me") |> Option.isNone)
+    | Error error -> failwith error 
+
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "TEST1WC" true true false |> runQuick
+    let data = request |> throwIfRequestNotCompletedOk ctx
+    Assert.True(data |> List.contains (PDBName "TEST1WC"))
+
+    // Test also with force
+    let request = API.createWorkingCopy ctx "me" "server1" "test1" 1 "TEST1WC" true true true |> runQuick
+    let data = request |> throwIfRequestNotCompletedOk ctx
+    Assert.True(data |> List.contains (PDBName "TEST1WC"))
+
+    let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
+    match instanceState with
+    | Ok instance -> Assert.True(instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC" && wc.CreatedBy = "me") |> Option.isSome)
     | Error error -> failwith error 
 
 [<Fact>]
@@ -787,5 +969,5 @@ let ``API fails to delete a working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
-    let request = API.deleteWorkingCopy ctx "me" "server1" "doesnotexist" |> runQuick
+    let request = API.deleteWorkingCopy ctx "me" "server1" "doesnotexist" false |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx

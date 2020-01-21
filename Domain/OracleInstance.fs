@@ -99,3 +99,15 @@ let oracleInstanceUri server port = sprintf "%s%s" server (oracleInstancePortStr
 let pdbServiceFromInstance (instance:OracleInstance) = pdbService (oracleInstanceUri instance.Server instance.Port)
 
 let isWorkingCopyFolder instance (folder:string) = folder.StartsWith(instance.WorkingCopyDestPath)
+
+let buildWorkingCopyFolder durable baseFolder =
+    match durable with
+    | true -> baseFolder + "/durable"
+    | false -> baseFolder
+
+let getWorkingCopyFolder durable instance = buildWorkingCopyFolder durable instance.WorkingCopyDestPath
+
+let isDurableWorkingCopyFolder instance (folder:string) = folder.StartsWith(instance |> getWorkingCopyFolder true)
+
+let isTemporaryWorkingCopyFolder instance (folder:string) = 
+    (folder |> isWorkingCopyFolder instance) && not (folder |> isDurableWorkingCopyFolder instance)

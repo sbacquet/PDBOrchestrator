@@ -8,6 +8,14 @@ type Lifetime =
 | Temporary of System.DateTime
 | Durable
 
+let isDurable = function
+| Temporary _ -> false
+| Durable -> true
+
+let lifetimeType = function
+| Temporary _ -> "temporary"
+| Durable -> "durable"
+
 type MasterPDBWorkingCopy = {
     Name: string
     MasterPDBName: string

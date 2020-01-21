@@ -14,7 +14,9 @@ let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : 
 
     let stopWatch = System.Diagnostics.Stopwatch()
 
-    let rec loop () = actor {
+    let rec loop () =
+
+        actor {
 
         let! n = ctx.Receive()
 
@@ -39,7 +41,8 @@ let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : 
             | None -> ctx.Sender() <! result
             return! loop ()
 
-    }
+        }
+
     loop ()
 
 let [<Literal>]cOracleLongTaskExecutorName = "OracleDiskIntensiveTaskExecutor"

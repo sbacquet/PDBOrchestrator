@@ -31,11 +31,11 @@ let private masterPDBGarbageCollectorBody
     let getPDBNamesLike like : Exceptional<string list> = 
         oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBNamesLike like
         |> runWithin parameters.ShortTimeout id (fun () -> "cannot get PDB names : timeout exceeded" |> exn |> Error)
-    let isWorkingCopy (pdb:string) : Exceptional<bool> = result {
+    let isTempWorkingCopy (pdb:string) : Exceptional<bool> = result {
         let! (folder:string option) = 
             oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
             |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
-        return folder |> Option.map (fun folder -> folder |> isWorkingCopyFolder instance) |> Option.defaultValue false
+        return folder |> Option.map (fun folder -> folder |> isTemporaryWorkingCopyFolder instance) |> Option.defaultValue false
     }
     let toErrorMaybe result = match result with | Ok _ -> None | Error error -> Some error
 
@@ -73,11 +73,11 @@ let private masterPDBGarbageCollectorBody
             ctx.Log.Value.Info("Deleting working copy {pdb} on instance {instance} requested", workingCopy, instance.Name)
             let sender = ctx.Sender().Retype<Application.Oracle.OraclePDBResultWithReqId>()
             let result = result {
-                let! isWorkingCopy = isWorkingCopy workingCopy
+                let! isWorkingCopy = isTempWorkingCopy workingCopy
                 if isWorkingCopy then
                     return! deletePDB workingCopy
                 else
-                    return! sprintf "PDB %s is not a working copy" workingCopy |> exn |> Error
+                    return! sprintf "PDB %s is not a temporary working copy" workingCopy |> exn |> Error
             }
             sender <! (requestId, result)
             return! stop () // short-lived actor

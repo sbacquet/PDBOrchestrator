@@ -25,7 +25,9 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
 
     let stopWatch = System.Diagnostics.Stopwatch()
 
-    let rec loop () = actor {
+    let rec loop () =
+        
+        actor {
 
         let! n = ctx.Receive()
 
@@ -73,7 +75,9 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             | Some reqId -> ctx.Sender() <! (reqId, result)
             | None -> ctx.Sender() <! result
             return! loop ()
-    }
+    
+        }
+    
     loop ()
 
 let [<Literal>]cOracleLongTaskExecutorName = "OracleLongTaskExecutor"
