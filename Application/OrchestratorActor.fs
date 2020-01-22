@@ -190,7 +190,7 @@ let describeAdminCommand = function
 let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) (ctx : Actor<_>) =
 
     let registerUserRequest = 
-        let logRequest id command = ctx.Log.Value.Info("<< Command {0} : {1}", id, describeCommand command)
+        let logRequest id command user = ctx.Log.Value.Info("<< Command {0} from user {1} : {2}", id, user, describeCommand command)
         registerUserRequest logRequest
 
     let requestDone state = 
@@ -202,12 +202,13 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     id, 
                     completedRequest.Duration.TotalSeconds, 
                     describeCommand command)
-            | CompletedWithError _ -> 
+            | CompletedWithError error -> 
                 ctx.Log.Value.Info(
                     ">> Command {0} completed with error in {1} s. ({2})", 
                     id, 
                     completedRequest.Duration.TotalSeconds, 
                     describeCommand command)
+                ctx.Log.Value.Info("Error in command {0} was : {1}", id, error)
         completeUserRequest logRequestResponse state.PendingRequests state.CompletedRequests
 
     let deleteRequest state =

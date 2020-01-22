@@ -33,7 +33,7 @@ let alivePendingRequests (pendingRequests : PendingUserRequestMap<'C>) =
     pendingRequests |> Map.toSeq |> Seq.map snd |> Seq.filter (fun req -> not req.Deleted)
 
 let registerUserRequest<'C> log id (command : 'C) user requests : PendingUserRequestMap<'C> =
-    log id command
+    log id command user
     requests |> Map.add id (newPendingUserRequest id command user)
 
 type CompletedUserRequest<'S> = {
