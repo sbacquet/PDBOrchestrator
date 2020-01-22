@@ -74,7 +74,7 @@ let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc =
             // Declare the given instance synchronized with primary
             routef "/instances/%s" (HttpHandlers.synchronizePrimaryInstanceWith apiCtx)
         ]
-        RequestErrors.BAD_REQUEST "Unknown HTTP request"
+        RequestErrors.badRequest (text "Sorry, this URL is not handled by the PDB server.")
     ]
 
 let errorHandler (ex : Exception) (logger : Microsoft.Extensions.Logging.ILogger) =
