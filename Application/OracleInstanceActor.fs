@@ -243,13 +243,15 @@ let private oracleInstanceActorBody
         let requests = state.Requests
         let pdbService = pdbServiceFromInstance instance
 
-        if requests.Count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
-
         if state.PreviousInstance <> instance then
             ctx.Log.Value.Debug("Persisted modified Oracle instance {instance}", instance.Name)
             loop { state with Repository = state.Repository.Put instance; PreviousInstance = instance }
 
-        else actor {
+        else 
+            
+            if requests.Count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
+
+            actor {
 
             let! msg = ctx.Receive()
 
@@ -675,7 +677,7 @@ let private oracleInstanceActorBody
             
             | _ -> return! loop state
         
-        }
+            }
 
     let collaborators = ctx |> spawnCollaborators parameters oracleAPI getMasterPDBRepo initialInstance
 

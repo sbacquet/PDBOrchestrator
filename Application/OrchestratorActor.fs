@@ -214,7 +214,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
     let deleteRequest state =
         let logRequestDeleted id command = 
             ctx.Log.Value.Warning(
-                ">> Command {0} deleted. ({1})", 
+                "^^ Command {0} deleted. ({1})", 
                 id, 
                 describeCommand command)
         deletePendingRequest logRequestDeleted state.PendingRequests state.CompletedRequests
@@ -228,17 +228,19 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 
     let rec loop state = 
 
-        if ctx.Log.Value.IsDebugEnabled then
-            let count = state.PendingRequests |> alivePendingRequests |> Seq.length in 
-                if count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", count)
-            let count = state.CompletedRequests.Count in 
-                if count > 0 then ctx.Log.Value.Debug("Number of completed requests : {0}", count)
-
         if state.PreviousOrchestrator <> state.Orchestrator then
             ctx.Log.Value.Debug("Persisted modified orchestrator")
             loop { state with Repository = state.Repository.Put state.Orchestrator; PreviousOrchestrator = state.Orchestrator }
 
-        else actor {
+        else 
+
+            if ctx.Log.Value.IsDebugEnabled then
+                let count = state.PendingRequests |> alivePendingRequests |> Seq.length in 
+                    if count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", count)
+                let count = state.CompletedRequests.Count in 
+                    if count > 0 then ctx.Log.Value.Debug("Number of completed requests : {0}", count)
+            
+            actor {
 
             let! (msg:obj) = ctx.Receive()
 
@@ -272,7 +274,8 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 
             | _ -> 
                 return! loop state
-        }
+        
+            }
 
     and handleCommand state command = 
         let sender = ctx.Sender().Retype<RequestValidation>()
