@@ -25,9 +25,12 @@ let saveOrchestrator folder name orchestrator =
     stream.Write json
     stream.Flush()
 
-type OrchestratorRepository(folder, name) = 
+type OrchestratorRepository(logFailure, folder, name) = 
     interface IOrchestratorRepository with
         member __.Get () = loadOrchestrator folder name
         member __.Put orchestrator = 
-            saveOrchestrator folder name orchestrator
+            try
+                saveOrchestrator folder name orchestrator
+            with 
+            | ex -> logFailure (orchestratorPath folder name) ex
             upcast __

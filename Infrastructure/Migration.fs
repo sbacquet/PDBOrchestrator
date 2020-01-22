@@ -101,9 +101,11 @@ let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword u
         |> Validation.ofResult
         >>= (Validation.traverse (rowToValidMasterPDB (fun pdb -> versionsPerName |> Map.tryFind pdb)))
 
+    let onRepoFailure _ _ = raise
+
     let putMasterPDBs pdbs =
         pdbs |> List.iter (fun pdb ->
-            let repo = Infrastructure.MasterPDBRepository.NewMasterPDBRepository(instanceName, pdb) :> Application.Common.IMasterPDBRepository
+            let repo = Infrastructure.MasterPDBRepository.NewMasterPDBRepository(onRepoFailure, instanceName, pdb) :> Application.Common.IMasterPDBRepository
             repo.Put pdb |> ignore
         )
         let instance = 
@@ -119,7 +121,7 @@ let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword u
                 "" "" "" "" // paths to edit manually in the instance JSON file
                 "DP_DIR" "/u01/app/intcdb_dumps" 
                 snapshotCapable
-        let repo = Infrastructure.OracleInstanceRepository.NewOracleInstanceRepository(".", instance, "A") :> Application.Common.IOracleInstanceRepository
+        let repo = Infrastructure.OracleInstanceRepository.NewOracleInstanceRepository(onRepoFailure, ".", instance, "A") :> Application.Common.IOracleInstanceRepository
         repo.Put instance |> ignore
         sprintf "%s imported properly from %s" instanceName fromServer |> Validation.Valid
     

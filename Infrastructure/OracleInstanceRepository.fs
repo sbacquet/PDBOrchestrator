@@ -47,16 +47,19 @@ let saveOracleInstance folder name suffix instance =
         stream.Write json
         stream.Flush()
 
-type OracleInstanceRepository(folder, name, suffix) = 
+type OracleInstanceRepository(logFailure, folder, name, suffix) = 
     interface IOracleInstanceRepository with
         member __.Get () = loadOracleInstance folder name suffix
-        member __.Put pdb = 
-            pdb |> saveOracleInstance folder name suffix
+        member __.Put instance = 
+            try
+                instance |> saveOracleInstance folder name suffix
+            with
+            | ex -> logFailure instance.Name (instancePath folder name) ex
             upcast __
 
-type NewOracleInstanceRepository(folder, instance, suffix) = 
+type NewOracleInstanceRepository(logFailure, folder, instance, suffix) = 
     interface IOracleInstanceRepository with
         member __.Get () = instance
         member __.Put inst = 
-            let newRepo = OracleInstanceRepository(folder, instance.Name, suffix) :> IOracleInstanceRepository
+            let newRepo = OracleInstanceRepository(logFailure, folder, instance.Name, suffix) :> IOracleInstanceRepository
             newRepo.Put inst

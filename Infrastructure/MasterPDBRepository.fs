@@ -25,16 +25,19 @@ let saveMasterPDB folder name pdb =
     stream.Write json
     stream.Flush()
     
-type MasterPDBRepository(folder, name) = 
+type MasterPDBRepository(logFailure, folder, name) = 
     interface IMasterPDBRepository with
         member __.Get () = loadMasterPDB folder name
         member __.Put pdb = 
-            pdb |> saveMasterPDB folder name
+            try
+                pdb |> saveMasterPDB folder name
+            with
+            | ex -> logFailure pdb.Name (masterPDBPath folder name) ex
             upcast __
 
-type NewMasterPDBRepository(folder, pdb) = 
+type NewMasterPDBRepository(logFailure, folder, pdb) = 
     interface IMasterPDBRepository with
         member __.Get () = pdb
         member __.Put pdb = 
-            let newRepo = MasterPDBRepository(folder, pdb.Name) :> IMasterPDBRepository
+            let newRepo = MasterPDBRepository(logFailure, folder, pdb.Name) :> IMasterPDBRepository
             newRepo.Put pdb

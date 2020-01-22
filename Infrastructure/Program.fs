@@ -95,7 +95,7 @@ let buildConfiguration (args:string[]) =
 [<EntryPoint>]
 let main args =
     let config = buildConfiguration args
-    Serilog.Log.Logger <- 
+    Log.Logger <- 
         LoggerConfiguration().
             ReadFrom.Configuration(config).
             CreateLogger()
@@ -105,11 +105,18 @@ let main args =
     let rootFolder = infrastuctureParameters.Root
     let orchestratorName = "orchestrator"
     let orchestratorPath = System.IO.Path.Combine(rootFolder, orchestratorName)
-    let orchestratorRepo = OrchestratorRepository.OrchestratorRepository(orchestratorPath, orchestratorName) :> IOrchestratorRepository
-    let getOracleInstanceRepo name = OracleInstanceRepository.OracleInstanceRepository(orchestratorPath, name, validApplicationParameters.ServerInstanceName) :> IOracleInstanceRepository
+
+    let logOrchestratorSaveFailure (path:string) (ex:exn) = Log.Error(ex, "Cannot write modifications done in orchestrator to file {path}", path)
+    let orchestratorRepo = OrchestratorRepository.OrchestratorRepository(logOrchestratorSaveFailure, orchestratorPath, orchestratorName) :> IOrchestratorRepository
+
+    let logOracleInstanceSaveFailure (instance:string) (path:string) (ex:exn) = Log.Error(ex, "Cannot write modifications done in Oracle instance {instance} to file {path}", instance, path)
+    let getOracleInstanceRepo name = OracleInstanceRepository.OracleInstanceRepository(logOracleInstanceSaveFailure, orchestratorPath, name, validApplicationParameters.ServerInstanceName) :> IOracleInstanceRepository
     let getInstanceFolder = OracleInstanceRepository.instanceFolder orchestratorPath
-    let getMasterPDBRepo (instance:OracleInstance) name = MasterPDBRepository.MasterPDBRepository(getInstanceFolder instance.Name, name) :> IMasterPDBRepository
-    let newMasterPDBRepo (instance:OracleInstance) pdb = MasterPDBRepository.NewMasterPDBRepository(getInstanceFolder instance.Name, pdb) :> IMasterPDBRepository
+
+    let logMasterPDBSaveFailure (pdb:string) (path:string) (ex:exn) = Log.Error(ex, "Cannot write modifications done in master PDB {pdb} to file {path}", pdb, path)
+    let getMasterPDBRepo (instance:OracleInstance) name = MasterPDBRepository.MasterPDBRepository(logMasterPDBSaveFailure, getInstanceFolder instance.Name, name) :> IMasterPDBRepository
+    let newMasterPDBRepo (instance:OracleInstance) pdb = MasterPDBRepository.NewMasterPDBRepository(logMasterPDBSaveFailure, getInstanceFolder instance.Name, pdb) :> IMasterPDBRepository
+
     let loggerFactory = new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory
     let getOracleAPI (instance:OracleInstance) = OracleInstanceAPI.OracleInstanceAPI(loggerFactory, instance)
 
