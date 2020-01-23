@@ -4,17 +4,28 @@ type Source =
 | SpecificVersion of int
 | Edition
 
+let isSpecificVersion = function
+| SpecificVersion _ -> true
+| _ -> false
+
+let sourceText = function
+| SpecificVersion version -> sprintf "specific version %d" version
+| Edition -> "edition"
+
 type Lifetime =
 | Temporary of System.DateTime
 | Durable
 
 let isDurable = function
-| Temporary _ -> false
 | Durable -> true
+| _ -> false
 
-let lifetimeType = function
-| Temporary _ -> "temporary"
-| Durable -> "durable"
+let lifetimeText isTemporary =
+    match isTemporary with
+    | true -> "temporary"
+    | false -> "durable"
+
+let lifetimeType = isDurable >> not >> lifetimeText
 
 type MasterPDBWorkingCopy = {
     Name: string

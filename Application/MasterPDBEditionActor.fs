@@ -12,7 +12,7 @@ open Application.Common
 open Domain.MasterPDBWorkingCopy
 
 type Command =
-| CreateWorkingCopy of WithRequestId<string, bool> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopy of WithRequestId<string, bool, bool> // responds with OraclePDBResultWithReqId
 | DeleteWorkingCopy of WithRequestId<MasterPDBWorkingCopy> // responds with OraclePDBResultWithReqId
 
 let private masterPDBEditionActorBody 
@@ -48,22 +48,30 @@ let private masterPDBEditionActorBody
         let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
 
         match command with
-        | CreateWorkingCopy (requestId, workingCopyName, durable) -> 
+        | CreateWorkingCopy (requestId, workingCopyName, durable, force) -> 
             let result = result {
                 let! wcExists = pdbExists workingCopyName
-                let! _ = 
-                    if wcExists then
-                        result {
+                // if the working copy already exists and not forcing, keep it if same durability
+                if wcExists && not force then
+                    let! isTemp = isTempWorkingCopy workingCopyName
+                    if (not isTemp) <> durable then
+                        return! Error <| (sprintf "working copy %s already exists but for a different durability (%s)" workingCopyName (lifetimeText isTemp) |> exn)
+                    else
+                        return workingCopyName
+                else
+                    let! _ = result {
+                        if wcExists then // force destruction
                             let! canDelete = 
                                 if durable then Ok true
                                 else isTempWorkingCopy workingCopyName
-                            if canDelete then
-                                return! deletePDB workingCopyName // force creation
-                            else
-                                return! Error <| (sprintf "PDB %s exists and is not a working copy, hence cannot be overwritten" workingCopyName |> exn)
-                        }
-                    else Ok ""
-                return! workingCopyName |> cloneEditionPDB durable
+                            return!
+                                if canDelete then
+                                    deletePDB workingCopyName // force creation
+                                else
+                                    Error <| (sprintf "PDB %s exists and is not a temporary working copy, hence cannot be overwritten" workingCopyName |> exn)
+                        else return ""
+                    }
+                    return! workingCopyName |> cloneEditionPDB durable
             }
             sender <! (requestId, result)
             return! loop ()

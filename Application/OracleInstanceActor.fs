@@ -257,28 +257,6 @@ let private oracleInstanceActorBody
 
             //try
             match msg with
-            | :? LifecycleEvent as event ->
-                match event with
-                | LifecycleEvent.PreStart ->
-                    ctx.Log.Value.Info("Checking integrity of Oracle instance {instance}...", state.Instance.Name)
-                    let pdbExists pdb : Async<Exceptional<bool>> = state.Collaborators.OracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
-                    let isWorkingCopyValid name = async {
-                        let! exists = pdbExists name
-                        match exists with
-                        | Ok exists -> return (name, exists)
-                        | Error _ -> return (name, true) // ignore errors
-                    }
-                    let! workingCopyValidations = 
-                        instance.WorkingCopies 
-                        |> Map.toList 
-                        |> Async.traverseP (fst >> isWorkingCopyValid)
-                    let workingCopyValidationsMap = workingCopyValidations |> Map.ofList
-                    let existingWCs, nonExistingWCs = instance.WorkingCopies |> Map.partition (fun key _ -> workingCopyValidationsMap.[key])
-                    nonExistingWCs |> Map.iter (fun name _ -> ctx.Log.Value.Warning("PDB for working copy {pdb} does not exist => removed from the list of Oracle instance {instance}", name, instance.Name))
-                    ctx.Log.Value.Info("Integrity of Oracle instance {instance} checked.", state.Instance.Name)
-                    return! loop { state with Instance = { state.Instance with WorkingCopies = existingWCs } }
-                | _ -> return! loop state
-
             | :? Command as command ->
                 match command with
                 | GetState ->
@@ -389,20 +367,23 @@ let private oracleInstanceActorBody
                 | CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force) ->
                     let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
                     let cancel = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
-                        if not (wc.MasterPDBName =~ masterPDBName) || 
-                           not (wc.CreatedBy =~ user) || 
-                           (isDurable wc.Lifetime <> durable)
+                        if not (wc.CreatedBy =~ user) // cannot force if not same user
                         then
-                            sprintf "working copy %s already exists but for a different master user/PDB/lifetime (%s/%s/%s)" wcName wc.CreatedBy wc.MasterPDBName (lifetimeType wc.Lifetime) |> Error |> Some
+                            sprintf "working copy %s already exists and was created by a different user (%s), hence cannot be overwritten" wcName wc.CreatedBy |> Error |> Some
                         else
-                            match wc.Source with
-                            | SpecificVersion version ->
-                                if version = versionNumber then
-                                    if force then None else Some (Ok wc)
+                            if force then None
+                            else
+                                if not (wc.MasterPDBName =~ masterPDBName) || 
+                                   (isDurable wc.Lifetime <> durable)
+                                then
+                                    sprintf "working copy %s already exists, but for a different master PDB/durability (%s/%s), hence cannot be overwritten" wcName wc.MasterPDBName (lifetimeType wc.Lifetime) |> Error |> Some
                                 else
-                                    sprintf "working copy %s of %s already exists, but for a different version (%d)" wcName wc.MasterPDBName version |> Error |> Some
-                            | Edition ->
-                                sprintf "working copy %s already exists, but for an edition of %s" wcName wc.MasterPDBName |> Error |> Some
+                                    match wc.Source with
+                                    | SpecificVersion version ->
+                                        if version = versionNumber then None
+                                        else sprintf "working copy %s of %s already exists, but for a different version (%d), hence cannot be overwritten" wcName wc.MasterPDBName version |> Error |> Some
+                                    | Edition ->
+                                        sprintf "working copy %s already exists, but for an edition of %s, hence cannot be overwritten" wcName wc.MasterPDBName |> Error |> Some
                     )
                     match cancel with
                     | Some result ->
@@ -421,7 +402,7 @@ let private oracleInstanceActorBody
                         | Some masterPDBName ->
                             let masterPDBActor = collaborators.MasterPDBActors |> getMasterPDBActor masterPDBName
                             let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                            retype masterPDBActor <! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, snapshot, durable)
+                            retype masterPDBActor <! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, snapshot, durable, force)
                             return! loop { state with Requests = newRequests }
 
                 | DeleteWorkingCopy (requestId, wcName, durable) ->
@@ -458,14 +439,21 @@ let private oracleInstanceActorBody
                 | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force) ->
                     let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
                     let cancel = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
-                        if not (wc.MasterPDBName =~ masterPDBName) || not (wc.CreatedBy =~ user) then
-                            sprintf "working copy %s already exists but for a different master PDB/user (%s/%s)" wcName wc.MasterPDBName wc.CreatedBy |> Error |> Some
+                        if not (wc.CreatedBy =~ user) // cannot force if not same user
+                        then
+                            sprintf "working copy %s already exists and was created by a different user (%s), hence cannot be overwritten" wcName wc.CreatedBy |> Error |> Some
                         else
-                            match wc.Source with
-                            | Edition ->
-                                if force then None else Some (Ok wc)
-                            | SpecificVersion version ->
-                                sprintf "working copy %s already exists but for a specific version (%d) of %s" wcName version wc.MasterPDBName |> Error |> Some
+                            if force then None
+                            else
+                                if not (wc.MasterPDBName =~ masterPDBName) || 
+                                   (isDurable wc.Lifetime <> durable)
+                                then
+                                    Error <| sprintf "working copy %s already exists, but for a different master PDB/durability (%s/%s), hence cannot be overwritten" wcName wc.MasterPDBName (lifetimeType wc.Lifetime) |> Some
+                                else
+                                    match wc.Source with
+                                    | Edition -> None
+                                    | SpecificVersion version ->
+                                        Error <| sprintf "working copy %s already exists but for a specific version (%d) of %s" wcName version wc.MasterPDBName |> Some
                     )
                     match cancel with
                     | Some result ->
@@ -484,7 +472,7 @@ let private oracleInstanceActorBody
                         | Some masterPDBName ->
                             let masterPDBActor = collaborators.MasterPDBActors |> getMasterPDBActor masterPDBName
                             let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                            retype masterPDBActor <! MasterPDBActor.CreateWorkingCopyOfEdition (requestId, wcName, durable)
+                            retype masterPDBActor <! MasterPDBActor.CreateWorkingCopyOfEdition (requestId, wcName, durable, force)
                             return! loop { state with Requests = newRequests }
 
                 | CollectGarbage ->

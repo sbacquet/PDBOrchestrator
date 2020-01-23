@@ -8,6 +8,7 @@ open Application.UserPendingRequest
 open Domain.Common.Validation
 open Application.Common
 open Application.DTO.MasterPDB
+open Domain.MasterPDBWorkingCopy
 
 type OnInstance<'T> = WithUser<string, 'T>
 type OnInstance<'T1, 'T2> = WithUser<string, 'T1, 'T2>
@@ -148,12 +149,11 @@ let describeCommand = function
 | RollbackMasterPDB (user, pdb) ->
     sprintf "roll back modifications done in \"%s\"" pdb
 | CreateWorkingCopy (user, instance, pdb, version, name, snapshot, durable, force) ->
-    sprintf "create a %s working copy (%s) named \"%s\" of master PDB \"%s\" version %d on Oracle instance \"%s\"" (if durable then "durable" else "temporary") (if snapshot then "snapshot" else "clone") name pdb version instance
+    sprintf "create%s a %s working copy named \"%s\" of master PDB \"%s\" version %d on Oracle instance \"%s\"" (if force then " (force)" else "") (lifetimeText durable) name pdb version instance
 | DeleteWorkingCopy (user, instance, name, durable) ->
-    let durability = if durable then "durable" else "temporary"
-    sprintf "delete a %s working copy named \"%s\" on Oracle instance \"%s\"" durability name instance
+    sprintf "delete a %s working copy named \"%s\" on Oracle instance \"%s\"" (lifetimeText durable) name instance
 | CreateWorkingCopyOfEdition (user, masterPDB, wcName, durable, force) ->
-    sprintf "create a %s working copy (clone) named \"%s\" of master PDB \"%s\" edition" (if durable then "durable" else "temporary") wcName masterPDB
+    sprintf "create%s a %s working copy (clone) named \"%s\" of master PDB \"%s\" edition" (if force then " (force)" else "") (lifetimeText durable) wcName masterPDB
 | ExtendWorkingCopy (instance, name) ->
     sprintf "extend lifetime of working copy %s on Oracle instance %s" name instance
 | GetRequest requestId ->
@@ -190,7 +190,7 @@ let describeAdminCommand = function
 let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) (ctx : Actor<_>) =
 
     let registerUserRequest = 
-        let logRequest id command user = ctx.Log.Value.Info("<< Command {0} from user {1} : {2}", id, user, describeCommand command)
+        let logRequest id command user = ctx.Log.Value.Info("<< Command {requestId} from user {user} : {command}", id, user, describeCommand command)
         registerUserRequest logRequest
 
     let requestDone state = 
@@ -198,23 +198,23 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             match completedRequest.Status with
             | CompletedOk _ -> 
                 ctx.Log.Value.Info(
-                    ">> Command {0} completed in {1} s. ({2})", 
+                    ">> Command {requestId} completed in {duration} s. ({description})", 
                     id, 
                     completedRequest.Duration.TotalSeconds, 
                     describeCommand command)
             | CompletedWithError error -> 
                 ctx.Log.Value.Info(
-                    ">> Command {0} completed with error in {1} s. ({2})", 
+                    ">> Command {requestId} completed with error in {duration} s. ({description})", 
                     id, 
                     completedRequest.Duration.TotalSeconds, 
                     describeCommand command)
-                ctx.Log.Value.Info("Error in command {0} was : {1}", id, error)
+                ctx.Log.Value.Info("Error in command {requestId} was : {error}", id, error)
         completeUserRequest logRequestResponse state.PendingRequests state.CompletedRequests
 
     let deleteRequest state =
         let logRequestDeleted id command = 
             ctx.Log.Value.Warning(
-                "^^ Command {0} deleted. ({1})", 
+                "^^ Command {requestId} deleted. ({description})", 
                 id, 
                 describeCommand command)
         deletePendingRequest logRequestDeleted state.PendingRequests state.CompletedRequests
@@ -483,7 +483,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
         }
 
     and handleAdminCommand state command = 
-        ctx.Log.Value.Info("Received admin command : {0}", describeAdminCommand command)
+        ctx.Log.Value.Info("Received admin command : {description}", describeAdminCommand command)
 
         let instanceActor = instanceActor state
         let primaryInstance = primaryInstance state
@@ -555,11 +555,11 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     instance <! OracleInstanceActor.CollectGarbage
                     return! loop state
                 | None ->
-                    ctx.Log.Value.Warning(sprintf "cannot find Oracle instance %s" instanceName)
+                    ctx.Log.Value.Warning("Cannot find Oracle instance {instance}.", instanceName)
                     return! loop state
 
             | CollectGarbage ->
-                ctx.Log.Value.Info("Garbage collection of all Oracle instances requested")
+                ctx.Log.Value.Info("Garbage collection of all Oracle instances requested.")
                 state.Collaborators.OracleInstanceActors |> Map.iter (fun _ actor -> retype actor <! OracleInstanceActor.CollectGarbage)
                 return! loop state
 
@@ -642,9 +642,9 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let status = 
                     match result with
                     | InvalidRequest errors -> 
-                        CompletedWithError (sprintf "Invalid request : %s." (System.String.Join("; ", errors |> List.toArray)))
+                        CompletedWithError <| sprintf "Invalid request : %s." (System.String.Join("; ", errors |> List.toArray))
                     | MasterPDBCreationFailure (instance, pdb, error) -> 
-                        CompletedWithError (sprintf "Error while creating master PDB %s on Oracle instance %s : %s." pdb instance error)
+                        CompletedWithError <| sprintf "Error while creating master PDB %s on Oracle instance %s : %s." pdb instance error
                     | MasterPDBCreated (instance, pdb) ->
                         sprintf "Master PDB %s created successfully on Oracle instance %s." pdb.Name instance
                         |> completedOk [ 
@@ -675,7 +675,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                             ResourceLink (sprintf "/instances/%s/master-pdbs/%s/edition" instance pdb.Name)
                            ] @ schemasData)
                     | MasterPDBActor.PreparationFailure (pdb, error) -> 
-                        sprintf "Error while preparing master PDB %s for edition : %s." pdb error |> CompletedWithError
+                        CompletedWithError <| sprintf "Error while preparing master PDB %s for edition : %s." pdb error
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
         }
@@ -699,7 +699,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                             ResourceLink (sprintf "/instances/%s/master-pdbs/%s/versions/%d" instance pdb.Name newVersion)
                         ]
                     | Error error -> 
-                        sprintf "Error while committing master PDB : %s." error |> CompletedWithError
+                        CompletedWithError <| sprintf "Error while committing master PDB : %s." error
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
         }
@@ -723,7 +723,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                             ResourceLink (sprintf "/instances/%s/master-pdbs/%s/versions/%d" instance pdb.Name latestVersion)
                         ]
                     | Error error -> 
-                        sprintf "Error while rolling back master PDB : %s." error |> CompletedWithError
+                        CompletedWithError <| sprintf "Error while rolling back master PDB : %s." error
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
         }
@@ -748,7 +748,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                             ResourceLink (sprintf "/instances/%s/working-copies/%s" oracleInstance workingCopyName)
                         ]
                     | Error error -> 
-                        sprintf "Error while creating working copy : %s." error |> CompletedWithError
+                        CompletedWithError <| sprintf "Error while creating working copy : %s." error
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
         }
@@ -759,16 +759,15 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
         actor {
             match requestMaybe with
             | None -> 
-                ctx.Log.Value.Error("internal error : request {requestId} not found", requestId)
+                ctx.Log.Value.Error("Internal error : request {requestId} not found.", requestId)
                 return! loop state
             | Some request ->
                 let status = 
                     match result with
                     | Ok wcName -> 
-                        sprintf "Working copy %s deleted successfully." wcName
-                        |> completedOk [ PDBName wcName ]
+                        completedOk [ PDBName wcName ] <| sprintf "Working copy %s deleted successfully." wcName
                     | Error error -> 
-                        sprintf "Error while deleting working copy : %s." error.Message |> CompletedWithError
+                        CompletedWithError <| sprintf "Error while deleting working copy : %s." error.Message
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
         }
@@ -778,7 +777,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
         let newCollabs = 
             terminatedInstanceNameMaybe
             |> Option.map (fun name -> 
-                ctx.Log.Value.Warning("Actor for Oracle instance {0} was terminated => disabled it", name)
+                ctx.Log.Value.Warning("Actor for Oracle instance {instance} was terminated => disabled it", name)
                 { state.Collaborators with OracleInstanceActors = state.Collaborators.OracleInstanceActors |> Map.remove name })
             |> Option.defaultValue state.Collaborators
         let newInstances = newCollabs.OracleInstanceActors |> Map.toList |> List.map fst
