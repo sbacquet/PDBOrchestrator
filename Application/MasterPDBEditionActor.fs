@@ -39,6 +39,12 @@ let private masterPDBEditionActorBody
             |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
         return folder |> Option.map (fun folder -> folder |> isTemporaryWorkingCopyFolder instance) |> Option.defaultValue false
     }
+    let isDurableWorkingCopy (pdb:string) : Exceptional<bool> = result {
+        let! (folder:string option) = 
+            oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
+            |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
+        return folder |> Option.map (fun folder -> folder |> isDurableWorkingCopyFolder instance) |> Option.defaultValue false
+    }
 
     let rec loop () = 
         
@@ -53,9 +59,9 @@ let private masterPDBEditionActorBody
                 let! wcExists = pdbExists workingCopyName
                 // if the working copy already exists and not forcing, keep it if same durability
                 if wcExists && not force then
-                    let! isTemp = isTempWorkingCopy workingCopyName
-                    if (not isTemp) <> durable then
-                        return! Error <| (sprintf "working copy %s already exists but for a different durability (%s)" workingCopyName (lifetimeText isTemp) |> exn)
+                    let! isDurable = isDurableWorkingCopy workingCopyName
+                    if isDurable <> durable then
+                        return! Error <| (sprintf "working copy %s already exists but for a different durability (%s)" workingCopyName (lifetimeText isDurable) |> exn)
                     else
                         return workingCopyName
                 else

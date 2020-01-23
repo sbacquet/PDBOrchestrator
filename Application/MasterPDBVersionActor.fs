@@ -48,6 +48,12 @@ let private masterPDBVersionActorBody
             |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
         return folder |> Option.map (fun folder -> folder |> isTemporaryWorkingCopyFolder instance) |> Option.defaultValue false
     }
+    let isDurableWorkingCopy (pdb:string) : Exceptional<bool> = result {
+        let! (folder:string option) = 
+            oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
+            |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
+        return folder |> Option.map (fun folder -> folder |> isDurableWorkingCopyFolder instance) |> Option.defaultValue false
+    }
     let importPDB manifest path name : OraclePDBResult =
         oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, name)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot import PDB %s : timeout exceeded" name |> exn |> Error)
@@ -68,9 +74,9 @@ let private masterPDBVersionActorBody
                 let! wcExists = pdbExists workingCopyName
                 // if the working copy already exists and not forcing, keep it if same durability
                 if wcExists && not force then
-                    let! isTemp = isTempWorkingCopy workingCopyName
-                    if (not isTemp) <> durable then
-                        return! Error <| (sprintf "working copy %s already exists but for a different durability (%s)" workingCopyName (lifetimeText isTemp) |> exn)
+                    let! isDurable = isDurableWorkingCopy workingCopyName
+                    if isDurable <> durable then
+                        return! Error <| (sprintf "working copy %s already exists but for a different durability (%s)" workingCopyName (lifetimeText isDurable) |> exn)
                     else
                         return workingCopyName
                 else

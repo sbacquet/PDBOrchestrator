@@ -20,12 +20,12 @@ let isDurable = function
 | Durable -> true
 | _ -> false
 
-let lifetimeText isTemporary =
-    match isTemporary with
-    | true -> "temporary"
-    | false -> "durable"
+let lifetimeText isDurable =
+    match isDurable with
+    | true -> "durable"
+    | false -> "temporary"
 
-let lifetimeType = isDurable >> not >> lifetimeText
+let lifetimeType = isDurable >> lifetimeText
 
 type MasterPDBWorkingCopy = {
     Name: string

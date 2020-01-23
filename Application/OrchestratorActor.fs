@@ -140,19 +140,19 @@ let describeCommand = function
     sprintf "get state of master PDB \"%s\" in Oracle instance \"%s\"" pdb instance
 | GetMasterPDBEditionInfo pdb ->
     sprintf "get edition info of master PDB \"%s\"" pdb
-| CreateMasterPDB (user, parameters) ->
+| CreateMasterPDB (_, parameters) ->
     sprintf "create master PDB \"%s\" from dump \"%s\"" parameters.Name parameters.Dump
-| PrepareMasterPDBForModification (user, pdb, version) ->
-    sprintf "prepare master PDB \"%s\" for modifications" pdb
-| CommitMasterPDB (user, pdb, comment) ->
+| PrepareMasterPDBForModification (_, pdb, version) ->
+    sprintf "prepare master PDB \"%s\" version %d for modifications" pdb version
+| CommitMasterPDB (_, pdb, _) ->
     sprintf "commit modifications done in master PDB \"%s\"" pdb
-| RollbackMasterPDB (user, pdb) ->
+| RollbackMasterPDB (_, pdb) ->
     sprintf "roll back modifications done in \"%s\"" pdb
-| CreateWorkingCopy (user, instance, pdb, version, name, snapshot, durable, force) ->
+| CreateWorkingCopy (_, instance, pdb, version, name, _, durable, force) ->
     sprintf "create%s a %s working copy named \"%s\" of master PDB \"%s\" version %d on Oracle instance \"%s\"" (if force then " (force)" else "") (lifetimeText durable) name pdb version instance
-| DeleteWorkingCopy (user, instance, name, durable) ->
+| DeleteWorkingCopy (_, instance, name, durable) ->
     sprintf "delete a %s working copy named \"%s\" on Oracle instance \"%s\"" (lifetimeText durable) name instance
-| CreateWorkingCopyOfEdition (user, masterPDB, wcName, durable, force) ->
+| CreateWorkingCopyOfEdition (_, masterPDB, wcName, durable, force) ->
     sprintf "create%s a %s working copy (clone) named \"%s\" of master PDB \"%s\" edition" (if force then " (force)" else "") (lifetimeText durable) wcName masterPDB
 | ExtendWorkingCopy (instance, name) ->
     sprintf "extend lifetime of working copy %s on Oracle instance %s" name instance
