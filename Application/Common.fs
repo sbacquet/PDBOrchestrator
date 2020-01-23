@@ -29,6 +29,9 @@ type IUnitRepository<'T> =
 
 type IMasterPDBRepository = IUnitRepository<Domain.MasterPDB.MasterPDB>
 
-type IOracleInstanceRepository = IUnitRepository<Domain.OracleInstance.OracleInstance>
+type IOracleInstanceRepository = 
+    abstract member Get : unit -> Domain.OracleInstance.OracleInstance
+    abstract member Put : Domain.OracleInstance.OracleInstance -> IOracleInstanceRepository
+    abstract member PutWorkingCopiesOnly : Domain.OracleInstance.OracleInstance -> IOracleInstanceRepository
 
 type IOrchestratorRepository = IUnitRepository<Domain.Orchestrator.Orchestrator>

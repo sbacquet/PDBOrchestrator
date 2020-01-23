@@ -32,12 +32,7 @@ let loadOracleInstance folder name suffix : OracleInstance =
             []
     { instance with WorkingCopies = instance.WorkingCopies |> Map.fold (fun m k v -> m |> Map.add k v) (workingCopies |> List.map (fun wc -> wc.Name, wc) |> Map.ofList) }
 
-let saveOracleInstance folder name suffix instance =
-    Directory.CreateDirectory(instanceFolder folder name) |> ignore
-    use stream = File.CreateText(instancePath folder name)
-    let json = instance |> OracleInstanceJson.oracleInstanceToJson
-    stream.Write json
-    stream.Flush()
+let saveWorkingCopies folder name suffix instance =
     let file = instanceWorkingCopiesPath folder name suffix
     if instance.WorkingCopies |> Map.isEmpty then
         File.Delete(file)
@@ -46,6 +41,14 @@ let saveOracleInstance folder name suffix instance =
         let json = instance.WorkingCopies |> Map.toList |> List.map snd |> OracleInstanceJson.workingCopiesToJson
         stream.Write json
         stream.Flush()
+
+let saveOracleInstance folder name suffix instance =
+    Directory.CreateDirectory(instanceFolder folder name) |> ignore
+    use stream = File.CreateText(instancePath folder name)
+    let json = instance |> OracleInstanceJson.oracleInstanceToJson
+    stream.Write json
+    stream.Flush()
+    instance |> saveWorkingCopies folder name suffix
 
 type OracleInstanceRepository(logFailure, folder, name, suffix) = 
     interface IOracleInstanceRepository with
@@ -56,6 +59,12 @@ type OracleInstanceRepository(logFailure, folder, name, suffix) =
             with
             | ex -> logFailure instance.Name (instancePath folder name) ex
             upcast __
+        member __.PutWorkingCopiesOnly instance = 
+            try
+                instance |> saveWorkingCopies folder name suffix
+            with
+            | ex -> logFailure instance.Name (instancePath folder name) ex
+            upcast __
 
 type NewOracleInstanceRepository(logFailure, folder, instance, suffix) = 
     interface IOracleInstanceRepository with
@@ -63,3 +72,6 @@ type NewOracleInstanceRepository(logFailure, folder, instance, suffix) =
         member __.Put inst = 
             let newRepo = OracleInstanceRepository(logFailure, folder, instance.Name, suffix) :> IOracleInstanceRepository
             newRepo.Put inst
+        member __.PutWorkingCopiesOnly inst = 
+            let newRepo = OracleInstanceRepository(logFailure, folder, instance.Name, suffix) :> IOracleInstanceRepository
+            newRepo.PutWorkingCopiesOnly inst

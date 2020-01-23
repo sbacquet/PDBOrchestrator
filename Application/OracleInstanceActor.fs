@@ -244,8 +244,14 @@ let private oracleInstanceActorBody
         let pdbService = pdbServiceFromInstance instance
 
         if state.PreviousInstance <> instance then
-            ctx.Log.Value.Debug("Persisted modified Oracle instance {instance}", instance.Name)
-            loop { state with Repository = state.Repository.Put instance; PreviousInstance = instance }
+            let newRepo =
+                if { state.PreviousInstance with WorkingCopies = Map.empty } = { instance with WorkingCopies = Map.empty } then
+                    ctx.Log.Value.Debug("Persisted working copies of Oracle instance {instance}", instance.Name)
+                    state.Repository.PutWorkingCopiesOnly instance
+                else
+                    ctx.Log.Value.Debug("Persisted modified Oracle instance {instance}", instance.Name)
+                    state.Repository.Put instance
+            loop { state with Repository = newRepo; PreviousInstance = instance }
 
         else 
             

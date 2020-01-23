@@ -186,6 +186,7 @@ type FakeOracleInstanceRepo(instance) =
     interface IOracleInstanceRepository with
         member __.Get () = instance
         member __.Put newInstance = upcast FakeOracleInstanceRepo newInstance
+        member __.PutWorkingCopiesOnly newInstance = upcast FakeOracleInstanceRepo newInstance
 
 let allInstances = 
     [
