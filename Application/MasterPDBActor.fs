@@ -53,7 +53,7 @@ type private Collaborators = {
     OracleDiskIntensiveTaskExecutor : IActorRef<OracleDiskIntensiveActor.Command>
 }
 
-let private getOrSpawnVersionActor parameters instance (masterPDBName:string) (version:MasterPDBVersion) collaborators ctx =
+let private getOrSpawnVersionActor parameters instance (masterPDBName:string) (version:MasterPDBVersion) collaborators workingCopyFactory ctx =
     let versionActorMaybe = collaborators.MasterPDBVersionActors |> Map.tryFind version.VersionNumber
     match versionActorMaybe with
     | Some versionActor -> collaborators, versionActor
@@ -65,20 +65,20 @@ let private getOrSpawnVersionActor parameters instance (masterPDBName:string) (v
                 collaborators.OracleShortTaskExecutor
                 collaborators.OracleLongTaskExecutor
                 collaborators.OracleDiskIntensiveTaskExecutor
+                workingCopyFactory
                 masterPDBName
                 version
         
         { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Add(version.VersionNumber, versionActor) }, 
         versionActor
 
-let private getOrSpawnEditionActor parameters instance (editionPDBName:string) collaborators ctx =
+let private getOrSpawnEditionActor parameters instance (editionPDBName:string) collaborators workingCopyFactory ctx =
         let editionActor = collaborators.MasterPDBEditionActor |> Option.defaultWith (fun () ->
             ctx |> MasterPDBEditionActor.spawn 
                 parameters
                 instance
                 collaborators.OracleShortTaskExecutor
-                collaborators.OracleLongTaskExecutor
-                collaborators.OracleDiskIntensiveTaskExecutor
+                workingCopyFactory
                 editionPDBName)
         
         { collaborators with MasterPDBEditionActor = Some editionActor }, 
@@ -98,7 +98,8 @@ let private masterPDBActorBody
     (instance:OracleInstance) 
     oracleShortTaskExecutor
     oracleLongTaskExecutor 
-    oracleDiskIntensiveTaskExecutor 
+    oracleDiskIntensiveTaskExecutor
+    (workingCopyFactory:IActorRef<Application.WorkingCopyFactoryActor.Command>)
     (initialRepository:IMasterPDBRepository) 
     (ctx : Actor<obj>) =
 
@@ -247,7 +248,7 @@ let private masterPDBActorBody
                             sender <! (requestId, Error (sprintf "version %d of master PDB %s is deleted" versionNumber masterPDB.Name |> exn))
                             return! loop state
                         else
-                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators ctx
+                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators workingCopyFactory ctx
                             versionActor <<! MasterPDBVersionActor.CreateWorkingCopy (requestId, name, snapshot, durable, force)
                             return! loop { state with Collaborators = newCollabs }
 
@@ -261,7 +262,7 @@ let private masterPDBActorBody
                             sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name |> exn))
                             return! loop state
                         | Some version ->
-                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators ctx
+                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators workingCopyFactory ctx
                             versionActor <<! MasterPDBVersionActor.DeleteWorkingCopy (requestId, workingCopy)
                             return! loop { state with Collaborators = newCollabs }
                     | Edition ->
@@ -269,7 +270,7 @@ let private masterPDBActorBody
                             sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name |> exn))
                             return! loop state
                         else
-                            let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators ctx
+                            let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators workingCopyFactory ctx
                             editionActor <<! MasterPDBEditionActor.DeleteWorkingCopy (requestId, workingCopy)
                             return! loop { state with Collaborators = newCollabs }
 
@@ -285,7 +286,7 @@ let private masterPDBActorBody
                             sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name |> exn))
                             return! loop state
                         else
-                            let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators ctx
+                            let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators workingCopyFactory ctx
                             editionActor <<! MasterPDBEditionActor.CreateWorkingCopy (requestId, workingCopyName, durable, bool)
                             return! loop { state with Collaborators = newCollabs }
 
@@ -295,7 +296,7 @@ let private masterPDBActorBody
                         let versionPDBMaybe = masterPDB.Versions |> Map.tryFind version
                         match versionPDBMaybe with
                         | Some versionPDB -> 
-                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name versionPDB collabs ctx
+                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name versionPDB collabs workingCopyFactory ctx
                             versionActor <! MasterPDBVersionActor.CollectGarbage
                             newCollabs
                         | None -> 
@@ -430,6 +431,7 @@ let spawn
         (shortTaskExecutor:IActorRef<Application.OracleShortTaskExecutor.Command>)
         (longTaskExecutor:IActorRef<Application.OracleLongTaskExecutor.Command>)
         (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>)
+        (workingCopyFactory:IActorRef<Application.WorkingCopyFactoryActor.Command>)
         (getRepository:OracleInstance -> string -> IMasterPDBRepository)
         (name:string)
         (actorFactory:IActorRefFactory) =
@@ -448,6 +450,7 @@ let spawn
                 shortTaskExecutor
                 longTaskExecutor
                 oracleDiskIntensiveTaskExecutor
+                workingCopyFactory
                 initialRepository
         )
 
@@ -456,7 +459,8 @@ let spawnNew
         (instance:OracleInstance) 
         (shortTaskExecutor:IActorRef<Application.OracleShortTaskExecutor.Command>)
         (longTaskExecutor:IActorRef<Application.OracleLongTaskExecutor.Command>) 
-        (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>) 
+        (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>)
+        (workingCopyFactory:IActorRef<Application.WorkingCopyFactoryActor.Command>)
         (newRepository:OracleInstance -> MasterPDB -> IMasterPDBRepository)
         (masterPDB:MasterPDB)
         (actorFactory:IActorRefFactory) =
@@ -473,6 +477,7 @@ let spawnNew
                 shortTaskExecutor
                 longTaskExecutor
                 oracleDiskIntensiveTaskExecutor
+                workingCopyFactory
                 (initialRepository.Put masterPDB)
         )
 

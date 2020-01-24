@@ -9,6 +9,7 @@ open Application.Common
 open Domain.MasterPDBWorkingCopy
 open Domain.Common
 open Domain.OracleInstance
+open Application.Oracle
 
 type Command =
 | CollectGarbage // responds with CommandToParent.WorkingCopiesDeleted
@@ -22,21 +23,16 @@ let private masterPDBGarbageCollectorBody
     (parameters:Parameters)
     (oracleShortTaskExecutor:IActorRef<Application.OracleShortTaskExecutor.Command>)
     (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 
+    (workingCopyFactory:IActorRef<WorkingCopyFactoryActor.Command>)
     (instance:OracleInstance)
     (ctx : Actor<Command>) =
 
-    let deletePDB pdb : Exceptional<string> = 
-        oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
+    let deleteWorkingCopy pdb : OraclePDBResult = 
+        workingCopyFactory <? WorkingCopyFactoryActor.DeleteWorkingCopy (None, pdb, true)
         |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
     let getPDBNamesLike like : Exceptional<string list> = 
         oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBNamesLike like
         |> runWithin parameters.ShortTimeout id (fun () -> "cannot get PDB names : timeout exceeded" |> exn |> Error)
-    let isTempWorkingCopy (pdb:string) : Exceptional<bool> = result {
-        let! (folder:string option) = 
-            oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
-            |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
-        return folder |> Option.map (fun folder -> folder |> isTemporaryWorkingCopyFolder instance) |> Option.defaultValue false
-    }
     let toErrorMaybe result = match result with | Ok _ -> None | Error error -> Some error
 
     let rec loop () = actor {
@@ -51,7 +47,7 @@ let private masterPDBGarbageCollectorBody
                 instance.WorkingCopies
                 |> Map.toList |> List.map snd
                 |> List.filter isExpired
-                |> List.map (fun wc -> (wc, deletePDB wc.Name |> toErrorMaybe))
+                |> List.map (fun wc -> (wc, deleteWorkingCopy wc.Name |> toErrorMaybe))
             ctx.Sender() <! WorkingCopiesDeleted deletionResults
             
             let collectMasterPDBGarbage masterPDBName =
@@ -70,30 +66,23 @@ let private masterPDBGarbageCollectorBody
             return! stop () // short-lived actor
 
         | DeleteWorkingCopy (requestId, workingCopy) ->
-            ctx.Log.Value.Info("Deleting working copy {pdb} on instance {instance} requested", workingCopy, instance.Name)
-            let sender = ctx.Sender().Retype<Application.Oracle.OraclePDBResultWithReqId>()
-            let result = result {
-                let! isWorkingCopy = isTempWorkingCopy workingCopy
-                if isWorkingCopy then
-                    return! deletePDB workingCopy
-                else
-                    return! sprintf "PDB %s is not a temporary working copy" workingCopy |> exn |> Error
-            }
-            sender <! (requestId, result)
+            ctx.Log.Value.Warning("Deleting unregistered working copy {pdb} on instance {instance} requested", workingCopy, instance.Name)
+            workingCopyFactory <<! Application.WorkingCopyFactoryActor.DeleteWorkingCopy(Some requestId, workingCopy, true)
             return! stop () // short-lived actor
 
     }
 
     loop ()
 
-let spawn parameters shortTaskExecutor longTaskExecutor (instance:OracleInstance) (actorFactory:IActorRefFactory) =
+let spawn parameters shortTaskExecutor longTaskExecutor workingCopyFactory (instance:OracleInstance) (actorFactory:IActorRefFactory) =
 
     (Akkling.Spawn.spawnAnonymous actorFactory
         <| props (
-            masterPDBGarbageCollectorBody 
+            masterPDBGarbageCollectorBody
                 parameters
                 shortTaskExecutor
-                longTaskExecutor 
+                longTaskExecutor
+                workingCopyFactory
                 instance
         )).Retype<Command>()
 

@@ -139,6 +139,7 @@ type private Collaborators = {
     OracleLongTaskExecutor: IActorRef<Application.OracleLongTaskExecutor.Command>
     OracleDiskIntensiveTaskExecutor : IActorRef<Application.OracleDiskIntensiveActor.Command>
     MasterPDBActors: Map<string, IActorRef<obj>>
+    WorkingCopyFactory: IActorRef<WorkingCopyFactoryActor.Command>
 }
 
 // Spawn actor for a new master PDBs
@@ -154,7 +155,8 @@ let private addNewMasterPDB parameters (ctx : Actor<obj>) (instance : OracleInst
                         instance 
                         collaborators.OracleShortTaskExecutor
                         collaborators.OracleLongTaskExecutor 
-                        collaborators.OracleDiskIntensiveTaskExecutor 
+                        collaborators.OracleDiskIntensiveTaskExecutor
+                        collaborators.WorkingCopyFactory
                         newMasterPDBRepo
                         masterPDB) 
         }
@@ -200,14 +202,16 @@ let private spawnCollaborators parameters oracleAPI (getMasterPDBRepo:OracleInst
     let oracleShortTaskExecutor = ctx |> OracleShortTaskExecutor.spawn parameters oracleAPI
     let oracleLongTaskExecutor = ctx |> OracleLongTaskExecutor.spawn parameters oracleAPI
     let oracleDiskIntensiveTaskExecutor = ctx |> Application.OracleDiskIntensiveActor.spawn parameters oracleAPI
+    let workingCopyFactory = WorkingCopyFactoryActor.spawn parameters instance oracleShortTaskExecutor oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor ctx
     let collaborators = {
         OracleShortTaskExecutor = oracleShortTaskExecutor
         OracleLongTaskExecutor = oracleLongTaskExecutor
         OracleDiskIntensiveTaskExecutor = oracleDiskIntensiveTaskExecutor
         MasterPDBActors = 
             instance.MasterPDBs 
-            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn parameters instance oracleShortTaskExecutor oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo pdb))
+            |> List.map (fun pdb -> (pdb, ctx |> MasterPDBActor.spawn parameters instance oracleShortTaskExecutor oracleLongTaskExecutor oracleDiskIntensiveTaskExecutor workingCopyFactory getMasterPDBRepo pdb))
             |> Map.ofList
+        WorkingCopyFactory = workingCopyFactory
     }
     // Monitor death of master PDB actors : if one of them dies, this Oracle instance will be disabled
     collaborators.MasterPDBActors |> Map.iter (fun _ actor -> actor |> monitor ctx |> ignore)
@@ -375,21 +379,21 @@ let private oracleInstanceActorBody
                     let cancel = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
                         if not (wc.CreatedBy =~ user) // cannot force if not same user
                         then
-                            sprintf "working copy %s already exists and was created by a different user (%s), hence cannot be overwritten" wcName wc.CreatedBy |> Error |> Some
+                            sprintf "working copy %s already exists and was created by a different user (%s), so cannot be overwritten" wcName wc.CreatedBy |> Error |> Some
                         else
                             if force then None
                             else
                                 if not (wc.MasterPDBName =~ masterPDBName) || 
                                    (isDurable wc.Lifetime <> durable)
                                 then
-                                    sprintf "working copy %s already exists, but for a different master PDB/durability (%s/%s), hence cannot be overwritten" wcName wc.MasterPDBName (lifetimeType wc.Lifetime) |> Error |> Some
+                                    sprintf "working copy %s already exists, but for a different master PDB/durability (%s/%s), so cannot be overwritten" wcName wc.MasterPDBName (lifetimeType wc.Lifetime) |> Error |> Some
                                 else
                                     match wc.Source with
                                     | SpecificVersion version ->
                                         if version = versionNumber then None
-                                        else sprintf "working copy %s of %s already exists, but for a different version (%d), hence cannot be overwritten" wcName wc.MasterPDBName version |> Error |> Some
+                                        else sprintf "working copy %s of %s already exists, but for a different version (%d), so cannot be overwritten" wcName wc.MasterPDBName version |> Error |> Some
                                     | Edition ->
-                                        sprintf "working copy %s already exists, but for an edition of %s, hence cannot be overwritten" wcName wc.MasterPDBName |> Error |> Some
+                                        sprintf "working copy %s already exists, but for an edition of %s, so cannot be overwritten" wcName wc.MasterPDBName |> Error |> Some
                     )
                     match cancel with
                     | Some result ->
@@ -425,8 +429,9 @@ let private oracleInstanceActorBody
                             retype masterPDBActor <! MasterPDBActor.DeleteWorkingCopy (requestId, workingCopy)
                             return! loop { state with Requests = newRequests }
                     | None ->
+                        // The working copy is not registered, but try to delete the PDB anyway (only if in temporary folder)
                         let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                        let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
+                        let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor state.Collaborators.WorkingCopyFactory instance ctx
                         garbageCollector <! OracleInstanceGarbageCollector.DeleteWorkingCopy (requestId, wcName)
                         return! loop { state with Requests = newRequests }
 
@@ -447,14 +452,14 @@ let private oracleInstanceActorBody
                     let cancel = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
                         if not (wc.CreatedBy =~ user) // cannot force if not same user
                         then
-                            sprintf "working copy %s already exists and was created by a different user (%s), hence cannot be overwritten" wcName wc.CreatedBy |> Error |> Some
+                            sprintf "working copy %s already exists and was created by a different user (%s), so cannot be overwritten" wcName wc.CreatedBy |> Error |> Some
                         else
                             if force then None
                             else
                                 if not (wc.MasterPDBName =~ masterPDBName) || 
                                    (isDurable wc.Lifetime <> durable)
                                 then
-                                    Error <| sprintf "working copy %s already exists, but for a different master PDB/durability (%s/%s), hence cannot be overwritten" wcName wc.MasterPDBName (lifetimeType wc.Lifetime) |> Some
+                                    Error <| sprintf "working copy %s already exists, but for a different master PDB/durability (%s/%s), so cannot be overwritten" wcName wc.MasterPDBName (lifetimeType wc.Lifetime) |> Some
                                 else
                                     match wc.Source with
                                     | Edition -> None
@@ -483,7 +488,7 @@ let private oracleInstanceActorBody
 
                 | CollectGarbage ->
                     ctx.Log.Value.Info("Garbage collection of Oracle instance {instance} requested.", instance.Name)
-                    let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor instance ctx
+                    let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor state.Collaborators.WorkingCopyFactory instance ctx
                     garbageCollector <! OracleInstanceGarbageCollector.CollectGarbage
                     return! loop state
 

@@ -79,6 +79,15 @@ let validateNumberOfOracleDiskIntensiveTaskExecutors (config:IConfigurationRoot)
         else Invalid [ sprintf "config entry %s must be > 0" configEntry ]
     with _ -> Invalid [ sprintf "config entry %s is not a valid integer" configEntry ] 
 
+let validateNumberOfWorkingCopyWorkers (config:IConfigurationRoot) =
+    let configEntry = "NumberOfWorkingCopyWorkers"
+    try
+        let number = config.GetValue(configEntry, 10)
+        if (number > 0)
+        then number |> Valid
+        else Invalid [ sprintf "config entry %s must be > 0" configEntry ]
+    with _ -> Invalid [ sprintf "config entry %s is not a valid integer" configEntry ] 
+
 let validateTemporaryWorkingCopyLifetime (config:IConfigurationRoot) =
     let configEntry = "TemporaryWorkingCopyLifetimeInHours"
     try
@@ -97,6 +106,7 @@ let configToApplicationParameters (config:IConfigurationRoot) =
     let numberOfOracleLongTaskExecutors = validateNumberOfOracleLongTaskExecutors config
     let numberOfOracleDiskIntensiveTaskExecutors = validateNumberOfOracleDiskIntensiveTaskExecutors config
     let temporaryWorkingCopyLifetime = validateTemporaryWorkingCopyLifetime config
+    let numberOfWorkingCopyWorkers = validateNumberOfWorkingCopyWorkers config
     retn Application.Parameters.consParameters 
         <*> serverInstanceName
         <*> shortTimeout
@@ -106,6 +116,7 @@ let configToApplicationParameters (config:IConfigurationRoot) =
         <*> numberOfOracleLongTaskExecutors
         <*> numberOfOracleDiskIntensiveTaskExecutors
         <*> temporaryWorkingCopyLifetime
+        <*> numberOfWorkingCopyWorkers
 
 let validateRoot (config:IConfigurationRoot) = 
     let configEntry = "Root"

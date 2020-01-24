@@ -30,7 +30,8 @@ let private masterPDBVersionActorBody
     (instance:OracleInstance) 
     (oracleShortTaskExecutor:IActorRef<OracleShortTaskExecutor.Command>) 
     (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 
-    (oracleDiskIntensiveTaskExecutor:IActorRef<OracleDiskIntensiveActor.Command>) 
+    (oracleDiskIntensiveTaskExecutor:IActorRef<OracleDiskIntensiveActor.Command>)
+    (workingCopyFactory:IActorRef<Application.WorkingCopyFactoryActor.Command>)
     (masterPDBName:string)
     (masterPDBVersion:MasterPDBVersion) 
     (ctx : Actor<Command>) =
@@ -39,7 +40,7 @@ let private masterPDBVersionActorBody
     let pdbExists pdb : Exceptional<bool> = 
         oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
         |> runWithin parameters.ShortTimeout id (fun () -> sprintf "cannot check if PDB %s exists: timeout exceeded" pdb |> exn |> Error)
-    let deletePDB pdb : OraclePDBResult = 
+    let deleteSnaphotSourcePDB pdb : OraclePDBResult = 
         oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
         |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
     let isTempWorkingCopy (pdb:string) : Exceptional<bool> = result {
@@ -57,9 +58,6 @@ let private masterPDBVersionActorBody
     let importPDB manifest path name : OraclePDBResult =
         oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, name)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot import PDB %s : timeout exceeded" name |> exn |> Error)
-    let snapshotPDB source path name : OraclePDBResult =
-        oracleLongTaskExecutor <? OracleLongTaskExecutor.SnapshotPDB (None, source, path, name)
-        |> runWithin parameters.LongTimeout id (fun () -> sprintf "cannot snapshot PDB %s to %s : timeout exceeded" source name |> exn |> Error)
 
     let rec loop () =
         
@@ -78,23 +76,24 @@ let private masterPDBVersionActorBody
                     if isDurable <> durable then
                         return! Error <| (sprintf "working copy %s already exists but for a different durability (%s)" workingCopyName (lifetimeText isDurable) |> exn)
                     else
-                        return workingCopyName
+                        return Some workingCopyName
                 else
-                    let! _ = result {
+                    let! deleteFirst = result {
                         if wcExists then // force destruction
                             let! canDelete = 
                                 if durable then Ok true
                                 else isTempWorkingCopy workingCopyName
                             return!
                                 if canDelete then
-                                    deletePDB workingCopyName // force creation
+                                    Ok true // force creation
                                 else
-                                    Error <| (sprintf "PDB %s exists and is not a temporary working copy, hence cannot be overwritten" workingCopyName |> exn)
-                        else return ""
+                                    Error <| (sprintf "PDB %s exists and is not a temporary working copy, so cannot be overwritten" workingCopyName |> exn)
+                        else
+                            return false
                     }
                     let sourceManifest = Domain.MasterPDBVersion.manifestFile masterPDBName masterPDBVersion.VersionNumber
                     let destPath = instance |> getWorkingCopyFolder durable
-                    if (instance.SnapshotCapable && snapshot) then
+                    if instance.SnapshotCapable && snapshot then
                         let! snapshotSourceExists = pdbExists snapshotSourceName
                         let! _ = 
                             if (not snapshotSourceExists) then
@@ -102,24 +101,29 @@ let private masterPDBVersionActorBody
                             else
                                 ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
                                 Ok ""
-                        return! snapshotPDB snapshotSourceName destPath workingCopyName
+                        workingCopyFactory <<! WorkingCopyFactoryActor.CreateWorkingCopyBySnapshot(Some requestId, snapshotSourceName, destPath, workingCopyName, deleteFirst)
+                        return None
                     else
-                        return! importPDB sourceManifest destPath workingCopyName
+                        workingCopyFactory <<! WorkingCopyFactoryActor.CreateWorkingCopyByClone(Some requestId, sourceManifest, destPath, workingCopyName, deleteFirst)
+                        return None
             }
-            sender <! (requestId, result)
+            match result with
+            | Error error ->
+                sender <! (requestId, Error error)
+            | Ok (Some pdb) ->
+                sender <! (requestId, Ok pdb)
+            | Ok None -> ()
             return! loop ()
 
         | DeleteWorkingCopy (requestId, workingCopy) ->
             ctx.Log.Value.Info("Deleting working copy {pdb} on instance {instance} requested", workingCopy.Name, instance.Name)
-            let sender = ctx.Sender().Retype<Application.Oracle.OraclePDBResultWithReqId>()
-            let result = deletePDB workingCopy.Name
-            sender <! (requestId, result)
+            workingCopyFactory <<! WorkingCopyFactoryActor.DeleteWorkingCopy(Some requestId, workingCopy.Name, false)
             return! loop ()
 
         | CollectGarbage ->
             if instance.SnapshotCapable then
                 let _ = result {
-                    let! _ = deletePDB snapshotSourceName
+                    let! _ = deleteSnaphotSourcePDB snapshotSourceName
                     retype (ctx.Parent()) <! KillVersion masterPDBVersion.VersionNumber
                     return ()
                 }
@@ -139,7 +143,7 @@ let private masterPDBVersionActorBody
             // TODO : read manifest file and get Oracle files location
             // TODO : delete Oracle files
             // TODO : delete manifest file
-            if instance.SnapshotCapable then deletePDB snapshotSourceName |> ignore else ()
+            if instance.SnapshotCapable then deleteSnaphotSourcePDB snapshotSourceName |> ignore else ()
             retype (ctx.Parent()) <! KillVersion masterPDBVersion.VersionNumber
             return! loop ()
         
@@ -147,7 +151,13 @@ let private masterPDBVersionActorBody
 
     loop ()
 
-let spawn parameters instance shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor (masterPDBName:string) (masterPDBVersion:MasterPDBVersion) (actorFactory:IActorRefFactory) =
+let spawn 
+        parameters instance 
+        (shortTaskExecutor:IActorRef<Application.OracleShortTaskExecutor.Command>)
+        (longTaskExecutor:IActorRef<Application.OracleLongTaskExecutor.Command>) 
+        (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>)
+        (workingCopyFactory:IActorRef<Application.WorkingCopyFactoryActor.Command>)
+        (masterPDBName:string) (masterPDBVersion:MasterPDBVersion) (actorFactory:IActorRefFactory) =
 
     (Akkling.Spawn.spawnAnonymous actorFactory
         <| props (
@@ -156,7 +166,8 @@ let spawn parameters instance shortTaskExecutor longTaskExecutor oracleDiskInten
                 instance
                 shortTaskExecutor 
                 longTaskExecutor 
-                oracleDiskIntensiveTaskExecutor 
+                oracleDiskIntensiveTaskExecutor
+                workingCopyFactory
                 masterPDBName
                 masterPDBVersion
         )).Retype<Command>()

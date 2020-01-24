@@ -30,9 +30,10 @@ let parameters : Application.Parameters.Parameters = {
     LongTimeout = TimeSpan.FromMinutes(2.) |> Some
     VeryLongTimeout = TimeSpan.FromMinutes(20.) |> Some
 #endif
-    NumberOfOracleShortTaskExecutors = 5
+    NumberOfOracleShortTaskExecutors = 10
     NumberOfOracleLongTaskExecutors = 3
     NumberOfOracleDiskIntensiveTaskExecutors = 1
+    NumberOfWorkingCopyWorkers = 10
     TemporaryWorkingCopyLifetime = TimeSpan.FromMinutes(1.)
 }
 
@@ -371,7 +372,8 @@ let ``Lock master PDB`` () = test <| fun tck ->
     let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
-    let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
+    let workingCopyFactory = tck |> WorkingCopyFactoryActor.spawn parameters instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor
+    let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor workingCopyFactory getMasterPDBRepo "test1"
     
     retype masterPDBActor <! MasterPDBActor.PrepareForModification (newRequestId(), 1, "me")
 
@@ -466,7 +468,8 @@ let ``MasterPDB creates a clone working copy`` () = test <| fun tck ->
     let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
-    let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
+    let workingCopyFactory = tck |> WorkingCopyFactoryActor.spawn parameters instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor
+    let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor workingCopyFactory getMasterPDBRepo "test1"
     
     let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "WORKINGCOPY", false, false, false) |> run
     result |> Result.mapError raise |> ignore
@@ -477,7 +480,8 @@ let ``MasterPDB creates a snapshot working copy`` () = test <| fun tck ->
     let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
-    let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor getMasterPDBRepo "test1"
+    let workingCopyFactory = tck |> WorkingCopyFactoryActor.spawn parameters instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor
+    let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor workingCopyFactory getMasterPDBRepo "test1"
     
     let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "WORKINGCOPY", true, false, false) |> run
     result |> Result.mapError raise |> ignore

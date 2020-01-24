@@ -9,17 +9,19 @@ type Parameters = {
     NumberOfOracleLongTaskExecutors : int
     NumberOfOracleDiskIntensiveTaskExecutors : int
     TemporaryWorkingCopyLifetime : System.TimeSpan
+    NumberOfWorkingCopyWorkers : int
 }
 
-let consParameters 
-    serverInstanceName 
-    shortTimeout 
-    longTimeout 
-    veryLongTimeout 
-    numberOfOracleShortTaskExecutors 
-    numberOfOracleLongTaskExecutors 
-    numberOfOracleDiskIntensiveTaskExecutors 
-    temporaryWorkingCopyLifetime = 
+let consParameters
+    serverInstanceName
+    shortTimeout
+    longTimeout
+    veryLongTimeout
+    numberOfOracleShortTaskExecutors
+    numberOfOracleLongTaskExecutors
+    numberOfOracleDiskIntensiveTaskExecutors
+    temporaryWorkingCopyLifetime
+    numberOfWorkingCopyWorkers = 
     {
         ServerInstanceName = serverInstanceName
         ShortTimeout = shortTimeout
@@ -29,4 +31,5 @@ let consParameters
         NumberOfOracleLongTaskExecutors = numberOfOracleLongTaskExecutors
         NumberOfOracleDiskIntensiveTaskExecutors = numberOfOracleDiskIntensiveTaskExecutors
         TemporaryWorkingCopyLifetime = temporaryWorkingCopyLifetime
+        NumberOfWorkingCopyWorkers = numberOfWorkingCopyWorkers
     }

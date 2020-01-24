@@ -19,20 +19,13 @@ let private masterPDBEditionActorBody
     (parameters:Parameters)
     (instance:OracleInstance) 
     (oracleShortTaskExecutor:IActorRef<OracleShortTaskExecutor.Command>) 
-    (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 
-    (oracleDiskIntensiveTaskExecutor:IActorRef<OracleDiskIntensiveActor.Command>) 
+    (workingCopyFactory:IActorRef<Application.WorkingCopyFactoryActor.Command>)
     (editionPDBName:string)
     (ctx : Actor<Command>) =
 
     let pdbExists pdb : Exceptional<bool> = 
         oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
         |> runWithin parameters.ShortTimeout id (fun () -> sprintf "cannot check if PDB %s exists: timeout exceeded" pdb |> exn |> Error)
-    let deletePDB pdb : OraclePDBResult = 
-        oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
-        |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
-    let cloneEditionPDB durable name : OraclePDBResult =
-        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ClonePDB (None, editionPDBName, instance |> getWorkingCopyFolder durable, name)
-        |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot clone PDB %s to %s : timeout exceeded" editionPDBName name |> exn |> Error)
     let isTempWorkingCopy (pdb:string) : Exceptional<bool> = result {
         let! (folder:string option) = 
             oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
@@ -63,46 +56,54 @@ let private masterPDBEditionActorBody
                     if isDurable <> durable then
                         return! Error <| (sprintf "working copy %s already exists but for a different durability (%s)" workingCopyName (lifetimeText isDurable) |> exn)
                     else
-                        return workingCopyName
+                        return Some workingCopyName
                 else
-                    let! _ = result {
-                        if wcExists then // force destruction
+                    let! deleteFirst = result {
+                        if wcExists then
                             let! canDelete = 
                                 if durable then Ok true
                                 else isTempWorkingCopy workingCopyName
                             return!
                                 if canDelete then
-                                    deletePDB workingCopyName // force creation
+                                    Ok true
                                 else
-                                    Error <| (sprintf "PDB %s exists and is not a temporary working copy, hence cannot be overwritten" workingCopyName |> exn)
-                        else return ""
+                                    Error <| (sprintf "PDB %s exists and is not a temporary working copy, so cannot be overwritten" workingCopyName |> exn)
+                        else
+                            return false
                     }
-                    return! workingCopyName |> cloneEditionPDB durable
+                    workingCopyFactory <<! WorkingCopyFactoryActor.CreateWorkingCopyOfEdition(Some requestId, editionPDBName, (instance |> getWorkingCopyFolder durable), workingCopyName, deleteFirst)
+                    return None
             }
-            sender <! (requestId, result)
+            match result with
+            | Error error ->
+                sender <! (requestId, Error error)
+            | Ok (Some pdb) ->
+                sender <! (requestId, Ok pdb)
+            | Ok None -> ()
             return! loop ()
         
         | DeleteWorkingCopy (requestId, workingCopy) ->
             ctx.Log.Value.Info("Deleting edition working copy {pdb} on instance {instance} requested", workingCopy.Name, instance.Name)
-            let sender = ctx.Sender().Retype<Application.Oracle.OraclePDBResultWithReqId>()
-            let result = deletePDB workingCopy.Name
-            sender <! (requestId, result)
+            workingCopyFactory <<! WorkingCopyFactoryActor.DeleteWorkingCopy(Some requestId, workingCopy.Name, false)
             return! loop ()
 
         }
 
     loop ()
 
-let spawn parameters instance shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor (editionPDBName:string) (actorFactory:IActorRefFactory) =
+let spawn 
+        parameters instance 
+        (shortTaskExecutor:IActorRef<Application.OracleShortTaskExecutor.Command>)
+        (workingCopyFactory:IActorRef<Application.WorkingCopyFactoryActor.Command>)
+        (editionPDBName:string) (actorFactory:IActorRefFactory) =
 
     (Akkling.Spawn.spawn actorFactory "edition"
         <| props (
-            masterPDBEditionActorBody 
+            masterPDBEditionActorBody
                 parameters
                 instance
-                shortTaskExecutor 
-                longTaskExecutor 
-                oracleDiskIntensiveTaskExecutor 
+                shortTaskExecutor
+                workingCopyFactory
                 editionPDBName
         )).Retype<Command>()
 
