@@ -121,11 +121,21 @@ let instance2 =
 
 type FakeOracleAPI(existingPDBs : Set<string>) = 
     let mutable _existingPDBs = existingPDBs |> Set.map (fun pdb -> pdb.ToUpper())
+    let _existingPDBsLock = new Object()
     let mutable _pdbFolderMap : Map<string, string> = Map.empty
+    let _pdbFolderMapLock = new Object()
+
+    let addExistingPDB (pdb:string) = lock _existingPDBsLock (fun () -> _existingPDBs <- _existingPDBs |> Set.add (pdb.ToUpper()))
+    let removeExistingPDB (pdb:string) = lock _existingPDBsLock (fun () -> _existingPDBs <- _existingPDBs |> Set.remove (pdb.ToUpper()))
+    let pdbExists (pdb:string) = lock _existingPDBsLock (fun () -> _existingPDBs |> Set.contains (pdb.ToUpper()))
+
+    let addPDBFolder (pdb:string) folder = lock _pdbFolderMapLock (fun () -> _pdbFolderMap <- _pdbFolderMap |> Map.add (pdb.ToUpper()) folder)
+    let removePDBFolder (pdb:string) = lock _pdbFolderMapLock (fun () -> _pdbFolderMap <- _pdbFolderMap |> Map.remove (pdb.ToUpper()))
+    let getPDBFolder (pdb:string) = lock _pdbFolderMapLock (fun () -> _pdbFolderMap |> Map.tryFind (pdb.ToUpper()))
+
     member __.Logger = loggerFactory.CreateLogger("Fake Oracle API")
-    member val ExistingPDBs = _existingPDBs with get, set
-    member this.AddPDBFolder (pdb:string) folder = _pdbFolderMap <- _pdbFolderMap |> Map.add (pdb.ToUpper()) folder
-    member this.RemovePDBFolder (pdb:string) = _pdbFolderMap <- _pdbFolderMap |> Map.remove (pdb.ToUpper())
+    member __.AddPDBFolder (pdb:string) folder = addPDBFolder pdb folder
+
     interface IOracleAPI with
         member this.NewPDBFromDump _ name _ _ _ = async {
             this.Logger.LogDebug("Creating new PDB {PDB}...", name)
@@ -139,12 +149,12 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
             return Ok name 
         }
         member this.DeletePDB name = async { 
-            if not (this.ExistingPDBs |> Set.contains (name.ToUpper())) then
+            if not (pdbExists name) then
                 return sprintf "%s does not exist" name |> exn |> Error
             else
                 this.Logger.LogDebug("Deleting PDB {PDB}...", name)
-                this.ExistingPDBs <- this.ExistingPDBs |> Set.remove (name.ToUpper())
-                this.RemovePDBFolder name
+                removeExistingPDB name
+                removePDBFolder name
                 return Ok name 
         }
         member this.ExportPDB _ name = async { 
@@ -153,34 +163,34 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
         }
         member this.ImportPDB _ folder name = async { 
             this.Logger.LogDebug("Importing PDB {PDB}...", name)
-            this.ExistingPDBs <- this.ExistingPDBs.Add (name.ToUpper())
-            this.AddPDBFolder name folder
+            addExistingPDB name
+            addPDBFolder name folder
             return Ok name 
         }
         member this.SnapshotPDB sourcePDB folder name = async { 
             this.Logger.LogDebug("Snapshoting PDB {sourcePDB} to {snapshotCopy}...", sourcePDB, name)
-            this.ExistingPDBs <- this.ExistingPDBs.Add (name.ToUpper())
-            this.AddPDBFolder name folder
+            addExistingPDB name
+            addPDBFolder name folder
             return Ok name 
         }
         member this.ClonePDB sourcePDB folder name = async { 
             this.Logger.LogDebug("Cloning PDB {sourcePDB} to {destPDB}...", sourcePDB, name)
-            this.ExistingPDBs <- this.ExistingPDBs.Add (name.ToUpper())
-            this.AddPDBFolder name folder
+            addExistingPDB name
+            addPDBFolder name folder
             return Ok name 
         }
         member this.PDBHasSnapshots _ = async { 
             return Ok false
         }
         member this.PDBExists name = async { 
-            return Ok (this.ExistingPDBs |> Set.contains (name.ToUpper()))
+            return Ok <| pdbExists name
         }
         member this.PDBSnapshots name = async {
             return Ok []
         }
         member this.GetPDBNamesLike (like:string) = raise (System.NotImplementedException())
         member this.GetPDBFilesFolder name = async { 
-            return _pdbFolderMap |> Map.tryFind (name.ToUpper()) |> Ok
+            return (getPDBFolder name |> Ok)
         }
  
 type FakeOracleInstanceRepo(instance) =
@@ -544,7 +554,7 @@ let ``API creates a snapshot working copy`` () = test <| fun tck ->
 [<Fact>]
 let ``API must create the PDB if not exists even if working copy registered`` () = test <| fun tck ->
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "WORKINGCOPY", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" "WORKINGCOPY" ] |> Map.ofList }) :> IOracleInstanceRepository
-    let oracleAPI = FakeOracleAPI(Set.empty)
+    let oracleAPI = FakeOracleAPI(Set.empty) :> IOracleAPI
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
@@ -554,7 +564,9 @@ let ``API must create the PDB if not exists even if working copy registered`` ()
     Assert.True(data |> List.contains (PDBService "server1.com/WORKINGCOPY"))
     Assert.True(data |> List.contains (OracleInstance "server1"))
 
-    Assert.True(oracleAPI.ExistingPDBs |> Set.contains "WORKINGCOPY", "the PDB was not created")
+    let pdbExists = oracleAPI.PDBExists "WORKINGCOPY" |> Async.RunSynchronously
+    pdbExists |> Result.map (fun exists -> Assert.True(exists, "the PDB was not created")) |> ignore
+    pdbExists |> Result.mapError raise |> ignore
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
