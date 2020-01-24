@@ -72,12 +72,10 @@ let private getOrSpawnVersionActor parameters instance (masterPDBName:string) (v
         { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Add(version.VersionNumber, versionActor) }, 
         versionActor
 
-let private getOrSpawnEditionActor parameters instance (editionPDBName:string) collaborators workingCopyFactory ctx =
+let private getOrSpawnEditionActor instance (editionPDBName:string) collaborators workingCopyFactory ctx =
         let editionActor = collaborators.MasterPDBEditionActor |> Option.defaultWith (fun () ->
             ctx |> MasterPDBEditionActor.spawn 
-                parameters
                 instance
-                collaborators.OracleShortTaskExecutor
                 workingCopyFactory
                 editionPDBName)
         
@@ -269,7 +267,7 @@ let private masterPDBActorBody
                             sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name |> exn))
                             return! loop state
                         else
-                            let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators workingCopyFactory ctx
+                            let newCollabs, editionActor = getOrSpawnEditionActor instance editionPDBName state.Collaborators workingCopyFactory ctx
                             editionActor <<! MasterPDBEditionActor.DeleteWorkingCopy (requestId, workingCopy)
                             return! loop { state with Collaborators = newCollabs }
 
@@ -285,7 +283,7 @@ let private masterPDBActorBody
                             sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name |> exn))
                             return! loop state
                         else
-                            let newCollabs, editionActor = getOrSpawnEditionActor parameters instance editionPDBName state.Collaborators workingCopyFactory ctx
+                            let newCollabs, editionActor = getOrSpawnEditionActor instance editionPDBName state.Collaborators workingCopyFactory ctx
                             editionActor <<! MasterPDBEditionActor.CreateWorkingCopy (requestId, workingCopyName, durable, bool)
                             return! loop { state with Collaborators = newCollabs }
 

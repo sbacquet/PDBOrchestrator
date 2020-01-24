@@ -10,11 +10,12 @@ open Domain.Common
 open Application.Common
 open Application
 open Akka.Routing
+open Domain.MasterPDBWorkingCopy
 
 type Command =
-| CreateWorkingCopyBySnapshot of WithOptionalRequestId<string, string, string, bool> // responds with OraclePDBResultWithReqId
-| CreateWorkingCopyByClone of WithOptionalRequestId<string, string, string, bool> // responds with OraclePDBResultWithReqId
-| CreateWorkingCopyOfEdition of WithOptionalRequestId<string, string, string, bool> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopyBySnapshot of WithOptionalRequestId<string, string, string, bool, bool> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopyByClone of WithOptionalRequestId<string, string, string, bool, bool> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopyOfEdition of WithOptionalRequestId<string, string, string, bool, bool> // responds with OraclePDBResultWithReqId
 | DeleteWorkingCopy of WithOptionalRequestId<string, bool>
 
 let private workingCopyFactoryActorBody 
@@ -41,58 +42,67 @@ let private workingCopyFactoryActorBody
         let! (folder:string option) = 
             oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
             |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
-        return folder |> Option.map (fun folder -> folder |> Domain.OracleInstance.isTemporaryWorkingCopyFolder instance) |> Option.defaultValue false
+        return folder |> Option.map (Domain.OracleInstance.isTemporaryWorkingCopyFolder instance) |> Option.defaultValue false
+    }
+    let isDurableWorkingCopy (pdb:string) : Exceptional.Exceptional<bool> = result {
+        let! (folder:string option) = 
+            oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBFilesFolder pdb
+            |> runWithin parameters.ShortTimeout id (fun () -> "cannot get files folder : timeout exceeded" |> exn |> Error)
+        return folder |> Option.map (Domain.OracleInstance.isDurableWorkingCopyFolder instance) |> Option.defaultValue false
+    }
+    let pdbExists pdb : Exceptional.Exceptional<bool> = 
+        oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
+        |> runWithin parameters.ShortTimeout id (fun () -> sprintf "cannot check if PDB %s exists: timeout exceeded" pdb |> exn |> Error)
+    let reply (requestId:RequestId option) (result:OraclePDBResult) =
+        match requestId with
+        | Some requestId -> ctx.Sender() <! (requestId, result)
+        | None -> ctx.Sender() <! result
+    let createWorkingCopyIfNeeded workingCopyName durable force builder = result {
+        let! wcExists = pdbExists workingCopyName
+        // if the working copy already exists and not forcing, keep it if same durability
+        if wcExists && not force then
+            let! isDurable = isDurableWorkingCopy workingCopyName
+            if isDurable <> durable then
+                return! Error <| (sprintf "working copy %s already exists but for a different durability (%s)" workingCopyName (lifetimeText isDurable) |> exn)
+            else
+                return workingCopyName
+        else
+            let! _ = result {
+                if wcExists then
+                    let! canDelete = 
+                        if durable then Ok true
+                        else isTempWorkingCopy workingCopyName
+                    return!
+                        if canDelete then
+                            deletePDB workingCopyName
+                        else
+                            Error <| (sprintf "PDB %s exists and is not a temporary working copy, so cannot be overwritten" workingCopyName |> exn)
+                else
+                    return ""
+            }
+            return! builder workingCopyName
     }
 
     let rec loop () = actor {
 
         let! command = ctx.Receive()
 
-        let reply (requestId:RequestId option) (result:OraclePDBResult) =
-            match requestId with
-            | Some requestId -> ctx.Sender() <! (requestId, result)
-            | None -> ctx.Sender() <! result
-
         match command with
-        | CreateWorkingCopyBySnapshot (requestId, snapshotSourceName, destPath, workingCopyName, deleteFirst) -> 
+        | CreateWorkingCopyBySnapshot (requestId, snapshotSourceName, destPath, workingCopyName, durable, force) -> 
             ctx.Log.Value.Info("Creating working copy {pdb} by snapshot...", workingCopyName)
-            let result = result {
-                let! _ =
-                    if deleteFirst then
-                        deletePDB workingCopyName
-                    else
-                        Ok ""
-                return! snapshotPDB snapshotSourceName destPath workingCopyName
-            }
-            ctx.Log.Value.Info("Working copy {pdb} created by snapshot.", workingCopyName)
+            let result = createWorkingCopyIfNeeded workingCopyName durable force <| snapshotPDB snapshotSourceName destPath
             result |> reply requestId
             return! loop ()
 
-        | CreateWorkingCopyByClone (requestId, sourceManifest, destPath, workingCopyName, deleteFirst) -> 
+        | CreateWorkingCopyByClone (requestId, sourceManifest, destPath, workingCopyName, durable, force) -> 
             ctx.Log.Value.Info("Creating working copy {pdb} by clone...", workingCopyName)
-            let result = result {
-                let! _ =
-                    if deleteFirst then
-                        deletePDB workingCopyName
-                    else
-                        Ok ""
-                return! importPDB sourceManifest destPath workingCopyName
-            }
-            ctx.Log.Value.Info("Working copy {pdb} created by clone.", workingCopyName)
+            let result = createWorkingCopyIfNeeded workingCopyName durable force <| importPDB sourceManifest destPath
             result |> reply requestId
             return! loop ()
 
-        | CreateWorkingCopyOfEdition (requestId, editionPDBName, destPath, workingCopyName, deleteFirst) ->
+        | CreateWorkingCopyOfEdition (requestId, editionPDBName, destPath, workingCopyName, durable, force) ->
             ctx.Log.Value.Info("Creating working copy {pdb} of edition...", workingCopyName)
-            let result = result {
-                let! _ =
-                    if deleteFirst then
-                        deletePDB workingCopyName
-                    else
-                        Ok ""
-                return! clonePDB editionPDBName destPath workingCopyName
-            }
-            ctx.Log.Value.Info("Working copy {pdb} of edition created.", workingCopyName)
+            let result = createWorkingCopyIfNeeded workingCopyName durable force <| clonePDB editionPDBName destPath
             result |> reply requestId
             return! loop ()
 
@@ -123,9 +133,9 @@ let spawn parameters instance shortTaskExecutor longTaskExecutor oracleDiskInten
         match command with
         | :? Command as command -> 
             match command with
-            | CreateWorkingCopyBySnapshot (_, _, _, workingCopyName, _)
-            | CreateWorkingCopyByClone (_, _, _, workingCopyName, _)
-            | CreateWorkingCopyOfEdition (_, _, _, workingCopyName, _)
+            | CreateWorkingCopyBySnapshot (_, _, _, workingCopyName, _, _)
+            | CreateWorkingCopyByClone (_, _, _, workingCopyName, _, _)
+            | CreateWorkingCopyOfEdition (_, _, _, workingCopyName, _, _)
             | DeleteWorkingCopy (_, workingCopyName, _) 
                 -> upcast workingCopyName
         | _ -> upcast ""
