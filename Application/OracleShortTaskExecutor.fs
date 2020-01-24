@@ -16,9 +16,9 @@ let private oracleShortTaskExecutorBody (parameters:Parameters) (oracleAPI : IOr
 
         actor {
 
-        let! n = ctx.Receive()
+        let! command = ctx.Receive()
 
-        match n with
+        match command with
         | PDBExists pdb ->
             let! exists = oracleAPI.PDBExists pdb
             ctx.Sender() <! exists

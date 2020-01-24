@@ -228,11 +228,12 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 
     let rec loop state = 
 
-        if state.PreviousOrchestrator <> state.Orchestrator then
-            ctx.Log.Value.Debug("Persisted modified orchestrator")
-            loop { state with Repository = state.Repository.Put state.Orchestrator; PreviousOrchestrator = state.Orchestrator }
+        actor {
 
-        else 
+            if state.PreviousOrchestrator <> state.Orchestrator then
+                ctx.Log.Value.Debug("Persisted modified orchestrator")
+                return! loop { state with Repository = state.Repository.Put state.Orchestrator; PreviousOrchestrator = state.Orchestrator }
+            else 
 
             if ctx.Log.Value.IsDebugEnabled then
                 let count = state.PendingRequests |> alivePendingRequests |> Seq.length in 
@@ -240,8 +241,6 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let count = state.CompletedRequests.Count in 
                     if count > 0 then ctx.Log.Value.Debug("Number of completed requests : {0}", count)
             
-            actor {
-
             let! (msg:obj) = ctx.Receive()
 
             match msg with
@@ -275,7 +274,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | _ -> 
                 return! loop state
         
-            }
+        }
 
     and handleCommand state command = 
         let sender = ctx.Sender().Retype<RequestValidation>()

@@ -18,9 +18,9 @@ let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : 
 
         actor {
 
-        let! n = ctx.Receive()
+        let! command = ctx.Receive()
 
-        match n with
+        match command with
         | ImportPDB (requestId, manifest, dest, name) -> 
             stopWatch.Restart()
             let! result = oracleAPI.ImportPDB manifest dest name

@@ -23,15 +23,13 @@ type Command =
 
 let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
-    let stopWatch = System.Diagnostics.Stopwatch()
-
     let rec loop () =
         
         actor {
 
-        let! n = ctx.Receive()
+        let! command = ctx.Receive()
 
-        match n with
+        match command with
         | CreatePDBFromDump (requestId, pars) -> 
             let! result = 
                 oracleAPI.NewPDBFromDump 
@@ -53,10 +51,7 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             return! loop ()
 
         | SnapshotPDB (requestId, from, dest, name) -> 
-            stopWatch.Restart()
             let! result = oracleAPI.SnapshotPDB from dest name
-            stopWatch.Stop()
-            result |> Result.map (fun snap -> ctx.Log.Value.Info("Snapshot {snapshot} created in {0} s", snap, stopWatch.Elapsed.TotalSeconds)) |> ignore
             match requestId with
             | Some reqId -> ctx.Sender() <! (reqId, result)
             | None -> ctx.Sender() <! result

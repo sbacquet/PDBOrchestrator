@@ -113,15 +113,14 @@ let private masterPDBActorBody
         let collaborators = state.Collaborators
         let manifestFromVersion = Domain.MasterPDBVersion.manifestFile masterPDB.Name
 
-        if state.PreviousMasterPDB <> masterPDB then
-            ctx.Log.Value.Debug("Persisted modified master PDB {pdb}", masterPDB.Name)
-            loop { state with Repository = state.Repository.Put masterPDB; PreviousMasterPDB = masterPDB }
-        
-        else 
-            
-            if requests.Count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
+        actor {
 
-            actor {
+            if state.PreviousMasterPDB <> masterPDB then
+                ctx.Log.Value.Debug("Persisted modified master PDB {pdb}", masterPDB.Name)
+                return! loop { state with Repository = state.Repository.Put masterPDB; PreviousMasterPDB = masterPDB }
+            else 
+            
+            let count = requests.Count in if count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", count)
 
             let! msg = ctx.Receive()
         
@@ -402,7 +401,7 @@ let private masterPDBActorBody
 
             | _ -> return! loop state
         
-            }
+        }
 
     let collaborators = { 
         MasterPDBVersionActors = Map.empty

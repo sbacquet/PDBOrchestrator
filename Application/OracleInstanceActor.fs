@@ -247,25 +247,23 @@ let private oracleInstanceActorBody
         let requests = state.Requests
         let pdbService = pdbServiceFromInstance instance
 
-        if state.PreviousInstance <> instance then
-            let newRepo =
-                if { state.PreviousInstance with WorkingCopies = Map.empty } = { instance with WorkingCopies = Map.empty } then
-                    ctx.Log.Value.Debug("Persisted working copies of Oracle instance {instance}", instance.Name)
-                    state.Repository.PutWorkingCopiesOnly instance
-                else
-                    ctx.Log.Value.Debug("Persisted modified Oracle instance {instance}", instance.Name)
-                    state.Repository.Put instance
-            loop { state with Repository = newRepo; PreviousInstance = instance }
+        actor {
 
-        else 
+            if state.PreviousInstance <> instance then
+                let newRepo =
+                    if { state.PreviousInstance with WorkingCopies = Map.empty } = { instance with WorkingCopies = Map.empty } then
+                        ctx.Log.Value.Debug("Persisted working copies of Oracle instance {instance}", instance.Name)
+                        state.Repository.PutWorkingCopiesOnly instance
+                    else
+                        ctx.Log.Value.Debug("Persisted modified Oracle instance {instance}", instance.Name)
+                        state.Repository.Put instance
+                return! loop { state with Repository = newRepo; PreviousInstance = instance }
+            else 
             
-            if requests.Count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", requests.Count)
-
-            actor {
+            let count = requests.Count in if count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", count)
 
             let! msg = ctx.Receive()
 
-            //try
             match msg with
             | :? Command as command ->
                 match command with
@@ -676,7 +674,7 @@ let private oracleInstanceActorBody
             
             | _ -> return! loop state
         
-            }
+        }
 
     let collaborators = ctx |> spawnCollaborators parameters oracleAPI getMasterPDBRepo initialInstance
 
