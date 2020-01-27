@@ -11,7 +11,7 @@ let [<Literal>]testFolder = __SOURCE_DIRECTORY__ + @"\tests\instances"
 [<Fact>]
 let ``Save and load Oracle instance`` () =
     let instance1Name = "test1"
-    let repo = OracleInstanceRepository((fun _ _ -> raise), testFolder, instance1Name, "A") :> IOracleInstanceRepository
+    let repo = OracleInstanceRepository((fun _ _ -> raise), None, testFolder, instance1Name, "A") :> IOracleInstanceRepository
     let wc = [ newTempWorkingCopy (System.TimeSpan.FromHours(12.)) "me" (SpecificVersion 13) "test1" "wc" ]
     let instance1 =
         consOracleInstance
@@ -36,7 +36,7 @@ let ``Save and load Oracle instance`` () =
 let ``Log error when saving Oracle instance`` () =
     let mutable passedHere = false
     let instance1Name = "test1"
-    let repo = OracleInstanceRepository((fun _ _ _ -> passedHere <- true), "*", instance1Name, "A") :> IOracleInstanceRepository
+    let repo = OracleInstanceRepository((fun _ _ _ -> passedHere <- true), None, "*", instance1Name, "A") :> IOracleInstanceRepository
     let instance1 =
         consOracleInstance
             [ "test1"; "test2" ]

@@ -106,16 +106,54 @@ let main args =
     let orchestratorName = "orchestrator"
     let orchestratorPath = System.IO.Path.Combine(rootFolder, orchestratorName)
 
-    let logOrchestratorSaveFailure (path:string) (ex:exn) = Log.Error(ex, "Cannot write modifications done in orchestrator to file {path}", path)
-    let orchestratorRepo = OrchestratorRepository.OrchestratorRepository(logOrchestratorSaveFailure, orchestratorPath, orchestratorName) :> IOrchestratorRepository
+    let gitParamsForOrchestrator : Infrastructure.OrchestratorRepository.GitParams = {
+        LogError = fun _ error -> Log.Error("Cannot commit modifications done in orchestrator : Git returned : {ex}", error)
+        GetModifyComment = fun _ -> "Modified orchestrator"
+    }
+    let logOrchestratorSaveFailure (path:string) (ex:exn) = 
+        Log.Error("Cannot write modifications done in orchestrator to file {path} : {ex}", path, ex.Message)
+    let orchestratorRepo = 
+        OrchestratorRepository.OrchestratorRepository(
+            logOrchestratorSaveFailure, 
+            gitParamsForOrchestrator |> Some, 
+            orchestratorPath, 
+            orchestratorName) :> IOrchestratorRepository
 
-    let logOracleInstanceSaveFailure (instance:string) (path:string) (ex:exn) = Log.Error(ex, "Cannot write modifications done in Oracle instance {instance} to file {path}", instance, path)
-    let getOracleInstanceRepo name = OracleInstanceRepository.OracleInstanceRepository(logOracleInstanceSaveFailure, orchestratorPath, name, validApplicationParameters.ServerInstanceName) :> IOracleInstanceRepository
+    let logOracleInstanceSaveFailure (instance:string) (path:string) (ex:exn) = 
+        Log.Error("Error while writing modifications done in Oracle instance {instance} to file {path} : {ex}", instance, path, ex.Message)
+    let gitParamsForOracleInstance : Infrastructure.OracleInstanceRepository.GitParams = {
+        LogError = fun instance error -> Log.Error("Cannot commit modifications done in Oracle instance {instance} : Git returned : {ex}", instance, error)
+        GetModifyComment = sprintf "Modified Oracle instance %s"
+        GetAddComment = sprintf "Added Oracle instance %s"
+    }
+    let getOracleInstanceRepo name = 
+        OracleInstanceRepository.OracleInstanceRepository(
+            logOracleInstanceSaveFailure, 
+            gitParamsForOracleInstance |> Some, 
+            orchestratorPath, 
+            name, 
+            validApplicationParameters.ServerInstanceName) :> IOracleInstanceRepository
     let getInstanceFolder = OracleInstanceRepository.instanceFolder orchestratorPath
 
-    let logMasterPDBSaveFailure (pdb:string) (path:string) (ex:exn) = Log.Error(ex, "Cannot write modifications done in master PDB {pdb} to file {path}", pdb, path)
-    let getMasterPDBRepo (instance:OracleInstance) name = MasterPDBRepository.MasterPDBRepository(logMasterPDBSaveFailure, getInstanceFolder instance.Name, name) :> IMasterPDBRepository
-    let newMasterPDBRepo (instance:OracleInstance) pdb = MasterPDBRepository.NewMasterPDBRepository(logMasterPDBSaveFailure, getInstanceFolder instance.Name, pdb) :> IMasterPDBRepository
+    let logMasterPDBSaveFailure (pdb:string) (path:string) (ex:exn) = 
+        Log.Error("Cannot write modifications done in master PDB {pdb} to file {path} : {ex}", pdb, path, ex.Message)
+    let gitParamsForMasterPDB instance : Infrastructure.MasterPDBRepository.GitParams = {
+        LogError = fun pdb error -> Log.Error("Cannot commit modifications done in master PDB {pdb} : Git returned : {ex}", pdb, error)
+        GetModifyComment = fun name -> sprintf "Modified master PDB %s on Oracle instance %s" name instance.Name
+        GetAddComment = fun name -> sprintf "Added master PDB %s to Oracle instance %s" name instance.Name
+    }
+    let getMasterPDBRepo (instance:OracleInstance) name = 
+        MasterPDBRepository.MasterPDBRepository(
+            logMasterPDBSaveFailure,
+            gitParamsForMasterPDB instance |> Some,
+            getInstanceFolder instance.Name, 
+            name) :> IMasterPDBRepository
+    let newMasterPDBRepo (instance:OracleInstance) pdb = 
+        MasterPDBRepository.NewMasterPDBRepository(
+            logMasterPDBSaveFailure, 
+            gitParamsForMasterPDB instance |> Some,
+            getInstanceFolder instance.Name, 
+            pdb) :> IMasterPDBRepository
 
     let loggerFactory = new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory
     let getOracleAPI (instance:OracleInstance) = OracleInstanceAPI.OracleInstanceAPI(loggerFactory, instance)

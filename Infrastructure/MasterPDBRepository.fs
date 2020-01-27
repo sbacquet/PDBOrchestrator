@@ -25,19 +25,49 @@ let saveMasterPDB folder name pdb =
     stream.Write json
     stream.Flush()
     
-type MasterPDBRepository(logFailure, folder, name) = 
+type GitParams = {
+    LogError : string -> string -> unit
+    GetModifyComment : string -> string
+    GetAddComment : string -> string
+}
+
+type MasterPDBRepository(logFailure, gitParams, folder, name) = 
     interface IMasterPDBRepository with
         member __.Get () = loadMasterPDB folder name
-        member __.Put pdb = 
+        member __.Put pdb =
             try
+                // 1. Save instance to file
                 pdb |> saveMasterPDB folder name
+                // 2. Commit file to Git
+                gitParams |> Option.map (fun gitParams ->
+                masterPDBPath "." name
+                |> GIT.commitFile folder (gitParams.GetModifyComment name)
+                |> Result.mapError (gitParams.LogError pdb.Name)) 
+                |> ignore
             with
             | ex -> logFailure pdb.Name (masterPDBPath folder name) ex
             upcast __
 
-type NewMasterPDBRepository(logFailure, folder, pdb) = 
+type NewMasterPDBRepository(logFailure, gitParams, folder, pdb) = 
     interface IMasterPDBRepository with
         member __.Get () = pdb
-        member __.Put pdb = 
-            let newRepo = MasterPDBRepository(logFailure, folder, pdb.Name) :> IMasterPDBRepository
-            newRepo.Put pdb
+        member __.Put _ = 
+            let filePath = masterPDBPath "." pdb.Name
+            // 1. Add file to Git
+            gitParams |> Option.map (fun gitParams ->
+            filePath 
+            |> GIT.addFile folder
+            |> Result.mapError (gitParams.LogError pdb.Name))
+            |> ignore
+            // 2. Save and commit it
+            try
+                pdb |> saveMasterPDB folder pdb.Name
+                gitParams |> Option.map (fun gitParams ->
+                filePath
+                |> GIT.commitFile folder (gitParams.GetAddComment pdb.Name)
+                |> Result.mapError (gitParams.LogError pdb.Name))
+                |> ignore
+            with
+            | ex -> logFailure pdb.Name (masterPDBPath folder pdb.Name) ex
+            // Return a repository ready to use
+            MasterPDBRepository(logFailure, gitParams, folder, pdb.Name) :> IMasterPDBRepository
