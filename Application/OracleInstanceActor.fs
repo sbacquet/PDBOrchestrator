@@ -250,10 +250,12 @@ let private oracleInstanceActorBody
         actor {
 
             if state.PreviousInstance <> instance then
+                let instanceWithDurableWorkingCopiesOnly instance = { instance with WorkingCopies = instance.WorkingCopies |> Map.filter (fun _ wc -> isDurable wc) }
+                let instanceWithTemporaryWorkingCopiesOnly instance = { instance with WorkingCopies = instance.WorkingCopies |> Map.filter (fun _ wc -> isTemporary wc) }
                 let newRepo =
-                    if { state.PreviousInstance with WorkingCopies = Map.empty } = { instance with WorkingCopies = Map.empty } then
-                        ctx.Log.Value.Debug("Persisted working copies of Oracle instance {instance}", instance.Name)
-                        state.Repository.PutWorkingCopiesOnly instance
+                    if (state.PreviousInstance |> instanceWithDurableWorkingCopiesOnly) = (instance |> instanceWithDurableWorkingCopiesOnly) then
+                        ctx.Log.Value.Debug("Persisted temporary working copies of Oracle instance {instance}", instance.Name)
+                        instance |> instanceWithTemporaryWorkingCopiesOnly |> state.Repository.PutWorkingCopiesOnly
                     else
                         ctx.Log.Value.Debug("Persisted modified Oracle instance {instance}", instance.Name)
                         state.Repository.Put instance
@@ -382,9 +384,9 @@ let private oracleInstanceActorBody
                             if force then None
                             else
                                 if not (wc.MasterPDBName =~ masterPDBName) || 
-                                   (isDurable wc.Lifetime <> durable)
+                                   (isDurable wc <> durable)
                                 then
-                                    sprintf "working copy %s already exists, but for a different master PDB/durability (%s/%s), so cannot be overwritten" wcName wc.MasterPDBName (lifetimeType wc.Lifetime) |> Error |> Some
+                                    sprintf "working copy %s already exists, but for a different master PDB/durability (%s/%s), so cannot be overwritten" wcName wc.MasterPDBName (Lifetime.isDurableText wc.Lifetime) |> Error |> Some
                                 else
                                     match wc.Source with
                                     | SpecificVersion version ->
@@ -418,7 +420,7 @@ let private oracleInstanceActorBody
                     let workingCopy = instance |> getWorkingCopy wcName
                     match workingCopy with
                     | Some workingCopy -> 
-                        if durable <> (workingCopy.Lifetime |> Domain.MasterPDBWorkingCopy.isDurable) then
+                        if durable <> (workingCopy |> Domain.MasterPDBWorkingCopy.isDurable) then
                             sender <! (requestId, Error <| (sprintf "cannot delete a working copy of durability different from requested; to delete a durable copy, please confirm by providing ?durable=true" |> exn))
                             return! loop state
                         else
@@ -455,9 +457,9 @@ let private oracleInstanceActorBody
                             if force then None
                             else
                                 if not (wc.MasterPDBName =~ masterPDBName) || 
-                                   (isDurable wc.Lifetime <> durable)
+                                   (isDurable wc <> durable)
                                 then
-                                    Error <| sprintf "working copy %s already exists, but for a different master PDB/durability (%s/%s), so cannot be overwritten" wcName wc.MasterPDBName (lifetimeType wc.Lifetime) |> Some
+                                    Error <| sprintf "working copy %s already exists, but for a different master PDB/durability (%s/%s), so cannot be overwritten" wcName wc.MasterPDBName (Lifetime.isDurableText wc.Lifetime) |> Some
                                 else
                                     match wc.Source with
                                     | Edition -> None

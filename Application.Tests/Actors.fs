@@ -687,7 +687,7 @@ let ``API fails to overwrite an existing temporary working copy`` () = test <| f
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True((instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me")).Value.Lifetime |> isDurable |> not)
+    | Ok instance -> Assert.True((instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me")).Value.Lifetime |> Lifetime.isDurable |> not)
     | Error error -> failwith error 
 
 [<Fact>]
@@ -733,7 +733,7 @@ let ``API fails to overwrite an existing durable working copy`` () = test <| fun
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True((instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me")).Value.Lifetime |> isDurable)
+    | Ok instance -> Assert.True((instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "WORKINGCOPY" && wc.CreatedBy = "me")).Value.Lifetime |> Lifetime.isDurable)
     | Error error -> failwith error 
 
 [<Fact>]
@@ -997,7 +997,7 @@ let ``API can force creating a durable working copy if temp copy exists with sam
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
-    | Ok instance -> Assert.True((instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC" && wc.CreatedBy = "me")).Value.Lifetime |> isDurable)
+    | Ok instance -> Assert.True((instance.WorkingCopies |> List.tryFind (fun wc -> wc.Name = "TEST1WC" && wc.CreatedBy = "me")).Value.Lifetime |> Lifetime.isDurable)
     | Error error -> failwith error 
 
 [<Fact>]

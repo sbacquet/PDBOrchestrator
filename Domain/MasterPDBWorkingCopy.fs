@@ -16,16 +16,21 @@ type Lifetime =
 | Temporary of System.DateTime
 | Durable
 
-let isDurable = function
-| Durable -> true
-| _ -> false
+module Lifetime =
+    let isDurable = function
+    | Durable -> true
+    | _ -> false
 
-let lifetimeText isDurable =
-    match isDurable with
-    | true -> "durable"
-    | false -> "temporary"
+    let isTemporary = function
+    | Temporary _ -> true
+    | _ -> false
 
-let lifetimeType = isDurable >> lifetimeText
+    let text isDurable =
+        match isDurable with
+        | true -> "durable"
+        | false -> "temporary"
+
+    let isDurableText = isDurable >> text
 
 type MasterPDBWorkingCopy = {
     Name: string
@@ -64,3 +69,7 @@ let isExpired wc =
     match wc.Lifetime with 
     | Temporary expiry -> expiry <= now
     | _ -> false
+
+let isDurable workingCopy = workingCopy.Lifetime |> Lifetime.isDurable
+
+let isTemporary workingCopy = workingCopy.Lifetime |> Lifetime.isTemporary

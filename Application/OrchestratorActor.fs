@@ -149,11 +149,11 @@ let describeCommand = function
 | RollbackMasterPDB (_, pdb) ->
     sprintf "roll back modifications done in \"%s\"" pdb
 | CreateWorkingCopy (_, instance, pdb, version, name, _, durable, force) ->
-    sprintf "create%s a %s working copy named \"%s\" of master PDB \"%s\" version %d on Oracle instance \"%s\"" (if force then " (force)" else "") (lifetimeText durable) name pdb version instance
+    sprintf "create%s a %s working copy named \"%s\" of master PDB \"%s\" version %d on Oracle instance \"%s\"" (if force then " (force)" else "") (Lifetime.text durable) name pdb version instance
 | DeleteWorkingCopy (_, instance, name, durable) ->
-    sprintf "delete a %s working copy named \"%s\" on Oracle instance \"%s\"" (lifetimeText durable) name instance
+    sprintf "delete a %s working copy named \"%s\" on Oracle instance \"%s\"" (Lifetime.text durable) name instance
 | CreateWorkingCopyOfEdition (_, masterPDB, wcName, durable, force) ->
-    sprintf "create%s a %s working copy (clone) named \"%s\" of master PDB \"%s\" edition" (if force then " (force)" else "") (lifetimeText durable) wcName masterPDB
+    sprintf "create%s a %s working copy (clone) named \"%s\" of master PDB \"%s\" edition" (if force then " (force)" else "") (Lifetime.text durable) wcName masterPDB
 | ExtendWorkingCopy (instance, name) ->
     sprintf "extend lifetime of working copy %s on Oracle instance %s" name instance
 | GetRequest requestId ->

@@ -122,11 +122,11 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
         let! oracleDirectoryForDumps = Decode.required Decode.string "oracleDirectoryForDumps" 
         let! oracleDirectoryPathForDumps = Decode.required Decode.string "oracleDirectoryPathForDumps" 
         let! masterPDBs = Decode.required Decode.stringList "masterPDBs"
-        let! workingCopies = Decode.optional decodeWorkingCopies "workingCopies" // for compatibility, now stored in a dedicated file
+        let! durableWorkingCopies = Decode.optional decodeWorkingCopies "durableWorkingCopies"
         return 
             consOracleInstance 
                 masterPDBs
-                (workingCopies |> Option.defaultValue List.empty)
+                (durableWorkingCopies |> Option.defaultValue List.empty)
                 name 
                 server 
                 port 
@@ -163,6 +163,7 @@ let encodeOracleInstance (algo:SymmetricAlgorithm) = Encode.buildWith (fun (x:Or
     Encode.required Encode.string "oracleDirectoryForDumps" x.OracleDirectoryForDumps >>
     Encode.required Encode.string "oracleDirectoryPathForDumps" x.OracleDirectoryPathForDumps >>
     Encode.required Encode.stringList "masterPDBs" x.MasterPDBs >>
+    Encode.ifNotEqual List.empty (Encode.listWith encodeWorkingCopy) "durableWorkingCopies" (x.WorkingCopies |> Map.toList |> List.map snd |> List.filter isDurable) >>
     Encode.required Encode.int "_version" cCurrentJsonVersion >>
     Encode.required Encode.bytes "_iv" algo.IV
 )

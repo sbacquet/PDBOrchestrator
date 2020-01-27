@@ -63,7 +63,7 @@ let private workingCopyFactoryActorBody
         if wcExists && not force then
             let! isDurable = isDurableWorkingCopy workingCopyName
             if isDurable <> durable then
-                return! Error <| (sprintf "working copy %s already exists but for a different durability (%s)" workingCopyName (lifetimeText isDurable) |> exn)
+                return! Error <| (sprintf "working copy %s already exists but for a different durability (%s)" workingCopyName (Lifetime.text isDurable) |> exn)
             else
                 return workingCopyName
         else
