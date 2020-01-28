@@ -105,6 +105,7 @@ let main args =
     let rootFolder = infrastuctureParameters.Root
     let orchestratorName = "orchestrator"
     let orchestratorPath = System.IO.Path.Combine(rootFolder, orchestratorName)
+    let ifGit gitParams = if infrastuctureParameters.UseGit then Some gitParams else None
 
     let gitParamsForOrchestrator : Infrastructure.OrchestratorRepository.GitParams = {
         LogError = fun _ error -> Log.Error("Cannot commit modifications done in orchestrator : Git returned : {ex}", error)
@@ -115,7 +116,7 @@ let main args =
     let orchestratorRepo = 
         OrchestratorRepository.OrchestratorRepository(
             logOrchestratorSaveFailure, 
-            gitParamsForOrchestrator |> Some, 
+            ifGit gitParamsForOrchestrator, 
             orchestratorPath, 
             orchestratorName) :> IOrchestratorRepository
 
@@ -129,7 +130,7 @@ let main args =
     let getOracleInstanceRepo name = 
         OracleInstanceRepository.OracleInstanceRepository(
             logOracleInstanceSaveFailure, 
-            gitParamsForOracleInstance |> Some, 
+            ifGit gitParamsForOracleInstance, 
             orchestratorPath, 
             name, 
             validApplicationParameters.ServerInstanceName) :> IOracleInstanceRepository
@@ -145,13 +146,13 @@ let main args =
     let getMasterPDBRepo (instance:OracleInstance) name = 
         MasterPDBRepository.MasterPDBRepository(
             logMasterPDBSaveFailure,
-            gitParamsForMasterPDB instance |> Some,
+            ifGit (gitParamsForMasterPDB instance),
             getInstanceFolder instance.Name, 
             name) :> IMasterPDBRepository
     let newMasterPDBRepo (instance:OracleInstance) pdb = 
         MasterPDBRepository.NewMasterPDBRepository(
             logMasterPDBSaveFailure, 
-            gitParamsForMasterPDB instance |> Some,
+            ifGit (gitParamsForMasterPDB instance),
             getInstanceFolder instance.Name, 
             pdb) :> IMasterPDBRepository
 
