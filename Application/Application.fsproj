@@ -16,7 +16,6 @@
     <Compile Include="MasterPDBVersionDTO.fs" />
     <Compile Include="WorkingCopyFactoryActor.fs" />
     <Compile Include="MasterPDBVersionActor.fs" />
-    <Compile Include="MasterPDBEditionActor.fs" />
     <Compile Include="MasterPDBDTO.fs" />
     <Compile Include="MasterPDBActor.fs" />
     <Compile Include="MasterPDBWorkingCopyDTO.fs" />

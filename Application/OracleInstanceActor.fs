@@ -425,8 +425,7 @@ let private oracleInstanceActorBody
                             return! loop state
                         else
                             let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                            let masterPDBActor = collaborators.MasterPDBActors |> getMasterPDBActor workingCopy.MasterPDBName
-                            retype masterPDBActor <! MasterPDBActor.DeleteWorkingCopy (requestId, workingCopy)
+                            collaborators.WorkingCopyFactory <! WorkingCopyFactoryActor.DeleteWorkingCopy(Some requestId, workingCopy.Name, false)
                             return! loop { state with Requests = newRequests }
                     | None ->
                         // The working copy is not registered, but try to delete the PDB anyway (only if in temporary folder)

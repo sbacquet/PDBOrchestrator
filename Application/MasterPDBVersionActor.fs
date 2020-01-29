@@ -15,7 +15,6 @@ open Domain.MasterPDBWorkingCopy
 
 type Command =
 | CreateWorkingCopy of WithRequestId<string, bool, bool, bool> // responds with OraclePDBResultWithReqId
-| DeleteWorkingCopy of WithRequestId<MasterPDBWorkingCopy>
 | CollectGarbage // no response
 | HaraKiri // no response
 | Delete
@@ -77,10 +76,6 @@ let private masterPDBVersionActorBody
             | Error error ->
                 sender <! (requestId, Error error)
             | _ -> ()
-            return! loop ()
-
-        | DeleteWorkingCopy (requestId, workingCopy) ->
-            workingCopyFactory <<! WorkingCopyFactoryActor.DeleteWorkingCopy(Some requestId, workingCopy.Name, false)
             return! loop ()
 
         | CollectGarbage ->
