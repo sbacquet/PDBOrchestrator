@@ -326,21 +326,21 @@ let getPendingWorkingCopyCommandsCount apiCtx next (ctx:HttpContext) = task {
     return! json (commands |> List.length |> serializeWith Encode.int JsonFormattingOptions.SingleLine) next ctx
 }
 
-let enterMaintenanceMode apiCtx next (ctx:HttpContext) = task {
+let enterMaintenanceMode apiCtx = withAdmin (fun _ next ctx -> task {
     let! switched = API.enterMaintenanceMode apiCtx
     if switched then
         return! text "The system is now in maintenance mode." next ctx
     else
         return! text "The system was already in maintenance mode." next ctx
-}
+})
 
-let enterNormalMode apiCtx next (ctx:HttpContext) = task {
+let enterNormalMode apiCtx = withAdmin (fun _ next ctx -> task {
     let! switched = API.enterNormalMode apiCtx
     if switched then
         return! text "The system is now in normal mode." next ctx
     else
         return! text "The system was already in normal mode." next ctx
-}
+})
 
 let getMode apiCtx next (ctx:HttpContext) = task {
     let! readOnly = API.isMaintenanceMode apiCtx
@@ -385,14 +385,14 @@ let collectInstanceGarbage apiCtx (instance:string) = withAdmin (fun _ next ctx 
     return! text (sprintf "Garbage collecting of Oracle instance %s initiated." instance) next ctx
 })
 
-let synchronizePrimaryInstanceWith apiCtx instance next ctx = task {
+let synchronizePrimaryInstanceWith apiCtx instance = withAdmin (fun _ next ctx -> task {
     let! stateMaybe = API.synchronizePrimaryInstanceWith apiCtx instance
     match stateMaybe with
     | Ok state -> return! (json <| OracleInstance.oracleInstanceDTOToJson (getCulture ctx) state) next ctx
     | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot synchronize %s with primary instance : %s." (instance.ToLower()) error) next ctx
-}
+})
 
-let switchPrimaryOracleInstanceWith apiCtx next (ctx:HttpContext) = task {
+let switchPrimaryOracleInstanceWith apiCtx = withAdmin (fun _ next ctx -> task {
     let! instance = ctx.BindJsonAsync<string>()
     if System.String.IsNullOrEmpty(instance) then
         return! RequestErrors.notAcceptable (text <| "The new primary Oracle instance name must be provided in the body as a JSON string.") next ctx
@@ -401,7 +401,7 @@ let switchPrimaryOracleInstanceWith apiCtx next (ctx:HttpContext) = task {
         match result with
         | Ok newInstance -> return! (text <| sprintf "New primary Oracle instance is now %s" (newInstance.ToLower())) next ctx
         | Error (error, currentInstance) -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot switch primary Oracle instance to %s : %s. The primary instance is unchanged (%s)." (instance.ToLower()) error (currentInstance.ToLower())) next ctx
-}
+})
 
 open Application.OracleInstanceActor
 
