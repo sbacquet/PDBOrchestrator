@@ -39,7 +39,7 @@ type Command =
 
 type AdminCommand =
 | GetPendingChanges // responds with Result<PendingChanges option,string> = Result<pending changes if any, error>
-| GetPendingWorkingCopyCommands // responds with Command list
+| GetPendingCommands // responds with Command list
 | EnterMaintenanceMode // responds with bool = mode changes
 | EnterNormalMode // responds with bool = mode changed
 | IsMaintenanceMode // responds with bool = is maintenance mode
@@ -166,8 +166,8 @@ let describeCommand = function
 let describeAdminCommand = function
 | GetPendingChanges ->
     "get pending changes"
-| GetPendingWorkingCopyCommands ->
-    "get pending commands relative to working copies"
+| GetPendingCommands ->
+    "get pending commands"
 | EnterMaintenanceMode ->
     "set maintenance mode"
 | EnterNormalMode ->
@@ -517,18 +517,9 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 ctx.Sender() <! result
                 return! loop state
 
-            | GetPendingWorkingCopyCommands ->
+            | GetPendingCommands ->
                 let sender = ctx.Sender().Retype<Command list>()
-
-                let filter = function
-                | CreateWorkingCopy _
-                | DeleteWorkingCopy _
-                | ExtendWorkingCopy _
-                | CreateWorkingCopyOfEdition _
-                  -> true
-                | _ -> false
-
-                let commands = getPendingCommands filter |> Seq.toList
+                let commands = getPendingCommands (fun _ -> true) |> Seq.toList
                 sender <! commands
                 return! loop state
 
@@ -645,11 +636,11 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     | MasterPDBCreationFailure (instance, pdb, error) -> 
                         CompletedWithError <| sprintf "Error while creating master PDB %s on Oracle instance %s : %s." pdb instance error
                     | MasterPDBCreated (instance, pdb) ->
-                        sprintf "Master PDB %s created successfully on Oracle instance %s." pdb.Name instance
-                        |> completedOk [ 
+                        completedOk [ 
                             PDBName pdb.Name
                             ResourceLink (sprintf "/instances/%s/master-pdbs/%s" instance pdb.Name)
                         ]
+                        <| sprintf "Master PDB %s created successfully on Oracle instance %s." pdb.Name instance
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status
                 return! loop { state with PendingRequests = newPendingRequests; CompletedRequests = newCompletedRequests }
         }
@@ -667,12 +658,12 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     match result with
                     | MasterPDBActor.Prepared (instance, pdb, editionPDB, editionPDBService, schemas) -> 
                         let schemasData = schemas |> List.map SchemaLogon
-                        sprintf "Master PDB %s prepared successfully for edition." pdb.Name 
-                        |> completedOk ([ 
+                        completedOk ([ 
                             PDBName editionPDB
                             PDBService editionPDBService
                             ResourceLink (sprintf "/instances/%s/master-pdbs/%s/edition" instance pdb.Name)
-                           ] @ schemasData)
+                        ] @ schemasData)
+                        <| sprintf "Master PDB %s prepared successfully for edition." pdb.Name 
                     | MasterPDBActor.PreparationFailure (pdb, error) -> 
                         CompletedWithError <| sprintf "Error while preparing master PDB %s for edition : %s." pdb error
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status
@@ -691,12 +682,12 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let status = 
                     match result with
                     | Ok (instance, pdb, newVersion) -> 
-                        sprintf "Master PDB %s committed successfully (new version %d created) on Oracle instance %s." pdb.Name newVersion instance
-                        |> completedOk [ 
+                        completedOk [ 
                             PDBName pdb.Name
                             PDBVersion newVersion
                             ResourceLink (sprintf "/instances/%s/master-pdbs/%s/versions/%d" instance pdb.Name newVersion)
                         ]
+                        <| sprintf "Master PDB %s committed successfully (new version %d created) on Oracle instance %s." pdb.Name newVersion instance
                     | Error error -> 
                         CompletedWithError <| sprintf "Error while committing master PDB : %s." error
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status
@@ -716,11 +707,11 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     match result with
                     | Ok (instance, pdb) -> 
                         let latestVersion = pdb |> Domain.MasterPDB.getLatestAvailableVersionNumber
-                        sprintf "Master PDB %s rolled back successfully to version %d on Oracle instance %s." pdb.Name latestVersion instance
-                        |> completedOk [ 
+                        completedOk [ 
                             PDBName pdb.Name 
                             ResourceLink (sprintf "/instances/%s/master-pdbs/%s/versions/%d" instance pdb.Name latestVersion)
                         ]
+                        <| sprintf "Master PDB %s rolled back successfully to version %d on Oracle instance %s." pdb.Name latestVersion instance
                     | Error error -> 
                         CompletedWithError <| sprintf "Error while rolling back master PDB : %s." error
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status
@@ -739,13 +730,16 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let status = 
                     match result with
                     | Ok (pdb, versionNumber, workingCopyName, workingCopyService, oracleInstance) -> 
-                        sprintf "Working copy of PDB %s version %d created successfully with name %s." pdb versionNumber workingCopyName
-                        |> completedOk [ 
+                        completedOk [ 
                             PDBName workingCopyName
                             PDBService workingCopyService
                             OracleInstance oracleInstance
                             ResourceLink (sprintf "/instances/%s/working-copies/%s" oracleInstance workingCopyName)
-                        ]
+                        ] 
+                        <| match versionNumber with
+                           | 0 -> sprintf "Working copy of edition of PDB %s created successfully with name %s." pdb workingCopyName
+                           | _ -> sprintf "Working copy of PDB %s version %d created successfully with name %s." pdb versionNumber workingCopyName
+
                     | Error error -> 
                         CompletedWithError <| sprintf "Error while creating working copy : %s." error
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status

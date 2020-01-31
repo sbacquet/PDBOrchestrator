@@ -94,5 +94,5 @@ let deleteMasterPDBVersion (ctx:APIContext) (pdb:string) (version:int) (force:bo
 let switchLock (ctx:APIContext) (pdb:string) : Async<Result<bool,string>> =
     retype ctx.Orchestrator <? OrchestratorActor.SwitchLock (pdb.ToUpper())
 
-let getPendingWorkingCopyCommands (ctx:APIContext) : Async<Command list> =
-    retype ctx.Orchestrator <? OrchestratorActor.GetPendingWorkingCopyCommands
+let getPendingCommands (ctx:APIContext) : Async<Command list> =
+    retype ctx.Orchestrator <? OrchestratorActor.GetPendingCommands

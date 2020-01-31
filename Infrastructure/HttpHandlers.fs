@@ -316,15 +316,15 @@ let getPendingChanges apiCtx next (ctx:HttpContext) = task {
             return! json (pendingChanges |> serializeWith encodePendingChanges JsonFormattingOptions.Pretty) next ctx
 }
 
-let getPendingWorkingCopyCommands apiCtx next (ctx:HttpContext) = task {
-    let! commands = API.getPendingWorkingCopyCommands apiCtx
+let getPendingCommands apiCtx = withAdmin (fun _ next ctx -> task {
+    let! commands = API.getPendingCommands apiCtx
     return! json (commands |> List.map OrchestratorActor.describeCommand |> serializeWith Encode.stringList JsonFormattingOptions.Pretty) next ctx
-}
+})
 
-let getPendingWorkingCopyCommandsCount apiCtx next (ctx:HttpContext) = task {
-    let! commands = API.getPendingWorkingCopyCommands apiCtx
+let getPendingCommandsCount apiCtx = withAdmin (fun _ next ctx -> task {
+    let! commands = API.getPendingCommands apiCtx
     return! json (commands |> List.length |> serializeWith Encode.int JsonFormattingOptions.SingleLine) next ctx
-}
+})
 
 let enterMaintenanceMode apiCtx = withAdmin (fun _ next ctx -> task {
     let! switched = API.enterMaintenanceMode apiCtx

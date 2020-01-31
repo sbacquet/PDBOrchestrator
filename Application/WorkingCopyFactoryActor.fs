@@ -2,7 +2,6 @@
 
 open Akkling
 open Akka.Actor
-open Domain.MasterPDBVersion
 open Application.PendingRequest
 open Application.Oracle
 open Application.Parameters
@@ -89,25 +88,25 @@ let private workingCopyFactoryActorBody
 
         match command with
         | CreateWorkingCopyBySnapshot (requestId, snapshotSourceName, destPath, workingCopyName, durable, force) -> 
-            ctx.Log.Value.Info("Creating working copy {pdb} by snapshot...", workingCopyName)
+            ctx.Log.Value.Debug("Creating working copy {pdb} by snapshot...", workingCopyName)
             let result = createWorkingCopyIfNeeded workingCopyName durable force <| snapshotPDB snapshotSourceName destPath
             result |> reply requestId
             return! loop ()
 
         | CreateWorkingCopyByClone (requestId, sourceManifest, destPath, workingCopyName, durable, force) -> 
-            ctx.Log.Value.Info("Creating working copy {pdb} by clone...", workingCopyName)
+            ctx.Log.Value.Debug("Creating working copy {pdb} by clone...", workingCopyName)
             let result = createWorkingCopyIfNeeded workingCopyName durable force <| importPDB sourceManifest destPath
             result |> reply requestId
             return! loop ()
 
         | CreateWorkingCopyOfEdition (requestId, editionPDBName, destPath, workingCopyName, durable, force) ->
-            ctx.Log.Value.Info("Creating working copy {pdb} of edition...", workingCopyName)
+            ctx.Log.Value.Debug("Creating working copy {pdb} of edition...", workingCopyName)
             let result = createWorkingCopyIfNeeded workingCopyName durable force <| clonePDB editionPDBName destPath
             result |> reply requestId
             return! loop ()
 
         | DeleteWorkingCopy (requestId, workingCopyName, temporaryOnly) ->
-            ctx.Log.Value.Info("Deleting working copy {pdb}...", workingCopyName)
+            ctx.Log.Value.Debug("Deleting working copy {pdb}...", workingCopyName)
             let result = result {
                 let! delete = result {
                     if temporaryOnly then

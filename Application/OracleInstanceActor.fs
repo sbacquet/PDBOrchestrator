@@ -246,6 +246,23 @@ let private oracleInstanceActorBody
         let collaborators = state.Collaborators
         let requests = state.Requests
         let pdbService = pdbServiceFromInstance instance
+        let inline logCommand command = 
+            if ctx.Log.Value.IsDebugEnabled then
+                match command with
+                | CreateMasterPDB (requestId, createMasterPDBParams) -> ctx.Log.Value.Debug("Create master PDB {pdb}", createMasterPDBParams.Name)
+                | PrepareMasterPDBForModification (requestId, pdb, version, user) -> ctx.Log.Value.Debug("Prepare master PDB {pdb} version {Versions} for modification", pdb, version)
+                | CommitMasterPDB (requestId, pdb, locker, comment) -> ctx.Log.Value.Debug("Commit master PDB {pdb}", pdb)
+                | RollbackMasterPDB (requestId, user, pdb) -> ctx.Log.Value.Debug("Rollback master PDB {pdb}", pdb)
+                | CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force) -> ctx.Log.Value.Debug("Create working copy {pdb} of {masterPDB} version {version}", wcName, masterPDBName, versionNumber)
+                | DeleteWorkingCopy (requestId, wcName, durable) -> ctx.Log.Value.Debug("Delete working copy {pdb}", wcName)
+                | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force) -> ctx.Log.Value.Debug("Create working copy {pdb} of edition of {masterPDB}", wcName, masterPDBName)
+                | ExtendWorkingCopy wcName -> ctx.Log.Value.Debug("Extend lifetime of working copy {pdb}", wcName)
+                | CollectGarbage -> ctx.Log.Value.Debug("Collect garbage")
+                | DeleteVersion (pdb, version, force) -> ctx.Log.Value.Debug("Delete version {version} of master PDB {pdb}", version, pdb)
+                | SwitchLock pdb -> ctx.Log.Value.Debug("Switch lock of master PDB {pdb}", pdb)
+                | _ -> ()
+            else
+                ()
 
         actor {
 
@@ -268,6 +285,7 @@ let private oracleInstanceActorBody
 
             match msg with
             | :? Command as command ->
+                logCommand command
                 match command with
                 | GetState ->
                     let sender = ctx.Sender().Retype<StateResult>()
@@ -486,7 +504,6 @@ let private oracleInstanceActorBody
                             return! loop { state with Requests = newRequests }
 
                 | CollectGarbage ->
-                    ctx.Log.Value.Info("Garbage collection of Oracle instance {instance} requested.", instance.Name)
                     let garbageCollector = OracleInstanceGarbageCollector.spawn parameters state.Collaborators.OracleShortTaskExecutor state.Collaborators.OracleLongTaskExecutor state.Collaborators.WorkingCopyFactory instance ctx
                     garbageCollector <! OracleInstanceGarbageCollector.CollectGarbage
                     return! loop state
