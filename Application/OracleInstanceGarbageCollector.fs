@@ -27,9 +27,18 @@ let private masterPDBGarbageCollectorBody
     (instance:OracleInstance)
     (ctx : Actor<Command>) =
 
-    let deleteWorkingCopy pdb : OraclePDBResult = 
-        workingCopyFactory <? WorkingCopyFactoryActor.DeleteWorkingCopy (None, pdb, true)
-        |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
+    let pdbExists pdb : Exceptional<bool> = 
+        oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
+        |> runWithin parameters.ShortTimeout id (fun () -> sprintf "cannot check if PDB %s exists: timeout exceeded" pdb |> exn |> Error)
+    let deleteWorkingCopy pdb : OraclePDBResult = result {
+        let! exists = pdbExists pdb
+        if exists then
+            return! 
+                workingCopyFactory <? WorkingCopyFactoryActor.DeleteWorkingCopy (None, pdb, true)
+                |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
+        else
+            return pdb
+    }
     let getPDBNamesLike like : Exceptional<string list> = 
         oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBNamesLike like
         |> runWithin parameters.ShortTimeout id (fun () -> "cannot get PDB names : timeout exceeded" |> exn |> Error)
