@@ -24,7 +24,7 @@ let decryptPassword (algo:SymmetricAlgorithm) (encryptedPasswordJson:Json) =
         |> JsonFailure.SingleFailure 
         |> JFail
 
-let decodeWorkingCopy = jsonDecoder {
+let decodeWorkingCopy (temporaryTimespan:System.TimeSpan option) = jsonDecoder {
     let! name = Decode.required Decode.string "name"
     let! masterPDBName = Decode.required Decode.string "masterPDBName"
     let! createdBy = Decode.required Decode.string "createdBy"
@@ -40,14 +40,10 @@ let decodeWorkingCopy = jsonDecoder {
         | "Edition" -> Ok Edition
         | _ -> Error "invalid sourceType"
     let! lifetimeType = Decode.required Decode.string "lifetimeType"
-    let! lifetimeExpiry = Decode.optional Decode.dateTime "expiryDate"
     let (lifetime:Result<Lifetime,string>) = 
-        match lifetimeType with
-        | "Temporary" -> 
-            match lifetimeExpiry with
-            | Some expiry -> expiry |> Temporary |> Ok
-            | None -> Error "expiryDate is not specified"
-        | "Durable" -> Ok Durable
+        match lifetimeType, temporaryTimespan with
+        | "Temporary", Some temporaryTimespan -> creationDate+temporaryTimespan |> Temporary |> Ok
+        | "Durable", None -> Durable |> Ok
         | _ -> Error "invalid lifetimeType"
     match source, lifetime with
     | Ok source, Ok lifetime ->
@@ -82,15 +78,12 @@ let encodeWorkingCopy = Encode.buildWith (fun (x:MasterPDBWorkingCopy) ->
         Encode.required Encode.string "sourceType" "Edition"
     ) >>
     (match x.Lifetime with
-    | Temporary lifetime -> 
-        Encode.required Encode.string "lifetimeType" "Temporary" >>
-        Encode.required Encode.dateTime "expiryDate" lifetime
-    | Durable ->
-        Encode.required Encode.string "lifetimeType" "Durable"
+    | Temporary _ -> Encode.required Encode.string "lifetimeType" "Temporary"
+    | Durable -> Encode.required Encode.string "lifetimeType" "Durable"
     )
 )
 
-let decodeWorkingCopies = Decode.listWith decodeWorkingCopy
+let decodeWorkingCopies temporaryTimespan = Decode.listWith (decodeWorkingCopy temporaryTimespan)
 
 let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
     let! version = Decode.required Decode.int "_version"
@@ -122,7 +115,7 @@ let decodeOracleInstance (algo:SymmetricAlgorithm) = jsonDecoder {
         let! oracleDirectoryForDumps = Decode.required Decode.string "oracleDirectoryForDumps" 
         let! oracleDirectoryPathForDumps = Decode.required Decode.string "oracleDirectoryPathForDumps" 
         let! masterPDBs = Decode.required Decode.stringList "masterPDBs"
-        let! durableWorkingCopies = Decode.optional decodeWorkingCopies "durableWorkingCopies"
+        let! durableWorkingCopies = Decode.optional (decodeWorkingCopies None) "durableWorkingCopies"
         return 
             consOracleInstance 
                 masterPDBs
@@ -176,8 +169,8 @@ let oracleInstanceToJson pdb =
     use aesAlg = Aes.Create()
     pdb |> Json.serializeWith (encodeOracleInstance aesAlg) JsonFormattingOptions.Pretty
 
-let jsonToWorkingCopies json =
-    json |> Json.deserializeWith decodeWorkingCopies
+let jsonToWorkingCopies temporaryTimespan json =
+    json |> Json.deserializeWith (decodeWorkingCopies temporaryTimespan)
 
 let workingCopiesToJson workingCopies =
     workingCopies |> Json.serializeWith (Encode.listWith encodeWorkingCopy) JsonFormattingOptions.Pretty

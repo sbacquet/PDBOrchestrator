@@ -11,7 +11,7 @@ let instanceFolder folder name = Path.Combine(folder, name)
 let instancePath folder name = Path.Combine(instanceFolder folder name, sprintf "%s.json" name)
 let instanceWorkingCopiesPath folder name (suffix:string) = Path.Combine(instanceFolder folder name, sprintf "%s_working_copies_%s.json" name suffix)
 
-let loadOracleInstance folder name suffix : OracleInstance =
+let loadOracleInstance temporaryTimespan folder name suffix : OracleInstance =
     let file = instancePath folder name
     use stream = new StreamReader(file)
     let content = stream.ReadToEnd()
@@ -25,7 +25,7 @@ let loadOracleInstance folder name suffix : OracleInstance =
         if File.Exists(file) then
             use stream = new StreamReader(file)
             let content = stream.ReadToEnd()
-            let result = content |> OracleInstanceJson.jsonToWorkingCopies
+            let result = content |> OracleInstanceJson.jsonToWorkingCopies (Some temporaryTimespan)
             match result with
             | JPass workingCopies -> workingCopies
             | JFail error -> error |> JsonFailure.summarize |> failwithf "Temporary working copies on Oracle instance %s cannot be loaded from JSON file %s :\n%s" name file
@@ -58,10 +58,10 @@ type GitParams = {
     GetAddComment : string -> string
 }
 
-type OracleInstanceRepository(logFailure, gitParams, folder, name, suffix) = 
+type OracleInstanceRepository(temporaryTimespan, logFailure, gitParams, folder, name, suffix) = 
     interface IOracleInstanceRepository with
 
-        member __.Get () = loadOracleInstance folder name suffix
+        member __.Get () = loadOracleInstance temporaryTimespan folder name suffix
 
         member __.Put instance = 
             try
@@ -84,7 +84,7 @@ type OracleInstanceRepository(logFailure, gitParams, folder, name, suffix) =
             | ex -> logFailure instance.Name (instancePath folder name) ex
             upcast __
 
-type NewOracleInstanceRepository(logFailure, gitParams, folder, instance, suffix) = 
+type NewOracleInstanceRepository(temporaryTimespan, logFailure, gitParams, folder, instance, suffix) = 
     interface IOracleInstanceRepository with
 
         member __.Get () = instance
@@ -110,6 +110,6 @@ type NewOracleInstanceRepository(logFailure, gitParams, folder, instance, suffix
             with
             | ex -> logFailure instance.Name (instancePath folder instance.Name) ex
             // Return a repository ready to use
-            OracleInstanceRepository(logFailure, gitParams, folder, instance.Name, suffix) :> IOracleInstanceRepository
+            OracleInstanceRepository(temporaryTimespan, logFailure, gitParams, folder, instance.Name, suffix) :> IOracleInstanceRepository
 
         member __.PutWorkingCopiesOnly _ = upcast __

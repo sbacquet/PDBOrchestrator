@@ -7,12 +7,13 @@ open Application.Common
 open Domain.MasterPDBWorkingCopy
 
 let [<Literal>]testFolder = __SOURCE_DIRECTORY__ + @"\tests\instances"
+let tempLifespan = System.TimeSpan.FromHours(12.)
 
 [<Fact>]
 let ``Save and load Oracle instance`` () =
     let instance1Name = "test1"
-    let repo = OracleInstanceRepository((fun _ _ -> raise), None, testFolder, instance1Name, "A") :> IOracleInstanceRepository
-    let wc = [ newTempWorkingCopy (System.TimeSpan.FromHours(12.)) "me" (SpecificVersion 13) "test1" "wc" ]
+    let repo = OracleInstanceRepository(tempLifespan, (fun _ _ -> raise), None, testFolder, instance1Name, "A") :> IOracleInstanceRepository
+    let wc = [ newTempWorkingCopy tempLifespan "me" (SpecificVersion 13) "test1" "wc" ]
     let instance1 =
         consOracleInstance
             [ "test1"; "test2" ]
@@ -36,7 +37,7 @@ let ``Save and load Oracle instance`` () =
 let ``Log error when saving Oracle instance`` () =
     let mutable passedHere = false
     let instance1Name = "test1"
-    let repo = OracleInstanceRepository((fun _ _ _ -> passedHere <- true), None, "*", instance1Name, "A") :> IOracleInstanceRepository
+    let repo = OracleInstanceRepository(tempLifespan, (fun _ _ _ -> passedHere <- true), None, "*", instance1Name, "A") :> IOracleInstanceRepository
     let instance1 =
         consOracleInstance
             [ "test1"; "test2" ]

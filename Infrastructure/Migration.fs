@@ -104,8 +104,6 @@ let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword u
     let onRepoFailure _ _ = raise
 
     let putMasterPDBs pdbs =
-        let gitAddComment = sprintf "Added %s"
-        let gitModifyComment = sprintf "Modified %s"
         pdbs |> List.iter (fun pdb ->
             let repo = Infrastructure.MasterPDBRepository.NewMasterPDBRepository(onRepoFailure, None, instanceName, pdb) :> Application.Common.IMasterPDBRepository
             repo.Put pdb |> ignore
@@ -123,7 +121,7 @@ let migrate fromServer dbaUser dbaPassword userForImport userForImportPassword u
                 "" "" "" "" // paths to edit manually in the instance JSON file
                 "DP_DIR" "/u01/app/intcdb_dumps" 
                 snapshotCapable
-        let repo = Infrastructure.OracleInstanceRepository.NewOracleInstanceRepository(onRepoFailure, None, ".", instance, "A") :> Application.Common.IOracleInstanceRepository
+        let repo = Infrastructure.OracleInstanceRepository.NewOracleInstanceRepository(System.TimeSpan.Zero, onRepoFailure, None, ".", instance, "A") :> Application.Common.IOracleInstanceRepository
         repo.Put instance |> ignore
         sprintf "%s imported properly from %s" instanceName fromServer |> Validation.Valid
     

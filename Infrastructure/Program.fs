@@ -129,6 +129,7 @@ let main args =
     }
     let getOracleInstanceRepo name = 
         OracleInstanceRepository.OracleInstanceRepository(
+            validApplicationParameters.TemporaryWorkingCopyLifetime,
             logOracleInstanceSaveFailure, 
             ifGit gitParamsForOracleInstance, 
             orchestratorPath, 
