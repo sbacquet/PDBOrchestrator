@@ -15,23 +15,25 @@ open Domain.MasterPDB
 open Application.DTO
 open Domain.MasterPDBWorkingCopy
 
+type User = Application.UserRights.User
+
 type CreateMasterPDBParams = {
     Name: string
     Dump: string
     Schemas: string list
     TargetSchemas: (string * string * string) list
-    User: string
+    User: User
     Date: DateTime
     Comment: string
 }
 
-let consCreateMasterPDBParams (name:string) dump schemas targetSchemas (user:string) (date:System.DateTime) comment = 
+let consCreateMasterPDBParams (name:string) dump schemas targetSchemas user (date:System.DateTime) comment = 
     { 
         Name=name.ToUpper()
         Dump=dump
         Schemas=schemas
         TargetSchemas=targetSchemas
-        User=user.ToLower()
+        User=user
         Date=date.ToUniversalTime()
         Comment=comment 
     }
@@ -67,11 +69,8 @@ module private Validation =
         else    
             Valid targetSchemas
 
-    let validateUser (user:string) =
-        if (user = "") then
-            Invalid [ "the user cannot be empty" ]
-        else
-            Valid user
+    let validateUser user =
+        Valid user
 
     let validateComment (comment:string) =
         if (comment = "") then
@@ -97,12 +96,12 @@ type Command =
 | SetInternalState of OracleInstance.OracleInstanceFullDTO // responds with StateResult
 | TransferInternalState of IActorRef<obj> // responds with StateResult
 | CreateMasterPDB of WithRequestId<CreateMasterPDBParams> // responds with WithRequestId<MasterPDBCreationResult>
-| PrepareMasterPDBForModification of WithRequestId<string, int, string> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
-| CommitMasterPDB of WithRequestId<string, string, string> // responds with WithRequestId<MasterPDBActor.EditionCommitted>
-| RollbackMasterPDB of WithRequestId<string, string> // responds with WithRequestId<MasterPDBActor.EditionRolledBack>
-| CreateWorkingCopy of WithRequestId<string, string, int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
+| PrepareMasterPDBForModification of WithRequestId<string, int, User> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
+| CommitMasterPDB of WithRequestId<string, User, string> // responds with WithRequestId<MasterPDBActor.EditionCommitted>
+| RollbackMasterPDB of WithRequestId<User, string> // responds with WithRequestId<MasterPDBActor.EditionRolledBack>
+| CreateWorkingCopy of WithRequestId<User, string, int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | DeleteWorkingCopy of WithRequestId<string, bool> // responds with OraclePDBResultWithReqId
-| CreateWorkingCopyOfEdition of WithRequestId<string, string, string, bool, bool> // responds with RequestValidation
+| CreateWorkingCopyOfEdition of WithRequestId<User, string, string, bool, bool> // responds with RequestValidation
 | ExtendWorkingCopy of string // responds with Result<MasterPDBWorkingCopy, string>
 | CollectGarbage // no response
 | GetDumpTransferInfo // responds with DumpTransferInfo
@@ -395,7 +394,7 @@ let private oracleInstanceActorBody
                 | CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force) ->
                     let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
                     let cancel = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
-                        if not (wc.CreatedBy =~ user) // cannot force if not same user
+                        if not (wc.CreatedBy = user.Name) // cannot force if not same user
                         then
                             sprintf "working copy %s already exists and was created by a different user (%s), so cannot be overwritten" wcName wc.CreatedBy |> Error |> Some
                         else
@@ -467,7 +466,7 @@ let private oracleInstanceActorBody
                 | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force) ->
                     let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
                     let cancel = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
-                        if not (wc.CreatedBy =~ user) // cannot force if not same user
+                        if not (wc.CreatedBy = user.Name) // cannot force if not same user
                         then
                             sprintf "working copy %s already exists and was created by a different user (%s), so cannot be overwritten" wcName wc.CreatedBy |> Error |> Some
                         else
@@ -569,7 +568,7 @@ let private oracleInstanceActorBody
                                 Domain.MasterPDB.newMasterPDB 
                                     commandParameters.Name 
                                     (commandParameters.TargetSchemas |> List.map Domain.MasterPDB.consSchemaFromTuple)
-                            let masterPDB = newMasterPDB commandParameters.User commandParameters.Comment
+                            let masterPDB = newMasterPDB commandParameters.User.Name commandParameters.Comment
                             let newStateResult = 
                                 addNewMasterPDB 
                                     parameters
@@ -598,9 +597,9 @@ let private oracleInstanceActorBody
                             sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, pdbService wcName, instance.Name))
                             let wc = 
                                 if durable then 
-                                    newDurableWorkingCopy user (SpecificVersion versionNumber) masterPDBName wcName
+                                    newDurableWorkingCopy user.Name (SpecificVersion versionNumber) masterPDBName wcName
                                 else    
-                                    newTempWorkingCopy parameters.TemporaryWorkingCopyLifetime user (SpecificVersion versionNumber) masterPDBName wcName
+                                    newTempWorkingCopy parameters.TemporaryWorkingCopyLifetime user.Name (SpecificVersion versionNumber) masterPDBName wcName
                             return! loop { state with Requests = newRequests; Instance = state.Instance |> addWorkingCopy wc }
                         | Error error ->
                             sender <! (requestId, Error error.Message)
@@ -618,9 +617,9 @@ let private oracleInstanceActorBody
                             sender <! (requestId, Ok (masterPDBName, 0, wcName, pdbService wcName, instance.Name))
                             let wc = 
                                 if durable then 
-                                    newDurableWorkingCopy user Edition masterPDBName wcName
+                                    newDurableWorkingCopy user.Name Edition masterPDBName wcName
                                 else    
-                                    newTempWorkingCopy parameters.TemporaryWorkingCopyLifetime user Edition masterPDBName wcName
+                                    newTempWorkingCopy parameters.TemporaryWorkingCopyLifetime user.Name Edition masterPDBName wcName
                             return! loop { state with Requests = newRequests; Instance = state.Instance |> addWorkingCopy wc }
                         | Error error ->
                             sender <! (requestId, Error error.Message)

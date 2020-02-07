@@ -13,6 +13,11 @@ open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
 open Microsoft.Extensions.Configuration
+open Microsoft.AspNetCore.Authentication
+open Microsoft.AspNetCore.Authentication.JwtBearer
+open Microsoft.IdentityModel.Protocols
+open Microsoft.IdentityModel.Protocols.OpenIdConnect
+open Microsoft.IdentityModel.Tokens
 open Giraffe
 
 [<RequireQualifiedAccess>]
@@ -55,7 +60,7 @@ module Config =
                 }
             }" level)
 
-let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
+let configureApp isAuthenticationMandatory (apiCtx:API.APIContext) (app : IApplicationBuilder) =
     let env = app.ApplicationServices.GetService<IHostingEnvironment>()
     let builder = 
         if env.IsDevelopment() then app.UseDeveloperExceptionPage()
@@ -70,12 +75,35 @@ let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
         .UseRequestLocalization(localizationOptions)        
         .UseStaticFiles()
         .UseSerilogRequestLogging()
-        .UseGiraffe(RestAPI.webApp apiCtx) |> ignore
+        .UseAuthentication()
+        .UseGiraffe(RestAPI.webApp isAuthenticationMandatory apiCtx) |> ignore
 
-let configureServices (loggerFactory : ILoggerFactory) (services : IServiceCollection) =
+let configureServices (loggerFactory : ILoggerFactory) openIdConnectUrl (services : IServiceCollection) =
+    let authenticationOptions (o : AuthenticationOptions) =
+        o.DefaultAuthenticateScheme <- JwtBearerDefaults.AuthenticationScheme
+        o.DefaultChallengeScheme <- JwtBearerDefaults.AuthenticationScheme
+    let jwtBearer = 
+        let jwtBearerOptions (options : JwtBearerOptions) =
+            let configurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(openIdConnectUrl, new OpenIdConnectConfigurationRetriever())
+            options.IncludeErrorDetails <- true
+            options.ConfigurationManager <- configurationManager
+            options.RefreshOnIssuerKeyNotFound <- true
+            options.SaveToken <- true
+            options.TokenValidationParameters <- TokenValidationParameters (
+                ValidateIssuer = false,
+                ValidateLifetime = true,
+                NameClaimType = "preferred_username",
+                RequireSignedTokens = true,
+                ValidateAudience = false,
+                ValidateIssuerSigningKey = false
+            )
+        Action<JwtBearerOptions> jwtBearerOptions
+
     services
         .AddSingleton(typeof<ILoggerFactory>, loggerFactory)
-        .AddGiraffe() |> ignore
+        .AddGiraffe() 
+        .AddAuthentication(authenticationOptions).AddJwtBearer(jwtBearer) |> ignore
+    |> ignore
 
 let buildConfiguration (args:string[]) =
     let aspnetcoreEnv = System.Environment.GetEnvironmentVariable "ASPNETCORE_ENVIRONMENT"
@@ -180,8 +208,8 @@ let main args =
                 .UseConfiguration(config)
                 .UseKestrel(fun options -> options.Listen(System.Net.IPAddress.IPv6Any, port))
                 .UseIISIntegration()
-                .Configure(Action<IApplicationBuilder> (configureApp apiContext))
-                .ConfigureServices(Action<IServiceCollection> (configureServices loggerFactory))
+                .Configure(Action<IApplicationBuilder> (configureApp infrastuctureParameters.AuthenticationIsMandatory apiContext))
+                .ConfigureServices(Action<IServiceCollection> (configureServices loggerFactory infrastuctureParameters.OpenIdConnectUrl))
                 .UseSerilog()
                 .Build()
         // Set up termination of web server on Akka system failure

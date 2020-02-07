@@ -2,10 +2,12 @@
 
 open Application.PendingRequest
 
+type User = Application.UserRights.User
+
 type PendingUserRequest<'C> = {
     Id: RequestId 
     Command: 'C
-    User: string
+    User: User
     StartTime: System.DateTime
     Deleted: bool
 }
@@ -19,13 +21,13 @@ let newPendingUserRequest id command user =
         Deleted = false
     }
 
-type WithUser<'T> = string * 'T
-type WithUser<'T1, 'T2> = string * 'T1 * 'T2
-type WithUser<'T1, 'T2, 'T3> = string * 'T1 * 'T2 * 'T3
-type WithUser<'T1, 'T2, 'T3, 'T4> = string * 'T1 * 'T2 * 'T3 * 'T4
-type WithUser<'T1, 'T2, 'T3, 'T4, 'T5> = string * 'T1 * 'T2 * 'T3 * 'T4 * 'T5
-type WithUser<'T1, 'T2, 'T3, 'T4, 'T5, 'T6> = string * 'T1 * 'T2 * 'T3 * 'T4 * 'T5 * 'T6
-type WithUser<'T1, 'T2, 'T3, 'T4, 'T5, 'T6, 'T7> = string * 'T1 * 'T2 * 'T3 * 'T4 * 'T5 * 'T6 * 'T7
+type WithUser<'T> = User * 'T
+type WithUser<'T1, 'T2> = User * 'T1 * 'T2
+type WithUser<'T1, 'T2, 'T3> = User * 'T1 * 'T2 * 'T3
+type WithUser<'T1, 'T2, 'T3, 'T4> = User * 'T1 * 'T2 * 'T3 * 'T4
+type WithUser<'T1, 'T2, 'T3, 'T4, 'T5> = User * 'T1 * 'T2 * 'T3 * 'T4 * 'T5
+type WithUser<'T1, 'T2, 'T3, 'T4, 'T5, 'T6> = User * 'T1 * 'T2 * 'T3 * 'T4 * 'T5 * 'T6
+type WithUser<'T1, 'T2, 'T3, 'T4, 'T5, 'T6, 'T7> = User * 'T1 * 'T2 * 'T3 * 'T4 * 'T5 * 'T6 * 'T7
 
 type PendingUserRequestMap<'C> = Map<RequestId, PendingUserRequest<'C>>
 
@@ -39,7 +41,7 @@ let registerUserRequest<'C> log id (command : 'C) user requests : PendingUserReq
 type CompletedUserRequest<'S> = {
     Id: RequestId 
     Status: 'S
-    User: string
+    User: User
     Duration: System.TimeSpan
 }
 

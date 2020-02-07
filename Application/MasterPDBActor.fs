@@ -13,14 +13,16 @@ open Domain.Common.Exceptional
 open Domain.Common
 open Domain.MasterPDBWorkingCopy
 
+type User = Application.UserRights.User
+
 type Command =
 | GetState // responds with StateResult
 | GetInternalState // responds with MasterPDB
 | SetInternalState of MasterPDB // no response
 | GetEditionInfo // responds with EditionInfoResult
-| PrepareForModification of WithRequestId<int, string> // responds with WithRequestId<PrepareForModificationResult>
-| Commit of WithRequestId<string, string> // responds with WithRequestId<EditionCommitted>
-| Rollback of WithRequestId<string> // responds with WithRequestId<EditionRolledBack>
+| PrepareForModification of WithRequestId<int, User> // responds with WithRequestId<PrepareForModificationResult>
+| Commit of WithRequestId<User, string> // responds with WithRequestId<EditionCommitted>
+| Rollback of WithRequestId<User> // responds with WithRequestId<EditionRolledBack>
 | CreateWorkingCopy of WithRequestId<int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | CreateWorkingCopyOfEdition of WithRequestId<string, bool, bool> // WithRequest<CreateWorkingCopyResult>
 | CollectVersionsGarbage of int list // no response
@@ -120,7 +122,7 @@ let private masterPDBActorBody
                     match editionPDBExists, masterPDB.EditionState.IsSome with
                     | Ok true, false ->
                         ctx.Log.Value.Warning("Master PDB {pdb} is not locked whereas its edition PDB exists on server => locked it (anonymous editor)", masterPDB.Name)
-                        return! loop { state with MasterPDB = { masterPDB with EditionState = Some (newEditionInfo "anonymous") } }
+                        return! loop { state with MasterPDB = { masterPDB with EditionState = Some (newEditionInfo Application.UserRights.anonymousUserName) } }
                     | Ok false, true ->
                         ctx.Log.Value.Warning("Master PDB {pdb} is declared as locked whereas its edition PDB does not exist on server => unlocked it", masterPDB.Name)
                         return! loop { state with MasterPDB = { masterPDB with EditionState = None } }
@@ -166,8 +168,8 @@ let private masterPDBActorBody
                     elif masterPDB.EditionDisabled then
                         sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "editing PDB %s is disabled" masterPDB.Name))
                         return! loop state
-                    elif not <| UserRights.canLockPDB masterPDB (UserRights.normalUser user) then
-                        sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "user %s is not authorized to lock PDB %s" user masterPDB.Name))
+                    elif not <| UserRights.canLockPDB masterPDB user then
+                        sender <! (requestId, PreparationFailure (masterPDB.Name, sprintf "user %s is not authorized to lock PDB %s" user.Name masterPDB.Name))
                         return! loop state
                     else
                         let latestVersion = masterPDB |> getLatestAvailableVersionNumber
@@ -190,8 +192,8 @@ let private masterPDBActorBody
                         sender <! (requestId, Error (sprintf "the master PDB %s is not being edited" masterPDB.Name))
                         return! loop state
                     | Some lockInfo ->
-                        if not <| UserRights.canUnlockPDB lockInfo (UserRights.normalUser unlocker) then
-                            sender <! (requestId, Error (sprintf "user %s is not authorized to unlock PDB %s" unlocker masterPDB.Name))
+                        if not <| UserRights.canUnlockPDB lockInfo unlocker then
+                            sender <! (requestId, Error (sprintf "user %s is not authorized to unlock PDB %s" unlocker.Name masterPDB.Name))
                             return! loop state
                         elif (state.EditionOperationInProgress) then
                             sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
@@ -210,8 +212,8 @@ let private masterPDBActorBody
                         sender <! (requestId, Error (sprintf "the master PDB %s is not being edited" masterPDB.Name))
                         return! loop state
                     | Some lockInfo ->
-                        if not <| UserRights.canUnlockPDB lockInfo (UserRights.normalUser unlocker) then
-                            sender <! (requestId, Error (sprintf "user %s is not authorized to unlock PDB %s" unlocker masterPDB.Name))
+                        if not <| UserRights.canUnlockPDB lockInfo unlocker then
+                            sender <! (requestId, Error (sprintf "user %s is not authorized to unlock PDB %s" unlocker.Name masterPDB.Name))
                             return! loop state
                         elif (state.EditionOperationInProgress) then
                             sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name))
@@ -316,7 +318,7 @@ let private masterPDBActorBody
                         let sender = request.Requester.Retype<WithRequestId<PrepareForModificationResult>>()
                         match result with
                         | Ok editionPDB ->
-                            let newMasterPDB = masterPDB |> lockForEdition locker
+                            let newMasterPDB = masterPDB |> lockForEdition locker.Name
                             let editionPDBService = sprintf "%s%s/%s" instance.Server (oracleInstancePortString instance.Port) editionPDB
                             let schemaLogons = newMasterPDB.Schemas |> List.map (fun schema -> (schema.Type, sprintf "%s/%s@%s" schema.User schema.Password editionPDBService))
                             sender <! (requestId, Prepared (instance.Name, newMasterPDB, editionPDB, editionPDBService, schemaLogons))
@@ -329,7 +331,7 @@ let private masterPDBActorBody
                         let sender = request.Requester.Retype<WithRequestId<EditionCommitted>>()
                         match result with
                         | Ok _ ->
-                            let newMasterPDBMaybe = masterPDB |> unlock |> Result.map (addVersionToMasterPDB unlocker comment)
+                            let newMasterPDBMaybe = masterPDB |> unlock |> Result.map (addVersionToMasterPDB unlocker.Name comment)
                             match newMasterPDBMaybe with
                             | Ok (newMasterPDB, newVersion) ->
                                 sender <! (requestId, Ok (instance.Name, newMasterPDB, newVersion))

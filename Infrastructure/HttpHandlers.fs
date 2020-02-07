@@ -11,6 +11,24 @@ open Infrastructure.DTOJSON
 open Application.DTO
 open Chiron
 open Application.DTO.MasterPDBWorkingCopy
+open Microsoft.AspNetCore.Authentication.JwtBearer
+open System.Security.Claims
+
+let notAuthenticated next (ctx : HttpContext) =
+    RequestErrors.UNAUTHORIZED
+        ctx.Request.Scheme
+        "Finastra"
+        "User/client must be authenticated."
+        next
+        ctx
+
+let authenticationNeeded : HttpHandler =
+    requiresAuthentication ((challenge JwtBearerDefaults.AuthenticationScheme) >=> notAuthenticated)
+
+let authenticationPolicy isMandatory : HttpHandler =
+    if isMandatory then requiresAuthentication (challenge JwtBearerDefaults.AuthenticationScheme >=> notAuthenticated)
+    else fun next ctx -> next ctx
+
 
 let json jsonStr : HttpHandler =
     fun _ (ctx : HttpContext) ->
@@ -26,15 +44,23 @@ let getCulture (ctx:HttpContext) =
 
 let withUser f : HttpHandler =
     fun next (ctx:HttpContext) -> task {
-        let userNameMaybe = 
-            if (ctx.User.Identity.Name = null) then None else Some ctx.User.Identity.Name
-            |> Option.orElse (ctx.TryGetRequestHeader "User") // TODO: remove this line when authentication implemented
-        let isAdmin = ctx.TryGetRequestHeader "Admin" |> Option.contains "Yes!" // TODO
-        match userNameMaybe with
-        | Some userName -> 
-            let user:Application.UserRights.User = { Name = userName.ToLower(); Roles = if isAdmin then [ "admin" ] else [] }
+        let user : Application.UserRights.User option =
+            if ctx.User.Identity.IsAuthenticated then
+                let identity = ctx.User.Identity :?> ClaimsIdentity
+                let roles =
+                    identity.Claims 
+                    |> Seq.filter (fun claim -> claim.Type = identity.RoleClaimType)
+                    |> Seq.map (fun claim -> claim.Value)
+                    |> List.ofSeq
+                ctx.User.Identity.Name |> Application.UserRights.consUser roles |> Some
+            else // TODO : remove
+                let isAdmin = ctx.TryGetRequestHeader "Admin" |> Option.contains "Yes!"
+                ctx.TryGetRequestHeader "User" |> Option.map (Application.UserRights.consUser (if isAdmin then [ Application.UserRights.adminRole ] else []))
+        match user with
+        | Some user -> 
             return! f user next ctx
-        | None -> return! RequestErrors.badRequest (text "User cannot be determined.") next ctx
+        | None -> 
+            return! RequestErrors.badRequest (text "User cannot be determined.") next ctx
     }
 
 let withAdmin f : HttpHandler =
@@ -42,8 +68,12 @@ let withAdmin f : HttpHandler =
         if UserRights.isAdmin user then
             f user next ctx
         else
-            RequestErrors.forbidden (text "User must be admin.") next ctx
+            RequestErrors.forbidden (text "User/client must be admin.") next ctx
     withUser ff
+
+// TODO: Use this function instead of withAdmin when authentication becomes mandatory
+let withAdmin2 f : HttpHandler =
+    Giraffe.Auth.requiresRole Application.UserRights.adminRole (RequestErrors.forbidden (text "User/client must be admin.")) >=> (withUser f)
 
 let getAllInstances apiCtx next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx
@@ -253,7 +283,7 @@ let createWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, na
                 if not parsedOk then 
                     return! RequestErrors.badRequest (text "When provided, the \"durable\" query parameter must be \"true\" or \"false\".") next ctx
                 else
-                    let! requestValidation = API.createWorkingCopy apiCtx user.Name instance masterPDB version name (not clone) durable force
+                    let! requestValidation = API.createWorkingCopy apiCtx user instance masterPDB version name (not clone) durable force
                     return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
@@ -267,7 +297,7 @@ let createWorkingCopyOfEdition apiCtx (masterPDB:string, name:string) =
             if not parsedOk then 
                 return! RequestErrors.badRequest (text "When provided, the \"durable\" query parameter must be \"true\" or \"false\".") next ctx
             else
-                let! requestValidation = API.createWorkingCopyOfEdition apiCtx user.Name masterPDB name durable force
+                let! requestValidation = API.createWorkingCopyOfEdition apiCtx user masterPDB name durable force
                 return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
@@ -277,7 +307,7 @@ let deleteWorkingCopy apiCtx (instance:string, name:string) =
         if not parsedOk then 
             return! RequestErrors.badRequest (text "When provided, the \"durable\" query parameter must be \"true\" or \"false\".") next ctx
         else
-            let! requestValidation = API.deleteWorkingCopy apiCtx user.Name instance name durable
+            let! requestValidation = API.deleteWorkingCopy apiCtx user instance name durable
             return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
 
@@ -353,7 +383,7 @@ let prepareMasterPDBForModification apiCtx (pdb:string) = withUser (fun user nex
     | Some version -> 
         let (ok, version) = System.Int32.TryParse version
         if ok then
-            let! requestValidation = API.prepareMasterPDBForModification apiCtx user.Name pdb version
+            let! requestValidation = API.prepareMasterPDBForModification apiCtx user pdb version
             return! returnRequest apiCtx.Endpoint requestValidation next ctx
         else 
             return! RequestErrors.badRequest (text "The current version must an integer.") next ctx
@@ -364,14 +394,14 @@ let prepareMasterPDBForModification apiCtx (pdb:string) = withUser (fun user nex
 let commitMasterPDB apiCtx (pdb:string) = withUser (fun user next ctx -> task {
     let! comment = ctx.ReadBodyFromRequestAsync()
     if (comment <> "") then
-        let! requestValidation = API.commitMasterPDB apiCtx user.Name pdb comment
+        let! requestValidation = API.commitMasterPDB apiCtx user pdb comment
         return! returnRequest apiCtx.Endpoint requestValidation next ctx
     else
         return! RequestErrors.badRequest (text "A comment must be provided.") next ctx
 })
 
 let rollbackMasterPDB apiCtx (pdb:string) = withUser (fun user next ctx -> task {
-    let! requestValidation = API.rollbackMasterPDB apiCtx user.Name pdb
+    let! requestValidation = API.rollbackMasterPDB apiCtx user pdb
     return! returnRequest apiCtx.Endpoint requestValidation next ctx
 })
 
@@ -428,7 +458,7 @@ let encodeCreateMasterPDBParams = Encode.buildWith (fun (x:CreateMasterPDBParams
     Encode.required Encode.string "Dump" x.Dump>>
     Encode.required Encode.stringList "Schemas" x.Schemas >>
     Encode.required (Encode.listWith (Encode.tuple3 Encode.string Encode.string Encode.string)) "TargetSchemas" x.TargetSchemas >>
-    Encode.required Encode.string "User" x.User >>
+    Encode.required Encode.string "User" x.User.Name >>
     Encode.required Encode.dateTime "Date" x.Date >>
     Encode.required Encode.string "Comment" x.Comment
 )
@@ -438,7 +468,7 @@ let jsonToCreateMasterPDBParams user json =
 
 let createNewPDB apiCtx = withAdmin (fun user next ctx -> task {
     let! body = ctx.ReadBodyFromRequestAsync()
-    let pars = jsonToCreateMasterPDBParams user.Name body
+    let pars = jsonToCreateMasterPDBParams user body
     match pars with
     | JPass result ->
         let! requestValidation = API.createMasterPDB apiCtx result

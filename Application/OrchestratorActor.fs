@@ -190,7 +190,7 @@ let describeAdminCommand = function
 let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) (ctx : Actor<_>) =
 
     let registerUserRequest = 
-        let logRequest id command user = ctx.Log.Value.Info("<< Command {requestId} from user {user} : {command}", id, user, describeCommand command)
+        let logRequest id command (user:User) = ctx.Log.Value.Info("<< Command {requestId} from user {user} : {command}", id, user.Name, describeCommand command)
         registerUserRequest logRequest
 
     let requestDone state = 
@@ -278,7 +278,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
 
     and handleCommand state command = 
         let sender = ctx.Sender().Retype<RequestValidation>()
-        let pendingChangeCommandAcceptable user = UserRights.isAdmin (UserRights.normalUser user)
+        let pendingChangeCommandAcceptable user = UserRights.isAdmin user
         let instanceActor = instanceActor state
         let primaryInstance = primaryInstance state
         let getInstanceName = getInstanceName state

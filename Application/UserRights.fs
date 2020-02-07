@@ -5,14 +5,15 @@ type User = {
     Roles: string list
 }
 
-let normalUser name = { Name = name; Roles = [] }
+let consUser roles name = { Name = name; Roles = roles }
 
-let adminUser = { Name = "admin"; Roles = [ "admin" ] }
+let [<Literal>]adminRole = "admin"
+let [<Literal>]anonymousUserName = "anonymous"
 
 let isAdmin (user:User) = 
-    user.Roles |> List.contains "admin" // TODO ?
+    user.Roles |> List.contains adminRole
 
 let canLockPDB (_:Domain.MasterPDB.MasterPDB) _ = true
 
 let canUnlockPDB (lockInfo:Domain.MasterPDB.EditionInfo) user =
-    isAdmin user || lockInfo.Editor = user.Name || lockInfo.Editor = "anonymous"
+    isAdmin user || lockInfo.Editor = user.Name || lockInfo.Editor = anonymousUserName

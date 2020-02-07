@@ -6,7 +6,8 @@ open Application
 open Giraffe
 open System
 
-let webApp (apiCtx:API.APIContext) : HttpFunc -> HttpFunc = 
+let webApp isAuthenticationMandatory (apiCtx:API.APIContext) : HttpHandler = 
+    HttpHandlers.authenticationPolicy isAuthenticationMandatory >=> 
     choose [
         GET >=> choose [
             routef "/requests/%O" (HttpHandlers.getRequestStatus apiCtx)

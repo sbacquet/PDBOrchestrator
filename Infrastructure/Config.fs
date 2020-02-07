@@ -166,16 +166,37 @@ let validateUseGit (config:IConfigurationRoot) =
         Valid useGit
     with _ -> Invalid [ sprintf "config entry %s is not a valid boolean" configEntry ] 
 
+let validateOpenIdConnectUrl (config:IConfigurationRoot) =
+    let configEntry = "OpenIdConnectUrl"
+    try
+        let url = config.GetValue(configEntry, "")
+        if url = "" then
+            Invalid [ sprintf "config entry %s must be a valid URL to OpenIdConnect server" configEntry ]
+        else
+            Valid url
+    with _ -> Invalid [ sprintf "config entry %s is not a valid string" configEntry ] 
+
+let validateAuthenticationIsMandatory (config:IConfigurationRoot) =
+    let configEntry = "AuthenticationIsMandatory"
+    try
+        let useGit = config.GetValue(configEntry, true)
+        Valid useGit
+    with _ -> Invalid [ sprintf "config entry %s is not a valid boolean" configEntry ] 
+
 let configToInfrastuctureParameters (config:IConfigurationRoot) = 
     let root = validateRoot config
     let port = validatePort config
     let dnsName = validateDNSName config
     let useGit = validateUseGit config
+    let openIdConnectUrl = validateOpenIdConnectUrl config
+    let authenticationIsMandatory = validateAuthenticationIsMandatory config
     retn Infrastructure.Parameters.consParameters 
         <*> root
         <*> port
         <*> dnsName
         <*> useGit
+        <*> openIdConnectUrl
+        <*> authenticationIsMandatory
 
 let mapConfigValues f (mapping:(string * string) list) (config:IConfigurationRoot) =
     config.AsEnumerable() 
