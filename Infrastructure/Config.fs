@@ -132,7 +132,7 @@ let validateRoot (config:IConfigurationRoot) =
 let validatePort (config:IConfigurationRoot) = 
     let configEntry = "Port"
     try
-        let port = config.GetValue(configEntry, 56789)
+        let port = config.GetValue(configEntry, 61200)
         if (port > 0 && port <= 65535)
         then Valid port
         else Invalid [ sprintf "config entry %s must be > 0 and <= 65535" configEntry ]
