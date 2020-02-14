@@ -7,6 +7,8 @@ type Parameters = {
     UseGit: bool
     OpenIdConnectUrl: string
     AuthenticationIsMandatory: bool
+    EnforceHTTPS: bool
+    CertificatePath: string
 }
 
 let consParameters 
@@ -16,6 +18,8 @@ let consParameters
     useGit
     openIdConnectUrl
     authenticationMandatory
+    enforceHTTPS
+    certificatePath
     =
     {
         Root = root
@@ -24,4 +28,6 @@ let consParameters
         UseGit = useGit
         OpenIdConnectUrl = openIdConnectUrl
         AuthenticationIsMandatory = authenticationMandatory
+        EnforceHTTPS = enforceHTTPS
+        CertificatePath = certificatePath
     }

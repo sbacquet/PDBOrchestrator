@@ -55,7 +55,7 @@ let withUser f : HttpHandler =
                 ctx.User.Identity.Name |> Application.UserRights.consUser roles |> Some
             else // TODO : remove
                 let isAdmin = ctx.TryGetRequestHeader "Admin" |> Option.contains "Yes!"
-                ctx.TryGetRequestHeader "User" |> Option.map (Application.UserRights.consUser (if isAdmin then [ Application.UserRights.adminRole ] else []))
+                ctx.TryGetRequestHeader "User" |> Option.map (Application.UserRights.consUser (if isAdmin then Application.UserRights.allRoles else []))
         match user with
         | Some user -> 
             return! f user next ctx

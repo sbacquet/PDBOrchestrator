@@ -126,7 +126,7 @@ let validateRoot (config:IConfigurationRoot) =
         then Invalid [ sprintf "config entry %s must be a non empty string" configEntry ]
         elif (not (System.IO.Directory.Exists(root)))
         then Invalid [ sprintf "config entry %s must be a valid path" configEntry ]
-        else Valid root
+        else Valid (System.IO.Path.GetFullPath root)
     with _ -> Invalid [ sprintf "config entry %s is not a valid string" configEntry ] 
 
 let validatePort (config:IConfigurationRoot) = 
@@ -183,6 +183,30 @@ let validateAuthenticationIsMandatory (config:IConfigurationRoot) =
         Valid useGit
     with _ -> Invalid [ sprintf "config entry %s is not a valid boolean" configEntry ] 
 
+let validateEnforceHTTPS (config:IConfigurationRoot) =
+    let configEntry = "EnforceHTTPS"
+    try
+        let enforceHTTPS = config.GetValue(configEntry, true)
+        Valid enforceHTTPS
+    with _ -> Invalid [ sprintf "config entry %s is not a valid boolean" configEntry ] 
+
+let validateCertificatePath rootFolder (config:IConfigurationRoot) =
+    let configEntry = "CertificatePath"
+    try
+        let path = config.GetValue(configEntry, "")
+        if path = "" then
+            Invalid [ sprintf "config entry %s must not be empty" configEntry ]
+        else
+            let path =
+                if System.IO.Path.IsPathRooted path then path
+                else System.IO.Path.Combine(rootFolder, path)
+            let path = System.IO.Path.GetFullPath path
+            if System.IO.File.Exists path then
+                Valid path
+            else
+                Invalid [ sprintf "config entry %s must contain a valid file path, either absolute or relative to root folder" path ]
+    with _ -> Invalid [ sprintf "config entry %s is not a valid string" configEntry ] 
+
 let configToInfrastuctureParameters (config:IConfigurationRoot) = 
     let root = validateRoot config
     let port = validatePort config
@@ -190,6 +214,8 @@ let configToInfrastuctureParameters (config:IConfigurationRoot) =
     let useGit = validateUseGit config
     let openIdConnectUrl = validateOpenIdConnectUrl config
     let authenticationIsMandatory = validateAuthenticationIsMandatory config
+    let enforceHTTPS = validateEnforceHTTPS config
+    let certificatePath = root |> Domain.Common.Validation.bind (fun root -> validateCertificatePath root config)
     retn Infrastructure.Parameters.consParameters 
         <*> root
         <*> port
@@ -197,6 +223,8 @@ let configToInfrastuctureParameters (config:IConfigurationRoot) =
         <*> useGit
         <*> openIdConnectUrl
         <*> authenticationIsMandatory
+        <*> enforceHTTPS
+        <*> certificatePath
 
 let mapConfigValues f (mapping:(string * string) list) (config:IConfigurationRoot) =
     config.AsEnumerable() 

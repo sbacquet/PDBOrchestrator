@@ -9,6 +9,7 @@ open Serilog
 open Akkling
 open Domain.Common.Validation
 open System
+open System.Net
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
@@ -85,17 +86,23 @@ let configureServices (loggerFactory : ILoggerFactory) openIdConnectUrl (service
     let jwtBearer = 
         let jwtBearerOptions (options : JwtBearerOptions) =
             let configurationManager = new ConfigurationManager<OpenIdConnectConfiguration>(openIdConnectUrl, new OpenIdConnectConfigurationRetriever())
+            let openIdConfig = configurationManager.GetConfigurationAsync(Threading.CancellationToken.None).Result;
             options.IncludeErrorDetails <- true
             options.ConfigurationManager <- configurationManager
             options.RefreshOnIssuerKeyNotFound <- true
             options.SaveToken <- true
             options.TokenValidationParameters <- TokenValidationParameters (
-                ValidateIssuer = false,
-                ValidateLifetime = true,
                 NameClaimType = "preferred_username",
-                RequireSignedTokens = true,
-                ValidateAudience = false,
-                ValidateIssuerSigningKey = false
+
+                ValidateIssuer = true,
+                ValidIssuer = openIdConfig.Issuer,
+                ValidateIssuerSigningKey = true,
+
+                ValidateAudience = true,
+                ValidAudience = "pdb-orchestrator",
+
+                ValidateLifetime = true,
+                RequireSignedTokens = true
             )
         Action<JwtBearerOptions> jwtBearerOptions
 
@@ -193,8 +200,9 @@ let main args =
         let orchestratorActor = system |> OrchestratorActor.spawn validApplicationParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
         system |> OrchestratorWatcher.spawn orchestratorActor |> ignore
         let port = infrastuctureParameters.Port
-        let portString port = if port = 80 then "" else sprintf ":%d" port
-        let endPoint = sprintf "http://%s%s" infrastuctureParameters.DNSName (portString port) // TODO (https)
+        let endPoint = 
+            if infrastuctureParameters.EnforceHTTPS then sprintf "https://%s:%d" infrastuctureParameters.DNSName port
+            else sprintf "http://%s:%d" infrastuctureParameters.DNSName (port+1)
         let apiContext = 
             API.consAPIContext 
                 system 
@@ -206,9 +214,21 @@ let main args =
             WebHostBuilder()
                 .UseWebRoot("wwwroot")
                 .UseConfiguration(config)
-                .UseUrls()
-                .UseKestrel(fun options -> options.Listen(System.Net.IPAddress.IPv6Any, port))
-                .Configure(Action<IApplicationBuilder> (configureApp infrastuctureParameters.AuthenticationIsMandatory apiContext))
+                .UseUrls() // Prevent warning at startup
+                .UseKestrel(fun options ->
+                    options.Listen(
+                        IPAddress.IPv6Any, 
+                        port,
+                        fun listenOptions -> listenOptions.UseHttps(infrastuctureParameters.CertificatePath, "pas1234!") |> ignore
+                    )
+                    if (not infrastuctureParameters.EnforceHTTPS) then options.Listen(IPAddress.IPv6Any, port+1) |> ignore
+                )
+                .Configure(Action<IApplicationBuilder>
+                    (configureApp 
+                        infrastuctureParameters.AuthenticationIsMandatory 
+                        apiContext
+                    )
+                )
                 .ConfigureServices(Action<IServiceCollection> (configureServices loggerFactory infrastuctureParameters.OpenIdConnectUrl))
                 .UseSerilog()
                 .Build()
