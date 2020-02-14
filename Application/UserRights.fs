@@ -11,8 +11,6 @@ let [<Literal>]rolePrefix = "pdb_"
 let [<Literal>]adminRole = "admin"
 let [<Literal>]unlockerRole = "unlocker"
 
-let allRoles = [ adminRole; unlockerRole ] |> List.map ((+)rolePrefix)
-
 let [<Literal>]anonymousUserName = "anonymous"
 
 let hasRole role (user:User) = 
@@ -22,7 +20,8 @@ let isAdmin = hasRole adminRole
 
 let isUnlocker = hasRole unlockerRole
 
-let canLockPDB (_:Domain.MasterPDB.MasterPDB) _ = true
+let canLockPDB (pdb:Domain.MasterPDB.MasterPDB) (user:User) =
+    pdb.EditionRole |> Option.map (fun role -> user |> hasRole role) |> Option.defaultValue true
 
 let canUnlockPDB (lockInfo:Domain.MasterPDB.EditionInfo) user =
     lockInfo.Editor = user.Name || lockInfo.Editor = anonymousUserName || isUnlocker user

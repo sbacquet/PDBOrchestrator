@@ -13,11 +13,11 @@ open Akka.Configuration
 open Serilog
 open Microsoft.Extensions.Logging
 open System
-open Application.DTO.OracleInstance
 open Application.OrchestratorActor
 open Domain.Common.Validation
 open Application.Common
 open Domain.MasterPDBWorkingCopy
+open Domain.MasterPDBVersion
 open Application
 
 let parameters : Application.Parameters.Parameters = {
@@ -92,7 +92,7 @@ let [<Literal>]cSnapshotSourcesPath = "/snapshot-sources"
 
 let instance1 = 
     consOracleInstance
-        [ "test1"; "test2" ]
+        [ "test1"; "test2"; "GOLDEN" ]
         List.empty
         "server1" "server1.com" None
         "xxx" "xxx"
@@ -219,6 +219,7 @@ let masterPDBMap1 =
     [ 
         "TEST1", newMasterPDB "TEST1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
         "TEST2", test2 |> addVersionToMasterPDB "me" "tata" |> fst
+        "GOLDEN", consMasterPDB "GOLDEN" [ consSchema "GOLDEN" "pqss" "Invest" ] [ newPDBVersion "me" "comment" ] None false (Some "qaRole") Map.empty
     ] |> Map.ofList
 
 let masterPDBMap2 =
@@ -344,7 +345,7 @@ let ``API creates PDB`` () = test <| fun tck ->
 
     let stateBefore = API.getInstanceState ctx "primary" |> runQuick
     stateBefore |> Result.mapError failwith |> ignore
-    stateBefore |> Result.map (fun instance -> Assert.Equal(2, instance.MasterPDBs.Length)) |> ignore
+    stateBefore |> Result.map (fun instance -> Assert.Equal(3, instance.MasterPDBs.Length)) |> ignore
 
     let request = 
         let pars = 
@@ -361,7 +362,7 @@ let ``API creates PDB`` () = test <| fun tck ->
 
     let stateAfter = API.getInstanceState ctx "primary" |> runQuick
     stateAfter |> Result.mapError failwith |> ignore
-    stateAfter |> Result.map (fun instance -> Assert.Equal(3, instance.MasterPDBs.Length)) |> ignore
+    stateAfter |> Result.map (fun instance -> Assert.Equal(4, instance.MasterPDBs.Length)) |> ignore
 
 [<Fact>]
 let ``API fails to create a PDB`` () = test <| fun tck ->
@@ -457,6 +458,24 @@ let ``API edits and commits master PDB`` () = test <| fun tck ->
     match state with
     | Ok pdb -> Assert.Equal("version 2", pdb.Versions.[1].Comment)
     | Error error -> failwith error
+
+[<Fact>]
+let ``API cannot edit a master PDB if user not granted`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let notQAguy = UserRights.consUser [ "anyRole" ] "notQA"
+    let request = API.prepareMasterPDBForModification ctx notQAguy "golden" 1 |> runQuick
+    request |> throwIfRequestNotCompletedWithError ctx
+
+[<Fact>]
+let ``API can edit a master PDB if user granted`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+
+    let QAguy = UserRights.consUser [ UserRights.rolePrefix+"qaRole"; "otherRole" ] "QA"
+    let request = API.prepareMasterPDBForModification ctx QAguy "golden" 1 |> runQuick
+    request |> throwIfRequestNotCompletedOk ctx |> ignore
 
 [<Fact>]
 let ``API deletes a version of master PDB`` () = test <| fun tck ->
@@ -824,9 +843,9 @@ let ``API gets pending changes`` () = test <| fun tck ->
     let getMasterPDBRepo (instance:OracleInstance) (name:string) = 
         match instance.Name with
         | "server1" -> 
-            let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newEditionInfo "lockman" |> Some) false Map.empty
+            let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newEditionInfo "lockman" |> Some) false None Map.empty
             match name with
-            | "TEST1" | "TEST2" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
+            | "TEST1" | "TEST2" | "GOLDEN" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
             | "LOCKED" -> FakeMasterPDBRepo lockedMasterPDB :> IMasterPDBRepository
             | name -> failwithf "Master PDB %s does not exist on instance %s" name instance.Name
         | name -> failwithf "Oracle instance %s does not exist" name

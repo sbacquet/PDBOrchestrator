@@ -1,14 +1,15 @@
 {
   "name": "GOLDEN",
+  "editionRole": "qa_editor",
   "schemas": [
     {
       "user": "fusioninvest",
-      "password": "zmuNQwZo+m0ZXcShnMpyEg==",
+      "password": "O5uROhNCgndZ4snbYZ6VKw==",
       "type": "Invest"
     },
     {
       "user": "af",
-      "password": "zmuNQwZo+m0ZXcShnMpyEg==",
+      "password": "O5uROhNCgndZ4snbYZ6VKw==",
       "type": "SRM"
     }
   ],
@@ -21,5 +22,5 @@
     }
   ],
   "_version": 1,
-  "_iv": "TCh8MjdIqQBEdgM4YWdCMQ=="
+  "_iv": "7qFzvTRMu2rhYEzVyaX/rQ=="
 }

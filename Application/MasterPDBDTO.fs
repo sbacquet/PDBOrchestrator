@@ -27,16 +27,18 @@ type MasterPDBDTO = {
     Versions: MasterPDBVersionDTO list
     EditionState: EditionInfoDTO option
     EditionDisabled: bool
+    EditionRole: string option
     Properties: Map<string, string>
 }
 
-let consMasterPDBDTO name schemas latestVersion versions editionState editionDisabled properties = {
+let consMasterPDBDTO name schemas latestVersion versions editionState editionDisabled editionRole properties = {
     Name = name
     Schemas = schemas
     LatestVersion = latestVersion
     Versions = versions
     EditionState = editionState |> Option.map (fun editionState -> { editionState with Date = editionState.Date.ToUniversalTime() })
     EditionDisabled = editionDisabled
+    EditionRole = editionRole
     Properties = properties
 }
 
@@ -48,6 +50,7 @@ let toDTO (masterPDB:MasterPDB) =
         (masterPDB.Versions |> Map.toList |> List.map (fun (_, version) -> version |> toDTO (Domain.MasterPDBVersion.manifestFile masterPDB.Name version.VersionNumber)))
         (masterPDB.EditionState |> toEditionInfoDTO)
         masterPDB.EditionDisabled
+        masterPDB.EditionRole
         masterPDB.Properties
 
 let fromDTO (dto:MasterPDBDTO) : MasterPDB = 
@@ -64,6 +67,7 @@ let fromDTO (dto:MasterPDBDTO) : MasterPDB =
                 version.Properties))
         (dto. EditionState |> Option.map (fun lock -> consEditionInfo lock.Editor lock.Date))
         dto.EditionDisabled
+        dto.EditionRole
         dto.Properties
 
 

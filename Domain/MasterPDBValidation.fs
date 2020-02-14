@@ -56,7 +56,12 @@ let validateProperties pdb properties =
     else
         Invalid [ sprintf "PDB %s has an empty property key" pdb ]
 
-let consValidMasterPDB name schemas versions lockState editionDisabled properties =
+let validateEditionRole pdb (role:string option) =
+    match role with
+    | Some editionRole -> if editionRole = "" then Invalid [ sprintf "the edition role for master PDB %s cannot be empty" pdb ] else Valid role
+    | None -> Valid None
+
+let consValidMasterPDB name schemas versions lockState editionDisabled editionRole properties =
     retn
         consMasterPDB <*> 
         validateName name <*> 
@@ -64,4 +69,5 @@ let consValidMasterPDB name schemas versions lockState editionDisabled propertie
         validateVersions name versions <*>
         validateLock name lockState <*>
         Valid editionDisabled <*>
+        validateEditionRole name editionRole <*>
         validateProperties name properties

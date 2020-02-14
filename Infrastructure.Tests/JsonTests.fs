@@ -16,7 +16,7 @@ open Application
 let ``Serialize and deserialize master PDB`` () =
     let password = "toto"
     let props = [ "key", "value" ] |> Map.ofList
-    let pdb = consMasterPDB "test1" [ consSchema "toto" password "Invest" ] [ newPDBVersion "me" "comment" ] (newEditionInfo "me" |> Some) false props
+    let pdb = consMasterPDB "test1" [ consSchema "toto" password "Invest" ] [ newPDBVersion "me" "comment" ] (newEditionInfo "me" |> Some) false (Some "editionRole") props
     let json = pdb |> MasterPDBJson.masterPDBtoJson
     let pdb' = json |> MasterPDBJson.jsonToMasterPDB
     match pdb' with

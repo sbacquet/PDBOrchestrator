@@ -53,9 +53,11 @@ let withUser f : HttpHandler =
                     |> Seq.map (fun claim -> claim.Value)
                     |> List.ofSeq
                 ctx.User.Identity.Name |> Application.UserRights.consUser roles |> Some
-            else // TODO : remove
+            else // TODO: delete this branch when OpenID mandatory
                 let isAdmin = ctx.TryGetRequestHeader "Admin" |> Option.contains "Yes!"
-                ctx.TryGetRequestHeader "User" |> Option.map (Application.UserRights.consUser (if isAdmin then Application.UserRights.allRoles else []))
+                let qaEditorRole = "qa_editor"
+                let allRoles = [ UserRights.adminRole; UserRights.unlockerRole; qaEditorRole ] |> List.map ((+)UserRights.rolePrefix)
+                ctx.TryGetRequestHeader "User" |> Option.map (UserRights.consUser (if isAdmin then allRoles else [ UserRights.rolePrefix+qaEditorRole ]))
         match user with
         | Some user -> 
             return! f user next ctx

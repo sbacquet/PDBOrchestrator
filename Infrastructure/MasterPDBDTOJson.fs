@@ -15,11 +15,12 @@ let encodeLockInfoDTO culture = Encode.buildWith (fun (x:EditionInfoDTO) ->
 
 let encodeMasterPDBDTO culture = Encode.buildWith (fun (x:MasterPDBDTO) ->
     Encode.required Encode.string "name" x.Name >>
-    Encode.required (Encode.listWith encodeSchemaDTO) "schemas" x.Schemas >>
-    Encode.ifNotEqual Map.empty (Encode.mapWith Encode.string) "properties" x.Properties >>
     Encode.ifNotEqual false Encode.bool "editionDisabled" x.EditionDisabled >>
+    Encode.optional Encode.string "editionRole" x.EditionRole >>
     Encode.optional (encodeLockInfoDTO culture) "edition" x.EditionState >>
     Encode.required Encode.int "latestVersion" x.LatestVersion >>
+    Encode.required (Encode.listWith encodeSchemaDTO) "schemas" x.Schemas >>
+    Encode.ifNotEqual Map.empty (Encode.mapWith Encode.string) "properties" x.Properties >>
     Encode.required (Encode.listWith (encodeMasterPDBVersionDTO culture)) "versions" x.Versions
 )
 

@@ -30,16 +30,18 @@ type MasterPDB = {
     Versions: Map<MasterPDBVersion.VersionNumber, MasterPDBVersion.MasterPDBVersion>
     EditionState : EditionInfo option
     EditionDisabled: bool
+    EditionRole: string option
     Properties: Map<string, string>
 }
 
-let consMasterPDB (name:string) schemas versions (editionState:EditionInfo option) editionDisabled properties = 
+let consMasterPDB (name:string) schemas versions (editionState:EditionInfo option) editionDisabled editionRole properties = 
     { 
         Name = name.ToUpper()
         Schemas = schemas 
         Versions = versions |> List.map (fun version -> version.VersionNumber, version) |> Map.ofList
         EditionState = editionState |> Option.map (fun editionState -> { editionState with Date = editionState.Date.ToUniversalTime() })
         EditionDisabled = editionDisabled
+        EditionRole = editionRole
         Properties = properties
     }
 
@@ -50,6 +52,7 @@ let newMasterPDB (name:string) schemas createdBy comment =
         Versions = [ 1, newPDBVersion createdBy comment ] |> Map.ofList
         EditionState = None 
         EditionDisabled = false
+        EditionRole = None
         Properties = Map.empty
     }
 
