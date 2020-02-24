@@ -207,10 +207,21 @@ let validateCertificatePath rootFolder (config:IConfigurationRoot) =
                 Invalid [ sprintf "config entry %s must contain a valid file path, either absolute or relative to root folder" path ]
     with _ -> Invalid [ sprintf "config entry %s is not a valid string" configEntry ] 
 
+let validateDomain (config:IConfigurationRoot) =
+    let configEntry = "Domain"
+    try
+        let domain = config.GetValue(configEntry, "dev")
+        if domain = "" then
+            Invalid [ sprintf "config entry %s must not be empty" configEntry ]
+        else
+            Valid domain
+    with _ -> Invalid [ sprintf "config entry %s is not a valid string" configEntry ]
+
 let configToInfrastuctureParameters (config:IConfigurationRoot) = 
     let root = validateRoot config
     let port = validatePort config
     let dnsName = validateDNSName config
+    let domain = validateDomain config
     let useGit = validateUseGit config
     let openIdConnectUrl = validateOpenIdConnectUrl config
     let authenticationIsMandatory = validateAuthenticationIsMandatory config
@@ -220,6 +231,7 @@ let configToInfrastuctureParameters (config:IConfigurationRoot) =
         <*> root
         <*> port
         <*> dnsName
+        <*> domain
         <*> useGit
         <*> openIdConnectUrl
         <*> authenticationIsMandatory

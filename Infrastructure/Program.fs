@@ -79,7 +79,7 @@ let configureApp isAuthenticationMandatory (apiCtx:API.APIContext) (app : IAppli
         .UseAuthentication()
         .UseGiraffe(RestAPI.webApp isAuthenticationMandatory apiCtx) |> ignore
 
-let configureServices (loggerFactory : ILoggerFactory) openIdConnectUrl (services : IServiceCollection) =
+let configureServices (loggerFactory : ILoggerFactory) openIdConnectUrl domain (services : IServiceCollection) =
     let authenticationOptions (o : AuthenticationOptions) =
         o.DefaultAuthenticateScheme <- JwtBearerDefaults.AuthenticationScheme
         o.DefaultChallengeScheme <- JwtBearerDefaults.AuthenticationScheme
@@ -99,7 +99,7 @@ let configureServices (loggerFactory : ILoggerFactory) openIdConnectUrl (service
                 ValidateIssuerSigningKey = true,
 
                 ValidateAudience = true,
-                ValidAudience = "pdb-orchestrator",
+                ValidAudiences = [ "pdb-orchestrator"; "pdb-orchestrator_"+domain ], // TODO: remove 1st
 
                 ValidateLifetime = true,
                 RequireSignedTokens = true
@@ -229,7 +229,7 @@ let main args =
                         apiContext
                     )
                 )
-                .ConfigureServices(Action<IServiceCollection> (configureServices loggerFactory infrastuctureParameters.OpenIdConnectUrl))
+                .ConfigureServices(Action<IServiceCollection> (configureServices loggerFactory infrastuctureParameters.OpenIdConnectUrl infrastuctureParameters.Domain))
                 .UseSerilog()
                 .Build()
         // Set up termination of web server on Akka system failure
