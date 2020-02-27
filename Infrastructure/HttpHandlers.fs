@@ -51,7 +51,7 @@ let withUser f : HttpHandler =
     }
 
 let withAdmin f : HttpHandler =
-    Auth.requiresRole UserRights.adminRole (RequestErrors.forbidden (text "User/client must be admin.")) >=> (withUser f)
+    Auth.requiresRole (UserRights.rolePrefix+UserRights.adminRole) (RequestErrors.forbidden (text "User/client must be admin.")) >=> (withUser f)
 
 let getAllInstances apiCtx next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx
