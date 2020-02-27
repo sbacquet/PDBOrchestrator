@@ -61,7 +61,7 @@ module Config =
                 }
             }" level)
 
-let configureApp isAuthenticationMandatory (apiCtx:API.APIContext) (app : IApplicationBuilder) =
+let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
     let env = app.ApplicationServices.GetService<IHostingEnvironment>()
     let builder = 
         if env.IsDevelopment() then app.UseDeveloperExceptionPage()
@@ -77,7 +77,7 @@ let configureApp isAuthenticationMandatory (apiCtx:API.APIContext) (app : IAppli
         .UseStaticFiles()
         .UseSerilogRequestLogging()
         .UseAuthentication()
-        .UseGiraffe(RestAPI.webApp isAuthenticationMandatory apiCtx) |> ignore
+        .UseGiraffe(RestAPI.webApp apiCtx) |> ignore
 
 let configureServices (loggerFactory : ILoggerFactory) openIdConnectUrl domain (services : IServiceCollection) =
     let authenticationOptions (o : AuthenticationOptions) =
@@ -200,9 +200,7 @@ let main args =
         let orchestratorActor = system |> OrchestratorActor.spawn validApplicationParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
         system |> OrchestratorWatcher.spawn orchestratorActor |> ignore
         let port = infrastuctureParameters.Port
-        let endPoint = 
-            if infrastuctureParameters.EnforceHTTPS then sprintf "https://%s:%d" infrastuctureParameters.DNSName port
-            else sprintf "http://%s:%d" infrastuctureParameters.DNSName (port+1)
+        let endPoint = sprintf "https://%s:%d" infrastuctureParameters.DNSName port
         let apiContext = 
             API.consAPIContext 
                 system 
@@ -223,12 +221,7 @@ let main args =
                     )
                     if (not infrastuctureParameters.EnforceHTTPS) then options.Listen(IPAddress.IPv6Any, port+1) |> ignore
                 )
-                .Configure(Action<IApplicationBuilder>
-                    (configureApp 
-                        infrastuctureParameters.AuthenticationIsMandatory 
-                        apiContext
-                    )
-                )
+                .Configure(Action<IApplicationBuilder> (configureApp apiContext))
                 .ConfigureServices(Action<IServiceCollection> (configureServices loggerFactory infrastuctureParameters.OpenIdConnectUrl infrastuctureParameters.Domain))
                 .UseSerilog()
                 .Build()

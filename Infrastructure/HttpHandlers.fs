@@ -25,11 +25,6 @@ let notAuthenticated next (ctx : HttpContext) =
 let authenticationNeeded : HttpHandler =
     requiresAuthentication ((challenge JwtBearerDefaults.AuthenticationScheme) >=> notAuthenticated)
 
-let authenticationPolicy isMandatory : HttpHandler =
-    if isMandatory then requiresAuthentication (challenge JwtBearerDefaults.AuthenticationScheme >=> notAuthenticated)
-    else fun next ctx -> next ctx
-
-
 let json jsonStr : HttpHandler =
     fun _ (ctx : HttpContext) ->
         task {
@@ -44,38 +39,19 @@ let getCulture (ctx:HttpContext) =
 
 let withUser f : HttpHandler =
     fun next (ctx:HttpContext) -> task {
-        let user : Application.UserRights.User option =
-            if ctx.User.Identity.IsAuthenticated then
-                let identity = ctx.User.Identity :?> ClaimsIdentity
-                let roles =
-                    identity.Claims 
-                    |> Seq.filter (fun claim -> claim.Type = identity.RoleClaimType)
-                    |> Seq.map (fun claim -> claim.Value)
-                    |> List.ofSeq
-                ctx.User.Identity.Name |> Application.UserRights.consUser roles |> Some
-            else // TODO: delete this branch when OpenID mandatory
-                let isAdmin = ctx.TryGetRequestHeader "Admin" |> Option.contains "Yes!"
-                let qaEditorRole = "qa_editor"
-                let allRoles = [ UserRights.adminRole; UserRights.unlockerRole; qaEditorRole ] |> List.map ((+)UserRights.rolePrefix)
-                ctx.TryGetRequestHeader "User" |> Option.map (UserRights.consUser (if isAdmin then allRoles else [ UserRights.rolePrefix+qaEditorRole ]))
-        match user with
-        | Some user -> 
-            return! f user next ctx
-        | None -> 
-            return! RequestErrors.badRequest (text "User cannot be determined.") next ctx
+        let user : Application.UserRights.User =
+            let identity = ctx.User.Identity :?> ClaimsIdentity
+            let roles =
+                identity.Claims 
+                |> Seq.filter (fun claim -> claim.Type = identity.RoleClaimType)
+                |> Seq.map (fun claim -> claim.Value)
+                |> List.ofSeq
+            identity.Name |> Application.UserRights.consUser roles
+        return! f user next ctx
     }
 
 let withAdmin f : HttpHandler =
-    let ff user next ctx =
-        if UserRights.isAdmin user then
-            f user next ctx
-        else
-            RequestErrors.forbidden (text "User/client must be admin.") next ctx
-    withUser ff
-
-// TODO: Use this function instead of withAdmin when authentication becomes mandatory
-let withAdmin2 f : HttpHandler =
-    Giraffe.Auth.requiresRole Application.UserRights.adminRole (RequestErrors.forbidden (text "User/client must be admin.")) >=> (withUser f)
+    Auth.requiresRole UserRights.adminRole (RequestErrors.forbidden (text "User/client must be admin.")) >=> (withUser f)
 
 let getAllInstances apiCtx next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx
@@ -409,7 +385,7 @@ let rollbackMasterPDB apiCtx (pdb:string) = withUser (fun user next ctx -> task 
 
 let collectGarbage apiCtx = withAdmin (fun _ next ctx -> task {
     API.collectGarbage apiCtx
-    return! text "Garbage collecting of all Oracle instance initiated." next ctx
+    return! text "Garbage collecting of all Oracle instances initiated." next ctx
 })
 
 let collectInstanceGarbage apiCtx (instance:string) = withAdmin (fun _ next ctx -> task {
