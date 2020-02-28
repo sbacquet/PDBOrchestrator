@@ -99,8 +99,8 @@ let configureServices (loggerFactory : ILoggerFactory) openIdConnectUrl domain (
                 ValidIssuer = openIdConfig.Issuer,
                 ValidateIssuerSigningKey = true,
 
-                ValidateAudience = true,
-                ValidAudiences = [ "pdb-orchestrator"; "pdb-orchestrator_"+domain ], // TODO: remove 1st
+                ValidateAudience = false, // TODO: enable back when pdb-orchestrator is renamed to pdb-orchestrator_dev in Keycloak
+                ValidAudience = "pdb-orchestrator_"+domain,
 
                 ValidateLifetime = true,
                 RequireSignedTokens = true
