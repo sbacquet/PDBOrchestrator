@@ -10,6 +10,7 @@ open Akkling
 open Domain.Common.Validation
 open System
 open System.Net
+open System.Security.Authentication
 open Microsoft.AspNetCore.Builder
 open Microsoft.AspNetCore.Hosting
 open Microsoft.Extensions.DependencyInjection
@@ -217,7 +218,13 @@ let main args =
                     options.Listen(
                         IPAddress.IPv6Any, 
                         port,
-                        fun listenOptions -> listenOptions.UseHttps(infrastuctureParameters.CertificatePath, "pas1234!") |> ignore
+                        fun listenOptions -> 
+                            listenOptions.UseHttps(
+                                infrastuctureParameters.CertificatePath, 
+                                "pas1234!",
+                                // By default, Tls (1.0) is not used => not compatible enough with some clients' Windows machine
+                                fun options -> options.SslProtocols <- SslProtocols.Tls ||| SslProtocols.Tls11 ||| SslProtocols.Tls12
+                            ) |> ignore
                     )
                     if (not infrastuctureParameters.EnforceHTTPS) then options.Listen(IPAddress.IPv6Any, port+1) |> ignore
                 )
