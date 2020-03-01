@@ -70,11 +70,20 @@ let test, (loggerFactory : ILoggerFactory) =
                     lifecycle = off
                 }
             }
-        }"
+        }
+        OracleDiskIntensiveTaskExecutorMailbox {
+            mailbox-type : ""Application.OracleDiskIntensiveTaskExecutorMailbox, Application""
+        }
+        "
         Akkling.TestKit.test config, 
         (new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory)
     else
-        Akkling.TestKit.testDefault,
+        let config = ConfigurationFactory.ParseString @"
+        OracleDiskIntensiveTaskExecutorMailbox {
+            mailbox-type : ""Application.OracleDiskIntensiveTaskExecutorMailbox, Application""
+        }
+        "
+        Akkling.TestKit.test config, 
         (new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory() :> ILoggerFactory)
 #else
 let quickTimeout = TimeSpan.FromSeconds(1.) |> Some

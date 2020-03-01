@@ -13,6 +13,7 @@
     <Compile Include="OracleShortTaskExecutor.fs" />
     <Compile Include="OracleLongTaskExecutor.fs" />
     <Compile Include="OracleDiskIntensiveActor.fs" />
+    <Compile Include="OracleDiskIntensiveTaskExecutorMailbox.fs" />
     <Compile Include="MasterPDBVersionDTO.fs" />
     <Compile Include="WorkingCopyFactoryActor.fs" />
     <Compile Include="MasterPDBVersionActor.fs" />

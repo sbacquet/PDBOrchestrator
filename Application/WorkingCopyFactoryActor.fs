@@ -15,7 +15,8 @@ type Command =
 | CreateWorkingCopyBySnapshot of WithOptionalRequestId<string, string, string, bool, bool> // responds with OraclePDBResultWithReqId
 | CreateWorkingCopyByClone of WithOptionalRequestId<string, string, string, bool, bool> // responds with OraclePDBResultWithReqId
 | CreateWorkingCopyOfEdition of WithOptionalRequestId<string, string, string, bool, bool> // responds with OraclePDBResultWithReqId
-| DeleteWorkingCopy of WithOptionalRequestId<string, bool>
+| DeleteWorkingCopy of WithOptionalRequestId<MasterPDBWorkingCopy>
+| DeleteUnregisteredWorkingCopy of WithOptionalRequestId<string>
 
 let private workingCopyFactoryActorBody 
     (parameters:Parameters)
@@ -25,9 +26,15 @@ let private workingCopyFactoryActorBody
     (oracleDiskIntensiveTaskExecutor:IActorRef<OracleDiskIntensiveActor.Command>) 
     (ctx : Actor<Command>) =
 
-    let deletePDB pdb : OraclePDBResult = 
-        oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
-        |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
+    let deletePDB pdb : OraclePDBResult =
+        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.DeletePDB (None, pdb)
+        |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
+    let deleteWC (wc:MasterPDBWorkingCopy) : OraclePDBResult =
+        if false then // TODO
+            oracleLongTaskExecutor <? OracleLongTaskExecutor.DeleteSnapshotPDB (None, wc.Name)
+            |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" wc.Name |> exn |> Error)
+        else
+            deletePDB wc.Name
     let importPDB manifest path name : OraclePDBResult =
         oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, name)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot import PDB %s : timeout exceeded" name |> exn |> Error)
@@ -105,15 +112,17 @@ let private workingCopyFactoryActorBody
             result |> reply requestId
             return! loop ()
 
-        | DeleteWorkingCopy (requestId, workingCopyName, temporaryOnly) ->
-            ctx.Log.Value.Debug("Deleting working copy {pdb}...", workingCopyName)
+        | DeleteWorkingCopy (requestId, workingCopy) ->
+            ctx.Log.Value.Debug("Deleting working copy {pdb}...", workingCopy.Name)
+            let result = deleteWC workingCopy
+            ctx.Log.Value.Info("Working copy {pdb} deleted.", workingCopy.Name)
+            result |> reply requestId
+            return! loop ()
+
+        | DeleteUnregisteredWorkingCopy (requestId, workingCopyName) ->
+            ctx.Log.Value.Debug("Deleting unregistered working copy {pdb}...", workingCopyName)
             let result = result {
-                let! delete = result {
-                    if temporaryOnly then
-                        return! isTempWorkingCopy workingCopyName
-                    else
-                        return true
-                }
+                let! delete = isTempWorkingCopy workingCopyName
                 return! 
                     if delete then deletePDB workingCopyName
                     else sprintf "PDB %s is not a temporary working copy" workingCopyName |> exn |> Error
@@ -135,8 +144,10 @@ let spawn parameters instance shortTaskExecutor longTaskExecutor oracleDiskInten
             | CreateWorkingCopyBySnapshot (_, _, _, workingCopyName, _, _)
             | CreateWorkingCopyByClone (_, _, _, workingCopyName, _, _)
             | CreateWorkingCopyOfEdition (_, _, _, workingCopyName, _, _)
-            | DeleteWorkingCopy (_, workingCopyName, _) 
+            | DeleteUnregisteredWorkingCopy (_, workingCopyName)
                 -> upcast workingCopyName
+            | DeleteWorkingCopy (_, workingCopy)
+                -> upcast workingCopy.Name
         | _ -> upcast ""
     (Akkling.Spawn.spawn actorFactory "WorkingCopyFactory"
         <| { props (workingCopyFactoryActorBody parameters instance shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor)
