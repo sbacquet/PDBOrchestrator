@@ -597,9 +597,9 @@ let private oracleInstanceActorBody
                             sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, pdbService wcName, instance.Name))
                             let wc = 
                                 if durable then 
-                                    newDurableWorkingCopy user.Name (SpecificVersion versionNumber) masterPDBName wcName
+                                    newDurableWorkingCopy user.Name (SpecificVersion versionNumber) masterPDBName snapshot wcName
                                 else    
-                                    newTempWorkingCopy parameters.TemporaryWorkingCopyLifetime user.Name (SpecificVersion versionNumber) masterPDBName wcName
+                                    newTempWorkingCopy parameters.TemporaryWorkingCopyLifetime user.Name (SpecificVersion versionNumber) masterPDBName snapshot wcName
                             return! loop { state with Requests = newRequests; Instance = state.Instance |> addWorkingCopy wc }
                         | Error error ->
                             sender <! (requestId, Error error.Message)
@@ -617,9 +617,9 @@ let private oracleInstanceActorBody
                             sender <! (requestId, Ok (masterPDBName, 0, wcName, pdbService wcName, instance.Name))
                             let wc = 
                                 if durable then 
-                                    newDurableWorkingCopy user.Name Edition masterPDBName wcName
+                                    newDurableWorkingCopy user.Name Edition masterPDBName false wcName
                                 else    
-                                    newTempWorkingCopy parameters.TemporaryWorkingCopyLifetime user.Name Edition masterPDBName wcName
+                                    newTempWorkingCopy parameters.TemporaryWorkingCopyLifetime user.Name Edition masterPDBName false wcName
                             return! loop { state with Requests = newRequests; Instance = state.Instance |> addWorkingCopy wc }
                         | Error error ->
                             sender <! (requestId, Error error.Message)

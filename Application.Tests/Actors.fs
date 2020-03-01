@@ -585,7 +585,7 @@ let ``API creates a snapshot working copy`` () = test <| fun tck ->
 
 [<Fact>]
 let ``API must create the PDB if not exists even if working copy registered`` () = test <| fun tck ->
-    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "WORKINGCOPY", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" "WORKINGCOPY" ] |> Map.ofList }) :> IOracleInstanceRepository
+    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "WORKINGCOPY", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" true "WORKINGCOPY" ] |> Map.ofList }) :> IOracleInstanceRepository
     let oracleAPI = FakeOracleAPI(Set.empty) :> IOracleAPI
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
@@ -878,7 +878,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
 
 [<Fact>]
 let ``API can delete an existing temp working copy`` () = test <| fun tck ->
-    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "TEST1WC", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" "TEST1WC" ] |> Map.ofList }) :> IOracleInstanceRepository
+    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "TEST1WC", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" true "TEST1WC" ] |> Map.ofList }) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
@@ -902,8 +902,8 @@ let ``API cannot delete a working copy of different durability than requested`` 
         FakeOracleInstanceRepo (
             { instance1 with 
                 WorkingCopies = [ 
-                    "TEST1WC", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" "TEST1WC" 
-                    "TEST1WC_durable", newDurableWorkingCopy "me" (SpecificVersion 1) "TEST1" "TEST1WC_durable"
+                    "TEST1WC", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" true "TEST1WC" 
+                    "TEST1WC_durable", newDurableWorkingCopy "me" (SpecificVersion 1) "TEST1" true "TEST1WC_durable"
                 ] |> Map.ofList }
         ) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc"; "TEST1WC_durable" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
@@ -917,7 +917,7 @@ let ``API cannot delete a working copy of different durability than requested`` 
 
 [<Fact>]
 let ``API can delete an existing durable working copy`` () = test <| fun tck ->
-    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "TEST1WC", newDurableWorkingCopy "me" (SpecificVersion 1) "TEST1" "TEST1WC" ] |> Map.ofList }) :> IOracleInstanceRepository
+    let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "TEST1WC", newDurableWorkingCopy "me" (SpecificVersion 1) "TEST1" true "TEST1WC" ] |> Map.ofList }) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
@@ -1033,8 +1033,8 @@ let ``API can force creating a durable working copy if temp copy exists with sam
     | Error error -> failwith error 
 
 [<Fact>]
-let ``API exends a temporary working copy`` () = test <| fun tck ->
-    let wc = consWorkingCopy (System.DateTime.Parse "01/01/2020") (Temporary (System.DateTime.Parse "02/01/2020")) "me" (SpecificVersion 1) "TEST1" "TEST1WC"
+let ``API extends a temporary working copy`` () = test <| fun tck ->
+    let wc = consWorkingCopy (System.DateTime.Parse "01/01/2020") (Temporary (System.DateTime.Parse "02/01/2020")) "me" (SpecificVersion 1) "TEST1" true "TEST1WC"
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ wc.Name, wc ] |> Map.ofList }) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
@@ -1054,8 +1054,8 @@ let ``API exends a temporary working copy`` () = test <| fun tck ->
         failwith error 
 
 [<Fact>]
-let ``API exends a durable working copy`` () = test <| fun tck ->
-    let wc = consWorkingCopy (System.DateTime.Parse "01/01/2020") Durable "me" (SpecificVersion 1) "TEST1" "TEST1WC"
+let ``API extends a durable working copy`` () = test <| fun tck ->
+    let wc = consWorkingCopy (System.DateTime.Parse "01/01/2020") Durable "me" (SpecificVersion 1) "TEST1" true "TEST1WC"
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ wc.Name, wc ] |> Map.ofList }) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""

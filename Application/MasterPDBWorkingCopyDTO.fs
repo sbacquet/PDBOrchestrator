@@ -12,6 +12,7 @@ type MasterPDBWorkingCopyDTO = {
     Source: Source
     Lifetime: Lifetime
     Schemas: SchemaDTO list
+    IsSnapshot: bool
 }
 
 let toWorkingCopyDTO (pdbService:string) (schemas:SchemaDTO list) (wc:MasterPDBWorkingCopy) : MasterPDBWorkingCopyDTO =
@@ -23,5 +24,6 @@ let toWorkingCopyDTO (pdbService:string) (schemas:SchemaDTO list) (wc:MasterPDBW
         Source = wc.Source
         Lifetime = wc.Lifetime
         Schemas = schemas |> List.map (fun schema -> { schema with ConnectionString = sprintf "%s/%s@%s" schema.User schema.Password pdbService |> Some })
+        IsSnapshot = wc.IsSnapshot
     }
 

@@ -30,7 +30,7 @@ let private workingCopyFactoryActorBody
         oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.DeletePDB (None, pdb)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
     let deleteWC (wc:MasterPDBWorkingCopy) : OraclePDBResult =
-        if false then // TODO
+        if wc.IsSnapshot then
             oracleLongTaskExecutor <? OracleLongTaskExecutor.DeleteSnapshotPDB (None, wc.Name)
             |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" wc.Name |> exn |> Error)
         else
