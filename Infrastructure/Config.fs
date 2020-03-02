@@ -176,13 +176,6 @@ let validateOpenIdConnectUrl (config:IConfigurationRoot) =
             Valid url
     with _ -> Invalid [ sprintf "config entry %s is not a valid string" configEntry ] 
 
-let validateEnforceHTTPS (config:IConfigurationRoot) =
-    let configEntry = "EnforceHTTPS"
-    try
-        let enforceHTTPS = config.GetValue(configEntry, true)
-        Valid enforceHTTPS
-    with _ -> Invalid [ sprintf "config entry %s is not a valid boolean" configEntry ] 
-
 let validateCertificatePath rootFolder (config:IConfigurationRoot) =
     let configEntry = "CertificatePath"
     try
@@ -217,7 +210,6 @@ let configToInfrastuctureParameters (config:IConfigurationRoot) =
     let domain = validateDomain config
     let useGit = validateUseGit config
     let openIdConnectUrl = validateOpenIdConnectUrl config
-    let enforceHTTPS = validateEnforceHTTPS config
     let certificatePath = root |> Domain.Common.Validation.bind (fun root -> validateCertificatePath root config)
     retn Infrastructure.Parameters.consParameters 
         <*> root
@@ -226,7 +218,6 @@ let configToInfrastuctureParameters (config:IConfigurationRoot) =
         <*> domain
         <*> useGit
         <*> openIdConnectUrl
-        <*> enforceHTTPS
         <*> certificatePath
 
 let mapConfigValues f (mapping:(string * string) list) (config:IConfigurationRoot) =

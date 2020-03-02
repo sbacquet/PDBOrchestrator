@@ -7,7 +7,6 @@ type Parameters = {
     Domain: string
     UseGit: bool
     OpenIdConnectUrl: string
-    EnforceHTTPS: bool
     CertificatePath: string
 }
 
@@ -18,7 +17,6 @@ let consParameters
     domain
     useGit
     openIdConnectUrl
-    enforceHTTPS
     certificatePath
     =
     {
@@ -28,6 +26,5 @@ let consParameters
         Domain = domain
         UseGit = useGit
         OpenIdConnectUrl = openIdConnectUrl
-        EnforceHTTPS = enforceHTTPS
         CertificatePath = certificatePath
     }

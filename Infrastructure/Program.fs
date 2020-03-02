@@ -100,7 +100,7 @@ let configureServices (loggerFactory : ILoggerFactory) openIdConnectUrl domain (
                 ValidateIssuerSigningKey = true,
 
                 ValidateAudience = true,
-                ValidAudiences = [ "pdb-orchestrator"; "pdb-orchestrator_"+domain ], // TODO: remove 1st
+                ValidAudience = "pdb-orchestrator_"+domain,
 
                 ValidateLifetime = true,
                 RequireSignedTokens = true
@@ -226,7 +226,6 @@ let main args =
                                 fun options -> options.SslProtocols <- SslProtocols.Tls ||| SslProtocols.Tls11 ||| SslProtocols.Tls12
                             ) |> ignore
                     )
-                    if (not infrastuctureParameters.EnforceHTTPS) then options.Listen(IPAddress.IPv6Any, port+1) |> ignore
                 )
                 .Configure(Action<IApplicationBuilder> (configureApp apiContext))
                 .ConfigureServices(Action<IServiceCollection> (configureServices loggerFactory infrastuctureParameters.OpenIdConnectUrl infrastuctureParameters.Domain))
