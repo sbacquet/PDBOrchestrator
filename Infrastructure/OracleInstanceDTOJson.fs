@@ -13,6 +13,7 @@ let encodeMasterPDBDTOs culture = Encode.listWith (MasterPDB.encodeMasterPDBDTO 
 
 let encodeWorkingCopyDTO culture = Encode.buildWith (fun (x:MasterPDBWorkingCopyDTO) ->
     Encode.required Encode.string "name" x.Name >>
+    Encode.required Encode.bool "isSnapshot" x.IsSnapshot >>
     Encode.required Encode.string "masterPDBName" x.MasterPDBName >>
     Encode.required Encode.string "createdBy" x.CreatedBy >>
     Encode.required Encode.dateTime "creationDate" x.CreationDate >>

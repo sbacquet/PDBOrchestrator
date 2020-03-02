@@ -19,7 +19,7 @@ type Command =
 | ClosePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
 | SnapshotPDB of WithOptionalRequestId<string, string, string> // responds with OraclePDBResultWithReqId
 | ExportPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
-| DeletePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
+| DeleteSnapshotPDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
 
 let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
@@ -64,7 +64,7 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             | None -> ctx.Sender() <! result
             return! loop ()
 
-        | DeletePDB (requestId, name) -> 
+        | DeleteSnapshotPDB (requestId, name) -> 
             let! result = name |> oracleAPI.DeletePDB
             match requestId with
             | Some reqId -> ctx.Sender() <! (reqId, result)

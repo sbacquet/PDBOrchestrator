@@ -30,14 +30,14 @@ let private masterPDBGarbageCollectorBody
     let pdbExists pdb : Exceptional<bool> = 
         oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
         |> runWithin parameters.ShortTimeout id (fun () -> sprintf "cannot check if PDB %s exists: timeout exceeded" pdb |> exn |> Error)
-    let deleteWorkingCopy pdb : OraclePDBResult = result {
-        let! exists = pdbExists pdb
+    let deleteWorkingCopy (wc:MasterPDBWorkingCopy) : OraclePDBResult = result {
+        let! exists = pdbExists wc.Name
         if exists then
             return! 
-                workingCopyFactory <? WorkingCopyFactoryActor.DeleteWorkingCopy (None, pdb, true)
-                |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
+                workingCopyFactory <? WorkingCopyFactoryActor.DeleteWorkingCopy (None, wc)
+                |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" wc.Name |> exn |> Error)
         else
-            return pdb
+            return wc.Name
     }
     let getPDBNamesLike like : Exceptional<string list> = 
         oracleShortTaskExecutor <? OracleShortTaskExecutor.GetPDBNamesLike like
@@ -56,7 +56,7 @@ let private masterPDBGarbageCollectorBody
                 instance.WorkingCopies
                 |> Map.toList |> List.map snd
                 |> List.filter isExpired
-                |> List.map (fun wc -> (wc, deleteWorkingCopy wc.Name |> toErrorMaybe))
+                |> List.map (fun wc -> (wc, deleteWorkingCopy wc |> toErrorMaybe))
             ctx.Sender() <! WorkingCopiesDeleted deletionResults
             
             let collectMasterPDBGarbage masterPDBName =
@@ -76,7 +76,7 @@ let private masterPDBGarbageCollectorBody
 
         | DeleteWorkingCopy (requestId, workingCopy) ->
             ctx.Log.Value.Warning("Deleting unregistered working copy {pdb} on instance {instance} requested", workingCopy, instance.Name)
-            workingCopyFactory <<! Application.WorkingCopyFactoryActor.DeleteWorkingCopy(Some requestId, workingCopy, true)
+            workingCopyFactory <<! Application.WorkingCopyFactoryActor.DeleteUnregisteredWorkingCopy(Some requestId, workingCopy)
             return! stop () // short-lived actor
 
     }

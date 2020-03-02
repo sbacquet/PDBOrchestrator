@@ -39,9 +39,10 @@ type MasterPDBWorkingCopy = {
     CreatedBy: string
     Source: Source
     Lifetime: Lifetime
+    IsSnapshot: bool
 }
 
-let consWorkingCopy (date:System.DateTime) lifetime createdBy source (masterPDBName:string) (name:string) =
+let consWorkingCopy (date:System.DateTime) lifetime createdBy source (masterPDBName:string) isSnapshot (name:string) =
     {
         Name = name.ToUpper()
         MasterPDBName = masterPDBName.ToUpper()
@@ -49,6 +50,7 @@ let consWorkingCopy (date:System.DateTime) lifetime createdBy source (masterPDBN
         CreatedBy = createdBy
         Source = source
         Lifetime = lifetime
+        IsSnapshot = isSnapshot
     }
 
 let computeWorkingCopyExpiry (from:System.DateTime) (delay:System.TimeSpan) = (from + delay).ToUniversalTime()

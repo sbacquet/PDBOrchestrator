@@ -13,7 +13,7 @@ let tempLifespan = System.TimeSpan.FromHours(12.)
 let ``Save and load Oracle instance`` () =
     let instance1Name = "test1"
     let repo = OracleInstanceRepository(tempLifespan, (fun _ _ -> raise), None, testFolder, instance1Name, "A") :> IOracleInstanceRepository
-    let wc = [ newTempWorkingCopy tempLifespan "me" (SpecificVersion 13) "test1" "wc" ]
+    let wc = [ newTempWorkingCopy tempLifespan "me" (SpecificVersion 13) "test1" true "wc" ]
     let instance1 =
         consOracleInstance
             [ "test1"; "test2" ]

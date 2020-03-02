@@ -60,7 +60,11 @@ module Config =
                         lifecycle = off
                     }
                 }
-            }" level)
+            }
+            OracleDiskIntensiveTaskExecutorMailbox {
+                mailbox-type : ""Application.OracleDiskIntensiveTaskExecutorMailbox, Application""
+            }
+            " level)
 
 let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
     let env = app.ApplicationServices.GetService<IHostingEnvironment>()
