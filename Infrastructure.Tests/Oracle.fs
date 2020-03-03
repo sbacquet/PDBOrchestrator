@@ -57,12 +57,12 @@ let ``Fail to get inexisting PDB from server`` () =
 [<Fact>]
 let ``Import and delete PDB`` () =
     let commands = asyncResult {
-        let! r = getPDBOnServer conn "toto" |> mapAsyncError
+        let! (r:Option<_>) = getPDBOnServer conn "toto" |> mapAsyncError
         let! _ = if r.IsSome then Error (exn "PDB toto already exists") else Ok "good"
         let! r = getPDBOnServerLike conn "toto%" |> mapAsyncError
         let! _ = if List.length r <> 0 then Error (exn "PDB toto% already exists") else Ok "good"
         let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder "toto"
-        let! r = getPDBOnServer conn "toto" |> mapAsyncError
+        let! (r:Option<_>) = getPDBOnServer conn "toto" |> mapAsyncError
         let! _ = if r.IsNone then Error (exn "No PDB toto ??") else Ok "good"
         let! r = getPDBOnServerLike conn "toto%" |> mapAsyncError
         let! _ = if List.length r <> 1 then Error (exn "No PDB toto% ??") else Ok "good"
@@ -112,14 +112,14 @@ let ``Get snapshots older than 15 seconds`` () =
     let commands1 = asyncResult {
         let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder "source"
         let! _ = oracleAPI.SnapshotPDB "source" cTempWCFolder "snapshot"
-        let! snapshots = oracleAPI.PDBSnapshots "source"
+        let! (snapshots:string list) = oracleAPI.PDBSnapshots "source"
         let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot!") else Ok "# snapshots is 1, good"
         let seconds = 15
         let createdBefore = TimeSpan.FromSeconds((float)seconds)
-        let! snapshots = "source" |> pdbSnapshots conn (Some cTempWCFolder) (Some createdBefore) |> mapAsyncError
+        let! (snapshots:string list) = "source" |> pdbSnapshots conn (Some cTempWCFolder) (Some createdBefore) |> mapAsyncError
         let! _ = if snapshots.Length <> 0 then Error (exn "Got a snapshot before 15 sec!") else Ok "# snapshots is 0, good"
         Async.Sleep(1000*(seconds+5)) |> Async.RunSynchronously
-        let! snapshots = "source" |> pdbSnapshots conn (Some cTempWCFolder) (Some createdBefore) |> mapAsyncError
+        let! (snapshots:string list) = "source" |> pdbSnapshots conn (Some cTempWCFolder) (Some createdBefore) |> mapAsyncError
         let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot after 20 sec!") else Ok "# snapshots is 1, good"
         return "Everything fine!"
     }    
