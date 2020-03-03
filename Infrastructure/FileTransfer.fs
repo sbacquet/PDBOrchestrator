@@ -122,7 +122,7 @@ let copyFilesBetweenInstances timeout (fromInstance:Domain.OracleInstance.Oracle
         else
             toPath
     if (fromPath |> Seq.length) <> (toPath |> Seq.length) then
-        return! Error ("fromPath and toPath must hqve the same size" |> exn)
+        return! Error ("fromPath and toPath must have the same size" |> exn)
     let currentLocation = System.Net.Dns.GetHostName()
     let! fromFiles = asyncResult {
         if currentLocation = fromInstance.Server then
