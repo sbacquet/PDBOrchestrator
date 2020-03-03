@@ -1,5 +1,8 @@
 ﻿module Domain.Common
 
+open System.Threading.Tasks
+open System
+
 let (=~) s1 s2 =
      System.String.Equals(s1, s2, System.StringComparison.CurrentCultureIgnoreCase)
 
@@ -11,29 +14,66 @@ let toErrorOption = function Ok _ -> None | Error error -> Some error
 
 module Result =
     type ResultBuilder() =
-        member __.Return(x) = Ok x
-        member __.ReturnFrom(m: Result<_, _>) = m
-        member __.Bind(m, f) = Result.bind f m
-        member __.Bind((m, error): (Option<'T> * 'E), f) = m |> ofOption error |> Result.bind f
-        member __.Zero() = None
-        member __.Delay(f) = f
-        member __.Run(f) = f()
-        member __.TryWith(body, handler) =
-            try 
-                __.ReturnFrom(body())
-            with 
-            | e -> handler e
-        member __.TryFinally(body, compensation) =
-            try 
-                __.ReturnFrom(body())
-            finally 
-                compensation() 
-        member __.Using(disposable:#System.IDisposable, body) =
-            let body' = fun () -> body disposable
-            __.TryFinally(body', fun () -> 
-                match disposable with 
-                    | null -> () 
-                    | disp -> disp.Dispose())
+        member __.Return (value: 'T) : Result<'T, 'TError> =
+          Ok value
+
+        member __.ReturnFrom (result: Result<'T, 'TError>) : Result<'T, 'TError> =
+          result
+
+        member this.Zero () : Result<unit, 'TError> =
+          this.Return ()
+
+        member __.Bind
+            (result: Result<'T, 'TError>, binder: 'T -> Result<'U, 'TError>)
+            : Result<'U, 'TError> =
+          Result.bind binder result
+
+        member __.Delay
+            (generator: unit -> Result<'T, 'TError>)
+            : unit -> Result<'T, 'TError> =
+          generator
+
+        member __.Run
+            (generator: unit -> Result<'T, 'TError>)
+            : Result<'T, 'TError> =
+          generator ()
+
+        member this.Combine
+            (result: Result<unit, 'TError>, binder: unit -> Result<'T, 'TError>)
+            : Result<'T, 'TError> =
+          this.Bind(result, binder)
+
+        member this.TryWith
+            (generator: unit -> Result<'T, 'TError>,
+             handler: exn -> Result<'T, 'TError>)
+            : Result<'T, 'TError> =
+          try this.Run generator with | e -> handler e
+
+        member this.TryFinally
+            (generator: unit -> Result<'T, 'TError>, compensation: unit -> unit)
+            : Result<'T, 'TError> =
+          try this.Run generator finally compensation ()
+
+        member this.Using
+            (resource: 'T when 'T :> IDisposable, binder: 'T -> Result<'U, 'TError>)
+            : Result<'U, 'TError> =
+          this.TryFinally (
+            (fun () -> binder resource),
+            (fun () -> if not <| obj.ReferenceEquals(resource, null) then resource.Dispose ())
+          )
+
+        member this.While
+            (guard: unit -> bool, generator: unit -> Result<unit, 'TError>)
+            : Result<unit, 'TError> =
+          if not <| guard () then this.Zero ()
+          else this.Bind(this.Run generator, fun () -> this.While (guard, generator))
+
+        member this.For
+            (sequence: #seq<'T>, binder: 'T -> Result<unit, 'TError>)
+            : Result<unit, 'TError> =
+          this.Using(sequence.GetEnumerator (), fun enum ->
+            this.While(enum.MoveNext,
+              this.Delay(fun () -> binder enum.Current)))
 
     let apply f x = f |> Result.bind (fun g -> x |> Result.map g)
 
@@ -195,30 +235,137 @@ module AsyncResult =
         list |> Async.sequenceP |> Async.map Result.sequence
 
     type AsyncResultBuilder() =
-        member __.Return(x) = retn x
-        member __.ReturnFrom(m: Async<Result<_, _>>) = m
-        member __.ReturnFrom(m: Result<_, _>) = async { return m }
-        member __.Bind(m:Async<Result<'a,'e>>, f:('a -> Async<Result<'b,'e>>)) : Async<Result<'b,'e>> = bind f m
-        member __.Bind(m:Result<'a,'e>, f:('a -> Async<Result<'b,'e>>)) : Async<Result<'b,'e>> = bind f (async { return m })
+
+        member __.Return (value: 'T) : Async<Result<'T, 'TError>> =
+            async.Return <| result.Return value
+
+        member __.ReturnFrom
+            (asyncResult: Async<Result<'T, 'TError>>)
+            : Async<Result<'T, 'TError>> =
+            asyncResult
+
+        member __.ReturnFrom
+            (taskResult: Task<Result<'T, 'TError>>)
+            : Async<Result<'T, 'TError>> =
+            Async.AwaitTask taskResult
+
+        member __.ReturnFrom
+            (result: Result<'T, 'TError>)
+            : Async<Result<'T, 'TError>> =
+            async.Return result
+
+        member __.Zero () : Async<Result<unit, 'TError>> =
+            async.Return <| result.Zero ()
+
+        member __.Bind
+            (asyncResult: Async<Result<'T, 'TError>>,
+                binder: 'T -> Async<Result<'U, 'TError>>)
+            : Async<Result<'U, 'TError>> =
+            async {
+                let! result = asyncResult
+                match result with
+                | Ok x -> return! binder x
+                | Error x -> return Error x
+            }
+
+        member this.Bind
+            (taskResult: Task<Result<'T, 'TError>>,
+                binder: 'T -> Async<Result<'U, 'TError>>)
+            : Async<Result<'U, 'TError>> =
+            this.Bind(Async.AwaitTask taskResult, binder)
+
+        member this.Bind
+            (result: Result<'T, 'TError>, binder: 'T -> Async<Result<'U, 'TError>>)
+            : Async<Result<'U, 'TError>> =
+            this.Bind(this.ReturnFrom result, binder)
+
         member __.Bind(_:unit, f:(unit -> Async<Result<'b,'e>>)) : Async<Result<'b,'e>> = bind f (async { return Ok () })
-        member __.Zero() = async { return Ok () }
-        member __.Delay(f) = f
-        member __.Run(f) = f()
-        member __.TryWith(body : unit -> Async<Result<'a, 'b>>, handler: exn -> Async<Result<'a, 'b>>) : Async<Result<'a, 'b>> =
-            try 
-                __.ReturnFrom(body())
-            with 
-            | e -> handler e
-        member __.TryFinally(body : unit -> Async<Result<'a, 'b>>, compensation: unit -> unit) : Async<Result<'a, 'b>> =
-            try 
-                __.ReturnFrom(body())
-            finally compensation() 
-        member __.Using(disposable:#System.IDisposable, body:#System.IDisposable -> Async<Result<_, _>>) =
-            let body' = fun () -> body disposable
-            __.TryFinally(body', fun () -> 
-                match disposable with 
-                    | null -> () 
-                    | disp -> disp.Dispose())
+
+        member __.Delay
+            (generator: unit -> Async<Result<'T, 'TError>>)
+            : Async<Result<'T, 'TError>> =
+            async.Delay generator
+
+        member this.Combine
+            (computation1: Async<Result<unit, 'TError>>,
+                computation2: Async<Result<'U, 'TError>>)
+            : Async<Result<'U, 'TError>> =
+            this.Bind(computation1, fun () -> computation2)
+
+        member __.TryWith
+            (computation: Async<Result<'T, 'TError>>,
+                handler: System.Exception -> Async<Result<'T, 'TError>>)
+            : Async<Result<'T, 'TError>> =
+            async.TryWith(computation, handler)
+
+        member __.TryFinally
+            (computation: Async<Result<'T, 'TError>>,
+                compensation: unit -> unit)
+            : Async<Result<'T, 'TError>> =
+            async.TryFinally(computation, compensation)
+
+        member __.Using
+            (resource: 'T when 'T :> IDisposable,
+                binder: 'T -> Async<Result<'U, 'TError>>)
+            : Async<Result<'U, 'TError>> =
+            async.Using(resource, binder)
+
+        member this.While
+            (guard: unit -> bool, computation: Async<Result<unit, 'TError>>)
+            : Async<Result<unit, 'TError>> =
+            if not <| guard () then this.Zero ()
+            else this.Bind(computation, fun () -> this.While (guard, computation))
+
+        member this.For
+            (sequence: #seq<'T>, binder: 'T -> Async<Result<unit, 'TError>>)
+            : Async<Result<unit, 'TError>> =
+            this.Using(sequence.GetEnumerator (), fun enum ->
+            this.While(enum.MoveNext,
+                this.Delay(fun () -> binder enum.Current)))
+
+[<AutoOpen>]
+module AsyncResultExtensions =
+    // Having Async<_> members as extensions gives them lower priority in
+    // overload resolution between Async<_> and Async<Result<_,_>>.
+    type AsyncResult.AsyncResultBuilder with
+
+        member __.ReturnFrom (async': Async<'T>) : Async<Result<'T, 'TError>> =
+            async {
+                let! x = async'
+                return Ok x
+            }
+
+        member __.ReturnFrom (task: Task<'T>) : Async<Result<'T, 'TError>> =
+            async {
+                let! x = Async.AwaitTask task
+                return Ok x
+            }
+
+        member __.ReturnFrom (task: Task) : Async<Result<unit, 'TError>> =
+            async {
+                do! Async.AwaitTask task
+                return result.Zero ()
+            }
+
+        member this.Bind
+            (async': Async<'T>, binder: 'T -> Async<Result<'U, 'TError>>)
+            : Async<Result<'U, 'TError>> =
+            let asyncResult = async {
+                let! x = async'
+                return Ok x
+            }
+            this.Bind(asyncResult, binder)
+
+
+        member this.Bind
+            (task: Task<'T>, binder: 'T -> Async<Result<'U, 'TError>>)
+            : Async<Result<'U, 'TError>> =
+            this.Bind(Async.AwaitTask task, binder)
+
+        member this.Bind
+            (task: Task, binder: unit -> Async<Result<'T, 'TError>>)
+            : Async<Result<'T, 'TError>> =
+            this.Bind(Async.AwaitTask task, binder)
 
 let asyncResult = new AsyncResult.AsyncResultBuilder()
 
