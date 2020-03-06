@@ -226,7 +226,7 @@ let private masterPDBActorBody
                             return! loop state
                         else
                             let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                            oracleLongTaskExecutor <! OracleLongTaskExecutor.DeletePDB (Some requestId, editionPDBName)
+                            oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.DeletePDB (Some requestId, editionPDBName)
                             return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
             
                 | CreateWorkingCopy (requestRef, versionNumber, name, snapshot, durable, force) ->

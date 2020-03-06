@@ -45,6 +45,7 @@ let decodeWorkingCopy (temporaryTimespan:System.TimeSpan option) = jsonDecoder {
         | "Temporary", Some temporaryTimespan -> creationDate+temporaryTimespan |> Temporary |> Ok
         | "Durable", None -> Durable |> Ok
         | _ -> Error "invalid lifetimeType"
+    let! isSnapshot = Decode.optional Decode.bool "isSnapshot"
     match source, lifetime with
     | Ok source, Ok lifetime ->
         return 
@@ -54,6 +55,7 @@ let decodeWorkingCopy (temporaryTimespan:System.TimeSpan option) = jsonDecoder {
                 createdBy
                 source
                 masterPDBName
+                (isSnapshot |> Option.defaultValue false)
                 name
     | Error error, Ok _
     | Ok _, Error error ->
@@ -80,7 +82,8 @@ let encodeWorkingCopy = Encode.buildWith (fun (x:MasterPDBWorkingCopy) ->
     (match x.Lifetime with
     | Temporary _ -> Encode.required Encode.string "lifetimeType" "Temporary"
     | Durable -> Encode.required Encode.string "lifetimeType" "Durable"
-    )
+    ) >>
+    Encode.required Encode.bool "isSnapshot" x.IsSnapshot
 )
 
 let decodeWorkingCopies temporaryTimespan = Decode.listWith (decodeWorkingCopy temporaryTimespan)

@@ -9,6 +9,7 @@ open Application.Parameters
 type Command =
 | ImportPDB of WithOptionalRequestId<string, string, string>
 | ClonePDB of WithOptionalRequestId<string, string, string> // responds with OraclePDBResultWithReqId
+| DeletePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
 
 let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
 
@@ -22,6 +23,7 @@ let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : 
 
         match command with
         | ImportPDB (requestId, manifest, dest, name) -> 
+            ctx.Log.Value.Debug("Importing PDB {pdb}...", name)
             stopWatch.Restart()
             let! result = oracleAPI.ImportPDB manifest dest name
             stopWatch.Stop()
@@ -32,6 +34,7 @@ let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : 
             return! loop ()
 
         | ClonePDB (requestId, from, dest, name) -> 
+            ctx.Log.Value.Debug("Cloning PDB {pdb1} to {pdb2}...", from, name)
             stopWatch.Restart()
             let! result = oracleAPI.ClonePDB from dest name
             stopWatch.Stop()
@@ -41,6 +44,17 @@ let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : 
             | None -> ctx.Sender() <! result
             return! loop ()
 
+        | DeletePDB (requestId, name) -> 
+            ctx.Log.Value.Debug("Deleting PDB {pdb}...", name)
+            stopWatch.Restart()
+            let! result = name |> oracleAPI.DeletePDB
+            stopWatch.Stop()
+            result |> Result.map (fun pdb -> ctx.Log.Value.Debug("PDB {pdb} deleted in {0} s", pdb, stopWatch.Elapsed.TotalSeconds)) |> ignore
+            match requestId with
+            | Some reqId -> ctx.Sender() <! (reqId, result)
+            | None -> ctx.Sender() <! result
+            return! loop ()
+    
         }
 
     loop ()
@@ -50,4 +64,7 @@ let [<Literal>]cOracleLongTaskExecutorName = "OracleDiskIntensiveTaskExecutor"
 let spawn (parameters:Parameters) oracleAPI actorFactory =
     Akkling.Spawn.spawn actorFactory cOracleLongTaskExecutorName 
     <| { props (oracleDiskIntensiveTaskExecutorBody oracleAPI) 
-            with Router = Some (upcast SmallestMailboxPool(parameters.NumberOfOracleDiskIntensiveTaskExecutors)) }
+            with 
+                Router = Some (upcast SmallestMailboxPool(parameters.NumberOfOracleDiskIntensiveTaskExecutors))
+                Mailbox = Some "OracleDiskIntensiveTaskExecutorMailbox" 
+       }

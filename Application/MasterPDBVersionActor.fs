@@ -40,8 +40,8 @@ let private masterPDBVersionActorBody
         oracleShortTaskExecutor <? OracleShortTaskExecutor.PDBExists pdb
         |> runWithin parameters.ShortTimeout id (fun () -> sprintf "cannot check if PDB %s exists: timeout exceeded" pdb |> exn |> Error)
     let deleteSnaphotSourcePDB pdb : OraclePDBResult = 
-        oracleLongTaskExecutor <? OracleLongTaskExecutor.DeletePDB (None, pdb)
-        |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
+        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.DeletePDB (None, pdb)
+        |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
     let importPDB manifest path name : OraclePDBResult =
         oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, name)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot import PDB %s : timeout exceeded" name |> exn |> Error)
