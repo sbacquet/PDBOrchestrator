@@ -292,6 +292,37 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 Invalid [ sprintf "%s is not a valid working copy PDB name : \"*_EDITION\" and \"*_Vnnn_*\" are reserved" name ]
             else
                 Valid name
+        let instancesMatching = function
+        | "primary" -> [ state.Orchestrator.PrimaryInstance ]
+        | "any" -> state.Orchestrator.OracleInstanceNames // TODO : use affinity
+        | instanceName -> [ instanceName ]
+
+        let acknowledge instanceName user validateRequest = actor {
+            let requestId = newRequestId()
+            let requestRef:RequestRef = (requestId, ctx.Self)
+            let foldInstance instanceValidation instanceName : Validation<string, string> =
+                match instanceValidation with
+                | Valid _ -> instanceValidation
+                | Invalid errors ->
+                    let instance = instanceActor instanceName
+                    let validationResult : Result<RequestValidation, string> = instance <? (validateRequest requestRef) |> runWithinElseDefaultError parameters.ShortTimeout
+                    match validationResult with
+                    | Ok validation ->
+                        match validation with
+                        | RequestValidation.Valid _ -> Valid instanceName
+                        | RequestValidation.Invalid errs -> Invalid (errs @ errors)
+                    | Error error -> Invalid ((sprintf "instance %s : %s" instanceName error) :: errors)
+            let instanceValidation = instancesMatching instanceName |> List.fold foldInstance (Invalid [])
+            match instanceValidation with
+            | Valid instanceName -> 
+                ctx.Log.Value.Debug("Request {0} run on instance {1}", requestId, instanceName)
+                retype (ctx.Sender()) <! RequestValidation.Valid requestId
+                let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
+                return! loop { state with PendingRequests = newPendingRequests }
+            | Invalid errors ->
+                retype (ctx.Sender()) <! RequestValidation.Invalid errors
+                return! loop state
+        }
 
         actor {
             // Check if command is compatible with maintenance mode
@@ -383,18 +414,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 let validatedName = validateWorkingCopyName wcName
                 match validatedName with
                 | Valid wcName ->
-                    let instanceName = getInstanceName instanceName
-                    match state.Orchestrator |> containsOracleInstance instanceName with
-                    | Some instanceName ->
-                        let instance = instanceActor instanceName
-                        let requestId = newRequestId()
-                        let newPendingRequests = state.PendingRequests |> registerUserRequest requestId command user
-                        instance <! Application.OracleInstanceActor.CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force)
-                        sender <! Valid requestId
-                        return! loop { state with PendingRequests = newPendingRequests }
-                    | None ->
-                        sender <! RequestValidation.Invalid [ sprintf "cannot find Oracle instance %s" instanceName ]
-                        return! loop state
+                    return! acknowledge instanceName user (fun requestRef -> Application.OracleInstanceActor.CreateWorkingCopy (requestRef, user, masterPDBName, versionNumber, wcName, snapshot, durable, force))
                 | Invalid errors ->
                     sender <! RequestValidation.Invalid errors
                     return! loop state
