@@ -42,6 +42,7 @@ let newCreateMasterPDBParams name dump schemas targetSchemas user comment =
     consCreateMasterPDBParams name dump schemas targetSchemas user System.DateTime.Now comment
 
 type private CreateMasterPDBParamsValidation = Validation<CreateMasterPDBParams, string>
+type private RequestValidation = Validation<RequestId, string>
 
 [<RequireQualifiedAccess>]
 module private Validation =
@@ -99,7 +100,7 @@ type Command =
 | PrepareMasterPDBForModification of WithRequestId<string, int, User> // responds with WithRequestId<MasterPDBActor.PrepareForModificationResult>
 | CommitMasterPDB of WithRequestId<string, User, string> // responds with WithRequestId<MasterPDBActor.EditionCommitted>
 | RollbackMasterPDB of WithRequestId<User, string> // responds with WithRequestId<MasterPDBActor.EditionRolledBack>
-| CreateWorkingCopy of WithRequestId<User, string, int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
+| CreateWorkingCopy of WithRequestRef<User, string, int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | DeleteWorkingCopy of WithRequestId<string, bool> // responds with OraclePDBResultWithReqId
 | CreateWorkingCopyOfEdition of WithRequestId<User, string, string, bool, bool> // responds with RequestValidation
 | ExtendWorkingCopy of string // responds with Result<MasterPDBWorkingCopy, string>
@@ -238,6 +239,7 @@ let private oracleInstanceActorBody
 
     let initialInstance = initialRepo.Get()
     let oracleAPI = getOracleAPI initialInstance
+    let valid requestId = ctx.Sender() <! RequestValidation.Valid requestId
 
     let rec loop state =
 
@@ -252,7 +254,7 @@ let private oracleInstanceActorBody
                 | PrepareMasterPDBForModification (requestId, pdb, version, user) -> ctx.Log.Value.Debug("Prepare master PDB {pdb} version {Versions} for modification", pdb, version)
                 | CommitMasterPDB (requestId, pdb, locker, comment) -> ctx.Log.Value.Debug("Commit master PDB {pdb}", pdb)
                 | RollbackMasterPDB (requestId, user, pdb) -> ctx.Log.Value.Debug("Rollback master PDB {pdb}", pdb)
-                | CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force) -> ctx.Log.Value.Debug("Create working copy {pdb} of {masterPDB} version {version}", wcName, masterPDBName, versionNumber)
+                | CreateWorkingCopy (requestRef, user, masterPDBName, versionNumber, wcName, snapshot, durable, force) -> ctx.Log.Value.Debug("Create working copy {pdb} of {masterPDB} version {version}", wcName, masterPDBName, versionNumber)
                 | DeleteWorkingCopy (requestId, wcName, durable) -> ctx.Log.Value.Debug("Delete working copy {pdb}", wcName)
                 | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force) -> ctx.Log.Value.Debug("Create working copy {pdb} of edition of {masterPDB}", wcName, masterPDBName)
                 | ExtendWorkingCopy wcName -> ctx.Log.Value.Debug("Extend lifetime of working copy {pdb}", wcName)
@@ -262,6 +264,10 @@ let private oracleInstanceActorBody
                 | _ -> ()
             else
                 ()
+        let invalid error = actor {
+            ctx.Sender() <! RequestValidation.Invalid [ error ]
+            return! loop state
+        }
 
         actor {
 
@@ -285,6 +291,19 @@ let private oracleInstanceActorBody
             match msg with
             | :? Command as command ->
                 logCommand command
+
+                let acknowledge requestRef (f:RequestRef->Async<RequestValidation>) = actor {
+                    let (requestId, requester) = requestRef
+                    let! valid = f (requestId, ctx.Self)
+                    ctx.Sender() <! valid
+                    match valid with
+                    | RequestValidation.Valid _ -> 
+                        let newRequests = requests |> registerRequest requestId command (retype requester)
+                        return! loop { state with Requests = newRequests }
+                    | RequestValidation.Invalid _ ->
+                        return! loop state
+                }
+
                 match command with
                 | GetState ->
                     let sender = ctx.Sender().Retype<StateResult>()
@@ -391,8 +410,7 @@ let private oracleInstanceActorBody
                         retype masterPDBActor <! MasterPDBActor.Rollback (requestId, user)
                         return! loop { state with Requests = newRequests }
 
-                | CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, force) ->
-                    let sender = ctx.Sender().Retype<WithRequestId<CreateWorkingCopyResult>>()
+                | CreateWorkingCopy (requestRef, user, masterPDBName, versionNumber, wcName, snapshot, durable, force) ->
                     let cancel = instance |> getWorkingCopy wcName |> Option.bind (fun wc ->
                         if not (wc.CreatedBy = user.Name) // cannot force if not same user
                         then
@@ -415,22 +433,20 @@ let private oracleInstanceActorBody
                     match cancel with
                     | Some result ->
                         match result with
-                        | Ok wc -> 
-                            sender <! (requestId, Ok (masterPDBName, versionNumber, wcName, pdbService wcName, instance.Name))
+                        | Ok wc ->
+                            let (requestId, requester) = requestRef
+                            valid requestId
+                            retype requester <! (requestId, Ok (masterPDBName, versionNumber, wcName, pdbService wcName, instance.Name))
                             return! loop { state with Instance = state.Instance |> addWorkingCopy (wc |> extendWorkingCopy parameters.TemporaryWorkingCopyLifetime) }
                         | Error error -> 
-                            sender <! (requestId, Error error)
-                            return! loop state
+                            return! invalid error
                     | None ->
                         match instance |> containsMasterPDB masterPDBName with
                         | None ->
-                            sender <! (requestId, Error (sprintf "master PDB %s does not exist on Oracle instance %s" masterPDBName instance.Name))
-                            return! loop state
+                            return! invalid <| sprintf "master PDB %s does not exist on Oracle instance %s" masterPDBName instance.Name
                         | Some masterPDBName ->
                             let masterPDBActor = collaborators.MasterPDBActors |> getMasterPDBActor masterPDBName
-                            let newRequests = requests |> registerRequest requestId command (retype (ctx.Sender()))
-                            retype masterPDBActor <! MasterPDBActor.CreateWorkingCopy (requestId, versionNumber, wcName, snapshot, durable, force)
-                            return! loop { state with Requests = newRequests }
+                            return! acknowledge requestRef (fun requestRef -> retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (requestRef, versionNumber, wcName, snapshot, durable, force))
 
                 | DeleteWorkingCopy (requestId, wcName, durable) ->
                     let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
@@ -590,7 +606,7 @@ let private oracleInstanceActorBody
                             requester <! (requestId, MasterPDBCreationFailure (instance.Name, commandParameters.Name, error.Message))
                             return! loop { state with Requests = newRequests }
 
-                    | CreateWorkingCopy (requestId, user, masterPDBName, versionNumber, wcName, snapshot, durable, _) ->
+                    | CreateWorkingCopy (_, user, masterPDBName, versionNumber, wcName, snapshot, durable, _) ->
                         let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                         match result with
                         | Ok _ ->
@@ -610,7 +626,7 @@ let private oracleInstanceActorBody
                         sender <! requestResponse
                         return! loop { state with Requests = newRequests; Instance = instance |> removeWorkingCopy wcName }
 
-                    | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, _) ->
+                    | CreateWorkingCopyOfEdition (_, user, masterPDBName, wcName, durable, _) ->
                         let sender = request.Requester.Retype<WithRequestId<CreateWorkingCopyResult>>()
                         match result with
                         | Ok _ ->

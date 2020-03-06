@@ -6,6 +6,8 @@ type RequestId = System.Guid
 
 let newRequestId () = System.Guid.NewGuid()
 
+type RequestRef = RequestId * IActorRef<obj>
+
 type PendingRequest<'C> = {
     Id: RequestId 
     Command: 'C
@@ -19,6 +21,14 @@ type WithRequestId<'T1, 'T2, 'T3, 'T4> = RequestId * 'T1 * 'T2 * 'T3 * 'T4
 type WithRequestId<'T1, 'T2, 'T3, 'T4, 'T5> = RequestId * 'T1 * 'T2 * 'T3 * 'T4 * 'T5
 type WithRequestId<'T1, 'T2, 'T3, 'T4, 'T5, 'T6> = RequestId * 'T1 * 'T2 * 'T3 * 'T4 * 'T5 * 'T6
 type WithRequestId<'T1, 'T2, 'T3, 'T4, 'T5, 'T6, 'T7> = RequestId * 'T1 * 'T2 * 'T3 * 'T4 * 'T5 * 'T6 * 'T7
+
+type WithRequestRef<'T> = RequestRef * 'T
+type WithRequestRef<'T1, 'T2> = RequestRef * 'T1 * 'T2
+type WithRequestRef<'T1, 'T2, 'T3> = RequestRef * 'T1 * 'T2 * 'T3
+type WithRequestRef<'T1, 'T2, 'T3, 'T4> = RequestRef * 'T1 * 'T2 * 'T3 * 'T4
+type WithRequestRef<'T1, 'T2, 'T3, 'T4, 'T5> = RequestRef * 'T1 * 'T2 * 'T3 * 'T4 * 'T5
+type WithRequestRef<'T1, 'T2, 'T3, 'T4, 'T5, 'T6> = RequestRef * 'T1 * 'T2 * 'T3 * 'T4 * 'T5 * 'T6
+type WithRequestRef<'T1, 'T2, 'T3, 'T4, 'T5, 'T6, 'T7> = RequestRef * 'T1 * 'T2 * 'T3 * 'T4 * 'T5 * 'T6 * 'T7
 
 type WithOptionalRequestId<'T> = RequestId option * 'T
 type WithOptionalRequestId<'T1, 'T2> = RequestId option * 'T1 * 'T2

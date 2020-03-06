@@ -236,7 +236,7 @@ let getMasterPDBRepo (instance:OracleInstance) (name:string) =
 let newMasterPDBRepo _ pdb = FakeMasterPDBRepo pdb :> IMasterPDBRepository
 
 let orchestratorState = {
-    OracleInstanceNames = [ "server1"; "server2" ]
+    OracleInstanceNames = [ "server2"; "server1" ]
     PrimaryInstance = "server1"
 }
 
@@ -318,6 +318,16 @@ let pollRequestStatus (ctx:API.APIContext) requestId =
         | s -> return s
     }
     requestStatus() |> run
+
+let throwIfRequestInvalid request =
+    match request with
+    | Invalid errors -> failwith (System.String.Join("; ", errors))
+    | Valid _ -> ()
+
+let throwIfRequestValid request =
+    match request with
+    | Invalid _ -> ()
+    | Valid _ -> failwith "This request should be invalid"
 
 let throwIfRequestNotCompletedOk (ctx:API.APIContext) request =
     match request with
@@ -496,74 +506,11 @@ let ``API deletes a version of master PDB`` () = test <| fun tck ->
     | Error error -> failwith error
 
 [<Fact>]
-let ``MasterPDB creates a clone working copy`` () = test <| fun tck ->
-    let fakeOracleAPI = FakeOracleAPI(Set.empty)
-    let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
-    let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
-    let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
-    let workingCopyFactory = tck |> WorkingCopyFactoryActor.spawn parameters instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor
-    let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor workingCopyFactory getMasterPDBRepo "test1"
-    
-    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "WORKINGCOPY", false, false, false) |> run
-    result |> Result.mapError raise |> ignore
-
-[<Fact>]
-let ``MasterPDB creates a snapshot working copy`` () = test <| fun tck ->
-    let fakeOracleAPI = FakeOracleAPI(Set.empty)
-    let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
-    let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
-    let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
-    let workingCopyFactory = tck |> WorkingCopyFactoryActor.spawn parameters instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor
-    let masterPDBActor = tck |> spawnMasterPDBActor instance1 shortTaskExecutor longTaskExecutor oracleDiskIntensiveTaskExecutor workingCopyFactory getMasterPDBRepo "test1"
-    
-    let (_, result):OraclePDBResultWithReqId = retype masterPDBActor <? MasterPDBActor.CreateWorkingCopy (newRequestId(), 1, "WORKINGCOPY", true, false, false) |> run
-    result |> Result.mapError raise |> ignore
-
-[<Fact>]
-let ``OracleInstance creates a snapshot working copy`` () = test <| fun tck ->
-    let oracleActor = spawnOracleInstanceActor tck "server1"
-
-    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), me, "TEST1", 1, "WORKINGCOPY", true, false, false) |> run
-    result |> Result.mapError failwith |> ignore
-    result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
-        Assert.Equal("TEST1", masterPDBName)
-        Assert.Equal(1, versionNumber)
-        Assert.Equal("WORKINGCOPY", wcName)
-        Assert.Equal("server1.com/WORKINGCOPY", service)
-        Assert.Equal("server1", instance)) |> ignore
-
-[<Fact>]
-let ``OracleInstance creates a clone working copy`` () = test <| fun tck ->
-    let oracleActor = spawnOracleInstanceActor tck "server1"
-
-    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), me, "TEST1", 1, "WORKINGCOPY", false, false, false) |> run
-    result |> Result.mapError failwith |> ignore
-    result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
-        Assert.Equal("TEST1", masterPDBName)
-        Assert.Equal(1, versionNumber)
-        Assert.Equal("WORKINGCOPY", wcName)
-        Assert.Equal("server1.com/WORKINGCOPY", service)
-        Assert.Equal("server1", instance)) |> ignore
-
-[<Fact>]
-let ``OracleInstance (non snapshot capable) creates a working copy`` () = test <| fun tck ->
-    let oracleActor = spawnOracleInstanceActor tck "server2"
-
-    let (_, result):WithRequestId<OracleInstanceActor.CreateWorkingCopyResult> = retype oracleActor <? OracleInstanceActor.CreateWorkingCopy (newRequestId(), me, "TEST2", 1, "WORKINGCOPY", true, false, false) |> run
-    result |> Result.mapError failwith |> ignore
-    result |> Result.map (fun (masterPDBName, versionNumber, wcName, service, instance) -> 
-        Assert.Equal("TEST2", masterPDBName)
-        Assert.Equal(1, versionNumber)
-        Assert.Equal("WORKINGCOPY", wcName)
-        Assert.Equal("server2.com/WORKINGCOPY", service)
-        Assert.Equal("server2", instance)) |> ignore
-
-[<Fact>]
 let ``API creates a snapshot working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
-    let request = API.createWorkingCopy ctx me "server1" "test1" 1 "workingcopy" true false false |> runQuick
+    let request = API.createWorkingCopy ctx me "any" "test2" 2 "workingcopy" true false false |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
     Assert.True(data |> List.contains (PDBName "WORKINGCOPY"))
     Assert.True(data |> List.contains (PDBService "server1.com/WORKINGCOPY"))
@@ -686,23 +633,23 @@ let ``API fails to overwrite an existing temporary working copy`` () = test <| f
 
     // cannot overwrite with a durable copy if not forcing
     let request = API.createWorkingCopy ctx me "server1" "test1" 1 "workingcopy" true true false |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx
+    request |> throwIfRequestValid
 
     // cannot overwrite with a temp copy of another version if not forcing
     let request = API.createWorkingCopy ctx me "server1" "test1" 2 "workingcopy" true false false |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx
+    request |> throwIfRequestValid
 
     // cannot overwrite with a temp copy of another master PDB if not forcing
     let request = API.createWorkingCopy ctx me "server1" "test2" 1 "workingcopy" true false false |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx
+    request |> throwIfRequestValid
 
     // cannot overwrite if not same user
     let request = API.createWorkingCopy ctx notMe "server1" "test1" 1 "workingcopy" true false false |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx
+    request |> throwIfRequestValid
 
     // cannot overwrite if not same user, even if forcing
     let request = API.createWorkingCopy ctx notMe "server1" "test1" 1 "workingcopy" true false true |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx
+    request |> throwIfRequestValid
 
     // cannot overwrite with an edition temp copy
     let request = API.createWorkingCopyOfEdition ctx me "test1" "workingcopy" true true |> runQuick
@@ -728,31 +675,31 @@ let ``API fails to overwrite an existing durable working copy`` () = test <| fun
 
     // cannot overwrite with a temp working copy
     let request = API.createWorkingCopy ctx me "server1" "test1" 1 "workingcopy" true false false |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+    request |> throwIfRequestValid
 
     // cannot overwrite with a temp working copy, even if forcing
     let request = API.createWorkingCopy ctx me "server1" "test1" 1 "workingcopy" true false true |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+    request |> throwIfRequestNotCompletedWithError ctx
 
     // cannot overwrite with a durable copy of another version if not forcing
     let request = API.createWorkingCopy ctx me "server1" "test1" 2 "workingcopy" true true false |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+    request |> throwIfRequestValid
 
     // cannot overwrite with a durable copy of another master PDB if not forcing
     let request = API.createWorkingCopy ctx me "server1" "test2" 1 "workingcopy" true true false |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+    request |> throwIfRequestValid
 
     // cannot overwrite if not same user
     let request = API.createWorkingCopy ctx notMe "server1" "test1" 1 "workingcopy" true true false |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+    request |> throwIfRequestValid
 
     // cannot overwrite if not same user, even if forcing
     let request = API.createWorkingCopy ctx notMe "server1" "test1" 1 "workingcopy" true true true |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+    request |> throwIfRequestValid
 
     // cannot overwrite with an edition durable copy
     let request = API.createWorkingCopyOfEdition ctx me "test1" "workingcopy" true true |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx |> ignore
+    request |> throwIfRequestNotCompletedWithError ctx
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
@@ -781,7 +728,7 @@ let ``API fails to create a snapshot working copy`` () = test <| fun tck ->
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
     let request = API.createWorkingCopy ctx me "server1" "test1" 10 "workingcopy" true false false |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx
+    request |> throwIfRequestValid
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
@@ -794,7 +741,7 @@ let ``API fails to create a clone working copy`` () = test <| fun tck ->
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
     let request = API.createWorkingCopy ctx me "server1" "test1" 10 "workingcopy" false false false |> runQuick
-    request |> throwIfRequestNotCompletedWithError ctx
+    request |> throwIfRequestValid
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with

@@ -11,9 +11,9 @@ open Application.Parameters
 open Application.Common
 open Domain.Common.Exceptional
 open Domain.Common
-open Domain.MasterPDBWorkingCopy
 
 type User = Application.UserRights.User
+type private RequestValidation = Domain.Common.Validation.Validation<RequestId, string>
 
 type Command =
 | GetState // responds with StateResult
@@ -23,7 +23,7 @@ type Command =
 | PrepareForModification of WithRequestId<int, User> // responds with WithRequestId<PrepareForModificationResult>
 | Commit of WithRequestId<User, string> // responds with WithRequestId<EditionCommitted>
 | Rollback of WithRequestId<User> // responds with WithRequestId<EditionRolledBack>
-| CreateWorkingCopy of WithRequestId<int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
+| CreateWorkingCopy of WithRequestRef<int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | CreateWorkingCopyOfEdition of WithRequestId<string, bool, bool> // WithRequest<CreateWorkingCopyResult>
 | CollectVersionsGarbage of int list // no response
 | DeleteVersion of int // responds with DeleteVersionResult
@@ -93,6 +93,8 @@ let private masterPDBActorBody
 
     let initialMasterPDB = initialRepository.Get()
     let editionPDBName = masterPDBEditionName initialMasterPDB.Name
+    let valid requestId =
+        ctx.Sender() <! RequestValidation.Valid requestId
 
     let rec loop state =
 
@@ -100,6 +102,10 @@ let private masterPDBActorBody
         let requests = state.Requests
         let collaborators = state.Collaborators
         let manifestFromVersion = Domain.MasterPDBVersion.manifestFile masterPDB.Name
+        let invalid error = actor {
+            ctx.Sender() <! RequestValidation.Invalid [ error ]
+            return! loop state
+        }
 
         actor {
 
@@ -223,20 +229,19 @@ let private masterPDBActorBody
                             oracleLongTaskExecutor <! OracleLongTaskExecutor.DeletePDB (Some requestId, editionPDBName)
                             return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
             
-                | CreateWorkingCopy (requestId, versionNumber, name, snapshot, durable, force) ->
-                    let sender = ctx.Sender().Retype<OraclePDBResultWithReqId>()
+                | CreateWorkingCopy (requestRef, versionNumber, name, snapshot, durable, force) ->
                     let versionMaybe = masterPDB.Versions |> Map.tryFind versionNumber
                     match versionMaybe with
                     | None -> 
-                        sender <! (requestId, Error (sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name |> exn))
-                        return! loop state
+                        return! invalid <| sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name
                     | Some version ->
                         if version.Deleted then
-                            sender <! (requestId, Error (sprintf "version %d of master PDB %s is deleted" versionNumber masterPDB.Name |> exn))
-                            return! loop state
+                            return! invalid <| sprintf "version %d of master PDB %s is deleted" versionNumber masterPDB.Name
                         else
+                            let (requestId, requester) = requestRef
+                            valid requestId
                             let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators workingCopyFactory ctx
-                            versionActor <<! MasterPDBVersionActor.CreateWorkingCopy (requestId, name, snapshot, durable, force)
+                            versionActor.Tell(MasterPDBVersionActor.CreateWorkingCopy (requestId, name, snapshot, durable, force), untyped requester)
                             return! loop { state with Collaborators = newCollabs }
 
                 | CreateWorkingCopyOfEdition (requestId, workingCopyName, durable, force) ->
