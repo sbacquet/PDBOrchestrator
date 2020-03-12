@@ -263,8 +263,8 @@ let spawnOrchestratorActor = OrchestratorActor.spawn parameters (fun _ -> FakeOr
 let spawnOracleInstanceActor = OracleInstanceActor.spawn parameters (fun _ -> FakeOracleAPI(Set.empty)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo
 let spawnMasterPDBActor = MasterPDBActor.spawn parameters
 
-let me = "me" |> UserRights.consUser []
-let notMe = "not_me" |> UserRights.consUser []
+let me = "me" |> UserRights.consUserWithDefaults []
+let notMe = "not_me" |> UserRights.consUserWithDefaults []
 
 [<Fact>]
 let ``State transfer`` () = test <| fun tck ->
@@ -499,7 +499,7 @@ let ``API cannot edit a master PDB if user not granted`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
-    let notQAguy = UserRights.consUser [ "anyRole" ] "notQA"
+    let notQAguy = UserRights.consUserWithDefaults [ "anyRole" ] "notQA"
     let request = API.prepareMasterPDBForModification ctx notQAguy "golden" 1 |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx
 
@@ -508,7 +508,7 @@ let ``API can edit a master PDB if user granted`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
-    let QAguy = UserRights.consUser [ UserRights.rolePrefix+"qaRole"; "otherRole" ] "QA"
+    let QAguy = UserRights.consUserWithDefaults [ UserRights.rolePrefix+"qaRole"; "otherRole" ] "QA"
     let request = API.prepareMasterPDBForModification ctx QAguy "golden" 1 |> runQuick
     request |> throwIfRequestNotCompletedOk ctx |> ignore
 

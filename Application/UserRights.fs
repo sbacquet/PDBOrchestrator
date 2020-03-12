@@ -3,9 +3,11 @@
 type User = {
     Name: string
     Roles: string list
+    getOracleInstanceAffinity: string list -> string list
 }
 
-let consUser roles name = { Name = name; Roles = roles }
+let consUser getOracleInstanceAffinity roles name = { Name = name; Roles = roles; getOracleInstanceAffinity = getOracleInstanceAffinity }
+let consUserWithDefaults = consUser id
 
 let [<Literal>]rolePrefix = "pdb_"
 let [<Literal>]adminRole = "admin"

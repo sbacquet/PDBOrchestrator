@@ -31,6 +31,7 @@
     <Compile Include="CompensableAction.fs" />
     <Compile Include="Oracle.fs" />
     <Compile Include="OracleInstanceAPI.fs" />
+    <Compile Include="OracleInstanceAffinity.fs" />
     <Compile Include="HttpHandlers.fs" />
     <Compile Include="RestAPI.fs" />
     <Compile Include="Migration.fs" />

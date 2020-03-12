@@ -46,12 +46,14 @@ let withUser f : HttpHandler =
                 |> Seq.filter (fun claim -> claim.Type = identity.RoleClaimType)
                 |> Seq.map (fun claim -> claim.Value)
                 |> List.ofSeq
-            identity.Name |> Application.UserRights.consUser roles
+            identity.Name |> Application.UserRights.consUser (identity |> OracleInstanceAffinity.userAffinity) roles
         return! f user next ctx
     }
 
-let withAdmin f : HttpHandler =
-    Auth.requiresRole (UserRights.rolePrefix+UserRights.adminRole) (RequestErrors.forbidden (text "User/client must be admin.")) >=> (withUser f)
+let withRole role f : HttpHandler =
+    Auth.requiresRole (UserRights.rolePrefix+role) (RequestErrors.forbidden (sprintf "User/client must have role '%s'." role |> text)) >=> (withUser f)
+
+let withAdmin f = withRole UserRights.adminRole f
 
 let getAllInstances apiCtx next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx

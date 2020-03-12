@@ -298,9 +298,9 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 Invalid [ sprintf "%s is not a valid working copy PDB name : \"*_EDITION\" and \"*_Vnnn_*\" are reserved" name ]
             else
                 Valid name
-        let instancesMatching = function
+        let instancesMatching (user:User) = function
         | "primary" -> [ state.Orchestrator.PrimaryInstance ]
-        | "any" -> state.Orchestrator.OracleInstanceNames // TODO : use affinity
+        | "any" -> state.Orchestrator.OracleInstanceNames |> user.getOracleInstanceAffinity
         | instanceName -> [ instanceName ]
 
         let acknowledge instanceName user validateRequest = actor {
@@ -318,7 +318,8 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         | RequestValidation.Valid _ -> Valid instanceName
                         | RequestValidation.Invalid errs -> Invalid (errs @ errors)
                     | Error error -> Invalid ((sprintf "instance %s : %s" instanceName error) :: errors)
-            let instanceValidation = instancesMatching instanceName |> List.fold foldInstance (Invalid [])
+            let instancesOrderedByAffinity = instancesMatching user instanceName
+            let instanceValidation = instancesOrderedByAffinity |> List.fold foldInstance (Invalid [])
             match instanceValidation with
             | Valid instanceName -> 
                 ctx.Log.Value.Debug("Request {0} run on instance {1}", requestId, instanceName)

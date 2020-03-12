@@ -61,7 +61,7 @@ let ``Serialize and deserialize orchestrator`` () =
 
 [<Fact>]
 let ``Serialize and deserialize CreateMasterPDBParams`` () =
-    let user = "sbacquet" |> UserRights.consUser []
+    let user = "sbacquet" |> UserRights.consUserWithDefaults []
     let pars:CreateMasterPDBParams = newCreateMasterPDBParams "testsb" @"\\sophis\dumps\NEW_USER.DMP" [ "NEW_USER" ] [ "NEW_USER", "pass", "FusionInvest" ] user "this is a comment"
     let json = pars |> Infrastructure.HttpHandlers.createMasterPDBParamsToJson
     let pars' = json |> Infrastructure.HttpHandlers.jsonToCreateMasterPDBParams user
