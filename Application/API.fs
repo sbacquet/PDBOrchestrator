@@ -88,7 +88,7 @@ let switchPrimaryOracleInstanceWith (ctx:APIContext) (instance:string) : Async<R
 let getDumpTransferInfo (ctx:APIContext) (instance:string) : Async<Result<Application.OracleInstanceActor.DumpTransferInfo, string>> =
     retype ctx.Orchestrator <? GetDumpTransferInfo (instance.ToLower())
 
-let deleteMasterPDBVersion (ctx:APIContext) (pdb:string) (version:int) (force:bool) : Async<Application.MasterPDBActor.DeleteVersionResult> =
+let deleteMasterPDBVersion (ctx:APIContext) (pdb:string) (version:int) (force:bool) : Async<Application.OrchestratorActor.DeleteVersionResult> =
     retype ctx.Orchestrator <? DeleteMasterPDBVersion (pdb.ToUpper(), version, force)
 
 let switchLock (ctx:APIContext) (pdb:string) : Async<Result<bool,string>> =
@@ -96,3 +96,6 @@ let switchLock (ctx:APIContext) (pdb:string) : Async<Result<bool,string>> =
 
 let getPendingCommands (ctx:APIContext) : Async<Command list> =
     retype ctx.Orchestrator <? OrchestratorActor.GetPendingCommands
+
+let declareMasterPDBVersionSynchronizedWithPrimary (ctx:APIContext) (instance:string) (pdb:string) (version:int) : Async<Result<unit,string>> =
+    retype ctx.Orchestrator <? OrchestratorActor.MasterPDBVersionSynchronizedWithPrimary (instance, pdb, version)

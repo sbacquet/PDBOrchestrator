@@ -12,6 +12,7 @@ open System
 open Application.Common
 open Application.Parameters
 open Domain.MasterPDB
+open Domain.MasterPDBVersion
 open Application.DTO
 open Domain.MasterPDBWorkingCopy
 
@@ -106,7 +107,8 @@ type Command =
 | ExtendWorkingCopy of string // responds with Result<MasterPDBWorkingCopy, string>
 | CollectGarbage // no response
 | GetDumpTransferInfo // responds with DumpTransferInfo
-| DeleteVersion of string * int * bool // responds with Application.MasterPDBActor.DeleteVersionResult
+| AddMasterPDBVersion of string * MasterPDBVersion // responds with Application.MasterPDBActor.AddVersionResult
+| DeleteMasterPDBVersion of string * int * bool // responds with Application.MasterPDBActor.DeleteVersionResult
 | SwitchLock of string
 
 type StateResult = Result<OracleInstance.OracleInstanceDTO, string>
@@ -259,7 +261,8 @@ let private oracleInstanceActorBody
                 | CreateWorkingCopyOfEdition (requestId, user, masterPDBName, wcName, durable, force) -> ctx.Log.Value.Debug("Create working copy {pdb} of edition of {masterPDB}", wcName, masterPDBName)
                 | ExtendWorkingCopy wcName -> ctx.Log.Value.Debug("Extend lifetime of working copy {pdb}", wcName)
                 | CollectGarbage -> ctx.Log.Value.Debug("Collect garbage")
-                | DeleteVersion (pdb, version, force) -> ctx.Log.Value.Debug("Delete version {version} of master PDB {pdb}", version, pdb)
+                | AddMasterPDBVersion (pdb, version) -> ctx.Log.Value.Debug("Add version {version} to master PDB {pdb}", version.VersionNumber, pdb)
+                | DeleteMasterPDBVersion (pdb, version, force) -> ctx.Log.Value.Debug("Delete version {version} of master PDB {pdb}", version, pdb)
                 | SwitchLock pdb -> ctx.Log.Value.Debug("Switch lock of master PDB {pdb}", pdb)
                 | _ -> ()
             else
@@ -538,7 +541,17 @@ let private oracleInstanceActorBody
                     ctx.Sender() <! transferInfo
                     return! loop state
 
-                | DeleteVersion (pdb, version, force) ->
+                | AddMasterPDBVersion (pdb, version) ->
+                    let sender = ctx.Sender().Retype<Application.MasterPDBActor.AddVersionResult>()
+                    match instance |> containsMasterPDB pdb with
+                    | Some pdb ->
+                        let masterPDBActor:IActorRef<MasterPDBActor.Command> = retype (collaborators.MasterPDBActors |> getMasterPDBActor pdb)
+                        masterPDBActor <<! MasterPDBActor.AddVersion version
+                    | None ->
+                        sender <! Error (sprintf "master PDB %s does not exist on Oracle instance %s" pdb instance.Name)
+                    return! loop state
+
+                | DeleteMasterPDBVersion (pdb, version, force) ->
                     let sender = ctx.Sender().Retype<Application.MasterPDBActor.DeleteVersionResult>()
                     match instance |> containsMasterPDB pdb with
                     | Some pdb ->

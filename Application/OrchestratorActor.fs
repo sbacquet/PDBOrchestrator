@@ -9,6 +9,7 @@ open Domain.Common.Validation
 open Application.Common
 open Application.DTO.MasterPDB
 open Domain.MasterPDBWorkingCopy
+open Domain.Common
 
 type OnInstance<'T> = WithUser<string, 'T>
 type OnInstance<'T1, 'T2> = WithUser<string, 'T1, 'T2>
@@ -46,9 +47,10 @@ type AdminCommand =
 | CollectGarbage // no response
 | Synchronize of string // responds with OracleInstanceActor.StateSet
 | SetPrimaryOracleInstance of string // responds with Result<string, string*string> = Result<new instance, (error, current instance)>
-| DeleteMasterPDBVersion of string * int * bool // responds with Application.MasterPDBActor.DeleteVersionResult
+| DeleteMasterPDBVersion of string * int * bool // responds with DeleteVersionResult
 | CollectInstanceGarbage of string // no response
 | SwitchLock of string // responds with Result<bool,string>
+| MasterPDBVersionSynchronizedWithPrimary of string * string * int // responds with Application.MasterPDBActor.DeleteVersionResult
 
 let private pendingChangeCommandFilter mapper = function
 // Commands that do not impact Oracle instances and master PDBs
@@ -67,14 +69,14 @@ let private pendingChangeCommandFilter mapper = function
 | PrepareMasterPDBForModification (user, _, _)
 | CommitMasterPDB (user, _, _)
 | RollbackMasterPDB (user, _)
-  -> mapper user
+    -> mapper user
 // Requests for durable copies are considered as pending changes,
 // so that there is no risk they are lost when switching servers (server is then in maintenance mode)
 // Only temporary copies can be created when in maintenance mode, so that continuous integration is not blocked.
 | CreateWorkingCopy (user, _, _, _, _, _, durable, _)
 | CreateWorkingCopyOfEdition (user, _, _, durable, _) 
 | DeleteWorkingCopy (user, _, _, durable)
-  -> durable && mapper user
+    -> durable && mapper user
 
 type PendingChanges = {
     Commands : Command list
@@ -99,12 +101,14 @@ type RequestResult =
 | CompletedOk of string * CompletedRequestData list
 | CompletedWithError of string
 
+let completedOk dataList message = CompletedOk (message, dataList)
+
 type RequestStatus = 
 | NotFound
 | Pending
 | Done of RequestResult * System.TimeSpan
 
-let completedOk dataList message = CompletedOk (message, dataList)
+type DeleteVersionResult = Result<(string * string) list, string> // instances where version was not deleted
 
 let private spawnCollaborators parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo state (ctx : Actor<_>) = 
     let spawnInstance = OracleInstanceActor.spawn parameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo ctx
@@ -186,6 +190,8 @@ let describeAdminCommand = function
     sprintf "delete version %d of master PDB \"%s\"" version pdb
 | SwitchLock pdb ->
     sprintf "switch lock of master PDB %s" pdb
+| MasterPDBVersionSynchronizedWithPrimary (instance, pdb, version) ->
+    sprintf "synchronized version %d of master PDB \"%s\" on instance \"%s\"" version pdb instance
 
 let private orchestratorActorBody (parameters:Application.Parameters.Parameters) getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo (repository:IOrchestratorRepository) (ctx : Actor<_>) =
 
@@ -632,11 +638,62 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                             return! loop state
 
             | DeleteMasterPDBVersion (pdb, version, force) ->
-                primaryInstance <<! OracleInstanceActor.DeleteVersion (pdb, version, force)
+                let sender = ctx.Sender().Retype<DeleteVersionResult>()
+                // Delete on primary instance first
+                let res:Result<Application.MasterPDBActor.DeleteVersionResult, string> = 
+                    primaryInstance <? OracleInstanceActor.DeleteMasterPDBVersion (pdb, version, force) |> runWithinElseDefaultError parameters.ShortTimeout
+                match res with
+                | Ok (Ok _) ->
+                    // Now try to delete on other instances (not blocking)
+                    let otherInstances = 
+                        state.Orchestrator.OracleInstanceNames
+                        |> List.filter (fun name -> name <> state.Orchestrator.PrimaryInstance)
+                    let res = 
+                        otherInstances
+                        |> List.map (fun name ->
+                            let x:Async<Application.MasterPDBActor.DeleteVersionResult> = instanceActor name <? OracleInstanceActor.DeleteMasterPDBVersion (pdb, version, force)
+                            x
+                            |> AsyncResult.mapError (fun error -> (name, error))
+                            |> AsyncValidation.ofAsyncResult
+                           )
+                        |> AsyncValidation.sequenceP
+                        |> runWithinElseDefaultError parameters.ShortTimeout
+                    match res with
+                    | Ok (Valid _) -> sender <! Ok []
+                    | Ok (Invalid instanceErrors) -> sender <! Ok instanceErrors
+                    | Error error -> sender <! Ok [ "?", error ]
+
+                | Ok (Error error) -> sender <! Error error
+                | Error error -> sender <! Error error
+
                 return! loop state
 
             | SwitchLock pdb ->
                 primaryInstance <<! OracleInstanceActor.SwitchLock pdb
+                return! loop state
+
+            | MasterPDBVersionSynchronizedWithPrimary (instanceName, pdbName, versionNumber) ->
+                let sender = ctx.Sender().Retype<Application.MasterPDBActor.AddVersionResult>()
+                match state.Orchestrator |> containsOracleInstance instanceName with
+                | Some instanceName ->
+                    if instanceName = state.Orchestrator.PrimaryInstance then
+                        sender <! Error "primary instance cannot synchronize with itself"
+                    else
+                        let instance = instanceActor instanceName
+                        let res:Result<Application.MasterPDBActor.StateResult,string> = primaryInstance <? OracleInstanceActor.GetMasterPDBState pdbName |> runWithinElseDefaultError parameters.ShortTimeout
+                        match res with
+                        | Ok (Ok pdbDTO) ->
+                            match pdbDTO.Versions |> List.tryFind (fun v -> v.VersionNumber = versionNumber) with
+                            | Some version ->
+                                instance <<! OracleInstanceActor.AddMasterPDBVersion (pdbName, version |> Application.DTO.MasterPDBVersion.fromDTO)
+                            | None ->
+                                sender <! (Error <| sprintf "cannot find version %d of master PDB %s on Oracle instance %s" versionNumber pdbName instanceName)
+                        | Ok (Error error) ->
+                            sender <! Error error
+                        | Error error ->
+                            sender <! (Error <| sprintf "cannot get master PDB %s on Oracle instance %s : %s" pdbName instanceName error)
+                | None ->
+                    sender <! (Error <| sprintf "cannot find Oracle instance %s" instanceName)
                 return! loop state
          }
 
@@ -704,10 +761,10 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                     | Ok (instance, pdb, newVersion) -> 
                         completedOk [ 
                             PDBName pdb.Name
-                            PDBVersion newVersion
-                            ResourceLink (sprintf "/instances/%s/master-pdbs/%s/versions/%d" instance pdb.Name newVersion)
+                            PDBVersion newVersion.VersionNumber
+                            ResourceLink (sprintf "/instances/%s/master-pdbs/%s/versions/%d" instance pdb.Name newVersion.VersionNumber)
                         ]
-                        <| sprintf "Master PDB %s committed successfully (new version %d created) on Oracle instance %s." pdb.Name newVersion instance
+                        <| sprintf "Master PDB %s committed successfully (new version %d created) on Oracle instance %s." pdb.Name newVersion.VersionNumber instance
                     | Error error -> 
                         CompletedWithError <| sprintf "Error while committing master PDB : %s." error
                 let (newPendingRequests, newCompletedRequests) = requestDone state request status

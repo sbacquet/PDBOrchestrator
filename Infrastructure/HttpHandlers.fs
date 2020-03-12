@@ -487,7 +487,18 @@ let deleteMasterPDBVersion apiCtx (masterPDB:string, version:int) = withAdmin (f
     else
         let! result = API.deleteMasterPDBVersion apiCtx masterPDB version force
         match result with
-        | Ok _ -> return! (text <| sprintf "Version %d of master PDB %s deleted." version (masterPDB.ToUpper())) next ctx
+        | Ok invalidInstances ->
+            match invalidInstances with
+            | [] -> return! (text <| sprintf "Version %d of master PDB %s deleted on all instances." version (masterPDB.ToUpper())) next ctx
+            | invalidInstances ->
+                return!
+                    (text <|
+                        sprintf
+                            "Version %d of master PDB %s deleted on primary instance, but not on : %s."
+                            version
+                            (masterPDB.ToUpper())
+                            (invalidInstances |> List.map (fun (instance, error) -> sprintf "%s : %s" instance error) |> String.concat "; "))
+                    next ctx
         | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Cannot delete version %d of master PDB %s : %s." version (masterPDB.ToUpper()) error) next ctx
 })
 
@@ -503,3 +514,9 @@ let deleteRequest apiCtx (requestId:System.Guid) next (ctx:HttpContext) = task {
     return! text (sprintf "The request %O has been deleted, if any." requestId) next ctx
 }
 
+let declareMasterPDBVersionSynchronizedWithPrimary apiCtx (instance:string, masterPDB:string, version:int) = withAdmin (fun _ next ctx -> task {
+    let! res = API.declareMasterPDBVersionSynchronizedWithPrimary apiCtx instance masterPDB version
+    match res with
+    | Ok _ -> return! (text <| sprintf "Master PDB %s version %d is now available on Oracle instance %s." masterPDB version instance) next ctx
+    | Error error -> return! RequestErrors.notAcceptable (text <| sprintf "Error : %s." error) next ctx
+})

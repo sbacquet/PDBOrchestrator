@@ -77,10 +77,16 @@ let getNextAvailableVersion masterPDB =
     let highestVersionUsed = masterPDB.Versions |> Map.toList |> List.last |> snd
     highestVersionUsed.VersionNumber + 1
 
-let addVersionToMasterPDB createdBy comment masterPDB =
+let addNewVersionToMasterPDB createdBy comment masterPDB =
     let newVersionNumber = getNextAvailableVersion masterPDB
     let version = consPDBVersion newVersionNumber false createdBy System.DateTime.Now comment Map.empty
-    { masterPDB with Versions = masterPDB.Versions |> Map.add newVersionNumber version }, newVersionNumber
+    { masterPDB with Versions = masterPDB.Versions |> Map.add newVersionNumber version }, version
+
+let addVersionToMasterPDB (version:MasterPDBVersion) masterPDB =
+    if masterPDB |> hasVersion version.VersionNumber then
+        Error <| sprintf "version %d already exists in master PDB %s" version.VersionNumber masterPDB.Name
+    else
+        Ok { masterPDB with Versions = masterPDB.Versions |> Map.add version.VersionNumber version }
 
 // /!\ versionNumber must exist in masterPDB's versions
 let markVersionDeleted versionNumber masterPDB =

@@ -9,7 +9,6 @@ type OraclePDBResultWithReqId = Application.PendingRequest.WithRequestId<OracleP
 let getOracleServerPort port = port |> Option.defaultValue 1521
 
 type IOracleAPI =
-    //inherit System.IDisposable
     abstract member NewPDBFromDump : 
         timeout:System.TimeSpan option ->
         name:string ->

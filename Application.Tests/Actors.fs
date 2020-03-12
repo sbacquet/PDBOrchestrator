@@ -101,7 +101,7 @@ let [<Literal>]cSnapshotSourcesPath = "/snapshot-sources"
 
 let instance1 = 
     consOracleInstance
-        [ "test1"; "test2"; "GOLDEN" ]
+        [ "test1"; "test2"; "test3"; "GOLDEN" ]
         List.empty
         "server1" "server1.com" None
         "xxx" "xxx"
@@ -116,7 +116,7 @@ let instance1 =
 
 let instance2 = 
     consOracleInstance
-        [ "test2" ]
+        [ "test2"; "test3" ]
         List.empty
         "server2" "server2.com" None
         "xxx" "xxx"
@@ -223,17 +223,20 @@ type FakeMasterPDBRepo(pdb: MasterPDB) =
         member __.Get () = pdb
         member __.Put newPDB = upcast FakeMasterPDBRepo newPDB
 
+let test3 = newMasterPDB "TEST3" [ consSchema "toto" "toto" "Invest" ] "me" "comment" |> addNewVersionToMasterPDB "me" "next comment" |> fst
 let masterPDBMap1 =
     let test2 = newMasterPDB "TEST2" [ consSchema "toto" "toto" "Invest" ] "me" "new comment2"
     [ 
         "TEST1", newMasterPDB "TEST1" [ consSchema "toto" "toto" "Invest" ] "me" "comment1"
-        "TEST2", test2 |> addVersionToMasterPDB "me" "tata" |> fst
-        "GOLDEN", consMasterPDB "GOLDEN" [ consSchema "GOLDEN" "pqss" "Invest" ] [ newPDBVersion "me" "comment" ] None false (Some "qaRole") Map.empty
+        "TEST2", test2 |> addNewVersionToMasterPDB "me" "tata" |> fst
+        "TEST3", test3
+        "GOLDEN", consMasterPDB "GOLDEN" [ consSchema "GOLDEN" "pass" "Invest" ] [ newPDBVersion "me" "comment" ] None false (Some "qaRole") Map.empty
     ] |> Map.ofList
 
 let masterPDBMap2 =
     [ 
         "TEST2", newMasterPDB "TEST2" [ consSchema "toto" "toto" "Invest" ] "me" "comment2"
+        "TEST3", test3
     ] |> Map.ofList
 
 let getMasterPDBRepo (instance:OracleInstance) (name:string) = 
@@ -283,17 +286,30 @@ let ``API synchronizes state`` () = test <| fun tck ->
     ()
 
 [<Fact>]
+let ``API synchronizes version`` () = test <| fun tck ->
+    let orchestrator = tck |> spawnOrchestratorActor
+    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let res = API.declareMasterPDBVersionSynchronizedWithPrimary ctx "server2" "TEST2" 2 |> runQuick
+    res |> Result.mapError failwith |> ignore
+    let state = API.getMasterPDBState ctx "server2" "TEST2" |> runQuick
+    state |> Result.map (fun s -> 
+        let version = s.Versions |> List.tryFind (fun v -> v.VersionNumber = 2)
+        Assert.True(version.IsSome)
+        Assert.True(version.Value.Comment = "tata")
+    ) |> ignore
+
+[<Fact>]
 let ``Oracle instance actor creates PDB`` () = test <| fun tck ->
     let oracleActor = spawnOracleInstanceActor tck "server2"
 
     let stateBefore : OracleInstanceActor.StateResult = retype oracleActor <? OracleInstanceActor.GetState |> runQuick
     match stateBefore with
-    | Ok state -> Assert.Equal(1, state.MasterPDBs.Length)
+    | Ok state -> Assert.Equal(2, state.MasterPDBs.Length)
     | Error error -> failwith error
 
     let parameters = 
         Application.OracleInstanceActor.newCreateMasterPDBParams
-            "test3"
+            "newpdb"
             @"c:\windows\system.ini" // always exists
             [ "schema1" ]
             [ "targetschema1", "pass1", "Invest" ]
@@ -308,7 +324,7 @@ let ``Oracle instance actor creates PDB`` () = test <| fun tck ->
 
     let stateAfter : OracleInstanceActor.StateResult = retype oracleActor <? OracleInstanceActor.GetState |> runQuick
     match stateAfter with
-    | Ok state -> Assert.Equal(2, state.MasterPDBs.Length)
+    | Ok state -> Assert.Equal(3, state.MasterPDBs.Length)
     | Error error -> failwith error
     ()
 
@@ -364,12 +380,12 @@ let ``API creates PDB`` () = test <| fun tck ->
 
     let stateBefore = API.getInstanceState ctx "primary" |> runQuick
     stateBefore |> Result.mapError failwith |> ignore
-    stateBefore |> Result.map (fun instance -> Assert.Equal(3, instance.MasterPDBs.Length)) |> ignore
+    stateBefore |> Result.map (fun instance -> Assert.Equal(4, instance.MasterPDBs.Length)) |> ignore
 
     let request = 
         let pars = 
             Application.OracleInstanceActor.newCreateMasterPDBParams
-                "test3" 
+                "newpdb" 
                 @"c:\windows\system.ini" 
                 [ "schema1" ] 
                 [ "targetschema1", "pass1", "FusionInvest" ] 
@@ -381,7 +397,7 @@ let ``API creates PDB`` () = test <| fun tck ->
 
     let stateAfter = API.getInstanceState ctx "primary" |> runQuick
     stateAfter |> Result.mapError failwith |> ignore
-    stateAfter |> Result.map (fun instance -> Assert.Equal(4, instance.MasterPDBs.Length)) |> ignore
+    stateAfter |> Result.map (fun instance -> Assert.Equal(5, instance.MasterPDBs.Length)) |> ignore
 
 [<Fact>]
 let ``API fails to create a PDB`` () = test <| fun tck ->
@@ -508,11 +524,27 @@ let ``API deletes a version of master PDB`` () = test <| fun tck ->
 
     let result = API.deleteMasterPDBVersion ctx "test2" 2 false |> runQuick
     result |> Result.mapError failwith |> ignore
+    result |> Result.map (fun invalidInstances -> Assert.False(invalidInstances |> List.isEmpty)) |> ignore
 
     let state = API.getMasterPDBState ctx orchestratorState.PrimaryInstance "test2" |> run
     match state with
     | Ok pdb -> Assert.Equal(true, (pdb.Versions |> List.find (fun v -> v.VersionNumber = 2)).Deleted)
     | Error error -> failwith error
+
+    let result = API.deleteMasterPDBVersion ctx "test3" 2 false |> runQuick
+    result |> Result.mapError failwith |> ignore
+    result |> Result.map (fun invalidInstances -> Assert.True(invalidInstances |> List.isEmpty)) |> ignore
+
+    let state = API.getMasterPDBState ctx orchestratorState.PrimaryInstance "test3" |> run
+    match state with
+    | Ok pdb -> Assert.Equal(true, (pdb.Versions |> List.find (fun v -> v.VersionNumber = 2)).Deleted)
+    | Error error -> failwith error
+
+    let state = API.getMasterPDBState ctx "server2" "test3" |> run
+    match state with
+    | Ok pdb -> Assert.Equal(true, (pdb.Versions |> List.find (fun v -> v.VersionNumber = 2)).Deleted)
+    | Error error -> failwith error
+
 
 [<Fact>]
 let ``API creates a snapshot working copy`` () = test <| fun tck ->
@@ -801,7 +833,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
         | "server1" -> 
             let lockedMasterPDB = consMasterPDB "locked" [] [ Domain.MasterPDBVersion.newPDBVersion "me" "comment" ] (newEditionInfo "lockman" |> Some) false None Map.empty
             match name with
-            | "TEST1" | "TEST2" | "GOLDEN" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
+            | "TEST1" | "TEST2" | "TEST3" | "GOLDEN" -> FakeMasterPDBRepo masterPDBMap1.[name] :> IMasterPDBRepository
             | "LOCKED" -> FakeMasterPDBRepo lockedMasterPDB :> IMasterPDBRepository
             | name -> failwithf "Master PDB %s does not exist on instance %s" name instance.Name
         | name -> failwithf "Oracle instance %s does not exist" name

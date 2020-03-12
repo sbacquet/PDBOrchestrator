@@ -26,6 +26,7 @@ type Command =
 | CreateWorkingCopy of WithRequestRef<int, string, bool, bool, bool> // responds with WithRequest<CreateWorkingCopyResult>
 | CreateWorkingCopyOfEdition of WithRequestId<string, bool, bool> // WithRequest<CreateWorkingCopyResult>
 | CollectVersionsGarbage of int list // no response
+| AddVersion of MasterPDBVersion // responds with AddVersionResult
 | DeleteVersion of int // responds with DeleteVersionResult
 | SwitchLock // responds with Result<bool,string>
 
@@ -39,12 +40,13 @@ let stateError error : StateResult = Error error
 
 type EditionInfoResult = Result<Application.DTO.MasterPDB.MasterPDBEditionDTO, string>
 
-type EditionCommitted = Result<string * MasterPDB * int, string>
+type EditionCommitted = Result<string * MasterPDB * MasterPDBVersion, string>
 type EditionRolledBack = Result<string * MasterPDB, string>
 
 type CreateWorkingCopyResult = Result<string * int * string, string>
 
-type DeleteVersionResult = Result<string * string * int, string> // instance * pdb * version
+type DeleteVersionResult = Result<unit, string>
+type AddVersionResult = Result<unit, string>
 
 type private Collaborators = {
     MasterPDBVersionActors: Map<int, IActorRef<MasterPDBVersionActor.Command>>
@@ -233,10 +235,10 @@ let private masterPDBActorBody
                     let versionMaybe = masterPDB.Versions |> Map.tryFind versionNumber
                     match versionMaybe with
                     | None -> 
-                        return! invalid <| sprintf "version %d of master PDB %s does not exist" versionNumber masterPDB.Name
+                        return! invalid <| sprintf "version %d of master PDB %s does not exist on instance %s" versionNumber masterPDB.Name instance.Name
                     | Some version ->
                         if version.Deleted then
-                            return! invalid <| sprintf "version %d of master PDB %s is deleted" versionNumber masterPDB.Name
+                            return! invalid <| sprintf "version %d of master PDB %s is deleted on instance %s" versionNumber masterPDB.Name instance.Name
                         else
                             let (requestId, requester) = requestRef
                             valid requestId
@@ -273,12 +275,23 @@ let private masterPDBActorBody
                     let newCollabs = versions |> List.fold collectVersionGarbage state.Collaborators
                     return! loop { state with Collaborators = newCollabs }
 
+                | AddVersion version ->
+                    let sender = ctx.Sender().Retype<AddVersionResult>()
+                    let result = masterPDB |> addVersionToMasterPDB version
+                    match result with
+                    | Ok newMasterPDB ->
+                        sender <! Ok ()
+                        return! loop { state with MasterPDB = newMasterPDB }
+                    | Error error ->
+                        sender <! Error error
+                        return! loop state
+
                 | DeleteVersion version ->
                     let sender = ctx.Sender().Retype<DeleteVersionResult>()
                     let result = state.MasterPDB |> deleteVersion version
                     match result with
                     | Ok newMasterPDB ->
-                        sender <! Ok (instance.Name, masterPDB.Name, version)
+                        sender <! Ok ()
                         collaborators.MasterPDBVersionActors 
                         |> Map.tryFind version 
                         |> Option.map (fun versionActor -> versionActor <! MasterPDBVersionActor.Delete)
@@ -336,7 +349,7 @@ let private masterPDBActorBody
                         let sender = request.Requester.Retype<WithRequestId<EditionCommitted>>()
                         match result with
                         | Ok _ ->
-                            let newMasterPDBMaybe = masterPDB |> unlock |> Result.map (addVersionToMasterPDB unlocker.Name comment)
+                            let newMasterPDBMaybe = masterPDB |> unlock |> Result.map (addNewVersionToMasterPDB unlocker.Name comment)
                             match newMasterPDBMaybe with
                             | Ok (newMasterPDB, newVersion) ->
                                 sender <! (requestId, Ok (instance.Name, newMasterPDB, newVersion))
