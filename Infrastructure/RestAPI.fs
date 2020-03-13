@@ -45,8 +45,10 @@ let webApp (apiCtx:API.APIContext) : HttpHandler =
             routef "/instances/primary/master-pdbs/%s/edition/working-copies/%s" (HttpHandlers.createWorkingCopyOfEdition apiCtx)
             // Prepare for edition
             routef "/instances/primary/master-pdbs/%s/edition" (HttpHandlers.prepareMasterPDBForModification apiCtx)
-            // Create working copy
-            routef "/instances/%s/master-pdbs/%s/versions/%i/working-copies/%s" (HttpHandlers.createWorkingCopy apiCtx)
+            // Create working copy on Oracle instance selected automatically
+            routef "/instances/auto/master-pdbs/%s/versions/%i/working-copies/%s" (HttpHandlers.createWorkingCopyAuto apiCtx)
+            // Create working copy, selecting the Oracle instance (needs a role)
+            routef "/instances/%s/master-pdbs/%s/versions/%i/working-copies/%s" (HttpHandlers.createWorkingCopyForcing apiCtx)
 
             // Routes for admins
             route "/mode/maintenance" >=> HttpHandlers.enterMaintenanceMode apiCtx

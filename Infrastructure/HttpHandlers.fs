@@ -50,10 +50,12 @@ let withUser f : HttpHandler =
         return! f user next ctx
     }
 
-let withRole role f : HttpHandler =
-    Auth.requiresRole (UserRights.rolePrefix+role) (RequestErrors.forbidden (sprintf "User/client must have role '%s'." role |> text)) >=> (withUser f)
+let withRole role : HttpHandler =
+    Auth.requiresRole (UserRights.rolePrefix+role) (RequestErrors.forbidden (sprintf "User/client must have role '%s'." role |> text))
 
-let withAdmin f = withRole UserRights.adminRole f
+let withAdmin f = 
+    withRole UserRights.adminRole >=> 
+    withUser f
 
 let getAllInstances apiCtx next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx
@@ -249,7 +251,7 @@ let returnRequest endpoint requestValidation : HttpHandler =
     | Invalid errors -> 
         RequestErrors.notAcceptable (text <| sprintf "Your request cannot be accepted : %s." (System.String.Join("; ", errors)))
 
-let createWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, name:string) =
+let private createWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, name:string) =
     withUser (fun user next ctx -> task {
         let parsedOk, force = ctx.TryGetQueryStringValue "force" |> Option.defaultValue bool.FalseString |> bool.TryParse
         if not parsedOk then 
@@ -266,6 +268,13 @@ let createWorkingCopy apiCtx (instance:string, masterPDB:string, version:int, na
                     let! requestValidation = API.createWorkingCopy apiCtx user instance masterPDB version name (not clone) durable force
                     return! returnRequest apiCtx.Endpoint requestValidation next ctx
     })
+
+let createWorkingCopyAuto apiCtx (masterPDB:string, version:int, name:string) =
+    createWorkingCopy apiCtx ("auto", masterPDB, version, name)
+
+let createWorkingCopyForcing apiCtx (instance:string, masterPDB:string, version:int, name:string) =
+    withRole UserRights.forceInstance >=>
+    createWorkingCopy apiCtx (instance, masterPDB, version, name)
 
 let createWorkingCopyOfEdition apiCtx (masterPDB:string, name:string) =
     withUser (fun user next ctx -> task {

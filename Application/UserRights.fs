@@ -12,6 +12,7 @@ let consUserWithDefaults = consUser id
 let [<Literal>]rolePrefix = "pdb_"
 let [<Literal>]adminRole = "admin"
 let [<Literal>]unlockerRole = "unlocker"
+let [<Literal>]forceInstance= "force_instance"
 
 let [<Literal>]anonymousUserName = "anonymous"
 
