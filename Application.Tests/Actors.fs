@@ -18,7 +18,6 @@ open Domain.Common.Validation
 open Application.Common
 open Domain.MasterPDBWorkingCopy
 open Domain.MasterPDBVersion
-open Application
 
 let parameters : Application.Parameters.Parameters = {
     ServerInstanceName = "A"
@@ -551,7 +550,7 @@ let ``API creates a snapshot working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = API.consAPIContext tck orchestrator loggerFactory ""
 
-    let request = API.createWorkingCopy ctx me "any" "test2" 2 "workingcopy" true false false |> runQuick
+    let request = API.createWorkingCopy ctx me "auto" "test2" 2 "workingcopy" true false false |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
     Assert.True(data |> List.contains (PDBName "WORKINGCOPY"))
     Assert.True(data |> List.contains (PDBService "server1.com/WORKINGCOPY"))

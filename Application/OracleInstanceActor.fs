@@ -7,7 +7,6 @@ open Domain
 open Domain.OracleInstance
 open Domain.Common.Validation
 open Domain.Common
-open Domain.Common.Exceptional
 open System
 open Application.Common
 open Application.Parameters

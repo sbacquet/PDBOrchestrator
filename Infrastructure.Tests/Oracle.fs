@@ -6,7 +6,6 @@ open Xunit
 open Infrastructure
 open Infrastructure.Oracle
 open Infrastructure.OracleInstanceAPI
-open Microsoft.Extensions.Logging.Abstractions
 open Application.Oracle
 open Domain.Common
 open Serilog

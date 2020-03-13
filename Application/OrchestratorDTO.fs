@@ -1,6 +1,5 @@
 ﻿module Application.DTO.Orchestrator
 
-open Akkling
 open Application
 
 type OrchestratorDTO = {

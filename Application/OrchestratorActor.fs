@@ -300,7 +300,7 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                 Valid name
         let instancesMatching (user:User) = function
         | "primary" -> [ state.Orchestrator.PrimaryInstance ]
-        | "any" -> state.Orchestrator.OracleInstanceNames |> user.getOracleInstanceAffinity
+        | "auto" -> state.Orchestrator.OracleInstanceNames |> user.getOracleInstanceAffinity
         | instanceName -> [ instanceName ]
 
         let acknowledge instanceName user validateRequest = actor {
