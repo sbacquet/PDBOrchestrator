@@ -205,7 +205,7 @@ let getRequestStatus (apiCtx:API.APIContext) (requestId:PendingRequest.RequestId
     | OrchestratorActor.PDBService service -> "PDB service", service
     | OrchestratorActor.SchemaLogon (schemaType, schemaLogon) -> sprintf "%s schema logon" schemaType, schemaLogon
     | OrchestratorActor.OracleInstance instance -> "Oracle instance", instance.ToLower()
-    | OrchestratorActor.ResourceLink link -> "Resource link", apiCtx.Endpoint + link
+    | OrchestratorActor.ResourceLink link -> "Resource link", sprintf "https://%s%s" apiCtx.Hostname link
 
     let! (_, requestStatus) = API.getRequestStatus apiCtx requestId
     

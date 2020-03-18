@@ -205,13 +205,13 @@ let main args =
         let orchestratorActor = system |> OrchestratorActor.spawn validApplicationParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
         system |> OrchestratorWatcher.spawn orchestratorActor |> ignore
         let port = infrastuctureParameters.Port
-        let endPoint = sprintf "https://%s:%d" infrastuctureParameters.DNSName port
         let apiContext = 
             API.consAPIContext 
                 system 
                 orchestratorActor 
                 loggerFactory 
-                endPoint
+                infrastuctureParameters.DNSName
+                port
 
         let host =
             WebHostBuilder()
