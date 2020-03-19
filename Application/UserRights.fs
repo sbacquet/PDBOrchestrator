@@ -8,6 +8,7 @@ type User = {
 let consUser roles name = { Name = name; Roles = roles }
 
 let [<Literal>]rolePrefix = "pdb_"
+let [<Literal>]userRole = "user"
 let [<Literal>]adminRole = "admin"
 let [<Literal>]unlockerRole = "unlocker"
 

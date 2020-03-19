@@ -37,7 +37,11 @@ let errorText error = sprintf "Error : %s." error |> text
 let getCulture (ctx:HttpContext) =
     ctx.Features.Get<Microsoft.AspNetCore.Localization.IRequestCultureFeature>().RequestCulture.Culture
 
+let withRole role : HttpHandler =
+    Auth.requiresRole (UserRights.rolePrefix+role) (RequestErrors.forbidden (sprintf "User/client must have role '%s'." role |> text))
+
 let withUser f : HttpHandler =
+    withRole UserRights.userRole >=>
     fun next (ctx:HttpContext) -> task {
         let user : Application.UserRights.User =
             let identity = ctx.User.Identity :?> ClaimsIdentity
@@ -50,8 +54,9 @@ let withUser f : HttpHandler =
         return! f user next ctx
     }
 
-let withAdmin f : HttpHandler =
-    Auth.requiresRole (UserRights.rolePrefix+UserRights.adminRole) (RequestErrors.forbidden (text "User/client must be admin.")) >=> (withUser f)
+let withAdmin f = 
+    withRole UserRights.adminRole >=> 
+    withUser f
 
 let getAllInstances apiCtx next (ctx:HttpContext) = task {
     let! state = API.getState apiCtx
