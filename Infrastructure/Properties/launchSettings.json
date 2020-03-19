@@ -2,7 +2,7 @@
   "profiles": {
     "Infrastructure": {
       "commandName": "Project",
-      "commandLineArgs": "Root=..\\Infrastructure.Tests\\integration UniqueName=A",
+      "commandLineArgs": "Root=..\\Infrastructure.Tests\\integration UniqueName=A DNSName=localhost",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       },

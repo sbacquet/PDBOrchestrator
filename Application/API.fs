@@ -10,11 +10,19 @@ type APIContext = {
     Orchestrator : IActorRef<Command>
     Logger : ILogger
     System : IActorRefFactory
+    Hostname : string
+    Port : int
     Endpoint : string
 }
 
-let consAPIContext system orchestratorActor (loggerFactory:ILoggerFactory) endpoint =
-    { System = system; Orchestrator = orchestratorActor; Logger = loggerFactory.CreateLogger("API"); Endpoint = endpoint }
+let consAPIContext system orchestratorActor (loggerFactory:ILoggerFactory) hostname port = {
+    System = system
+    Orchestrator = orchestratorActor
+    Logger = loggerFactory.CreateLogger("API")
+    Hostname = hostname
+    Port = port
+    Endpoint = sprintf "https://%s:%d" hostname port
+}
 
 let getState (ctx:APIContext) : Async<Application.DTO.Orchestrator.OrchestratorDTO> =
     ctx.Orchestrator <? GetState

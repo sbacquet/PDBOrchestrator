@@ -1,15 +1,24 @@
 ﻿module Application.UserRights
 
-type User = {
-    Name: string
-    Roles: string list
-    getOracleInstanceAffinity: string list -> string list
-}
+[<CustomEquality; NoComparison>]
+type User =
+    {
+        Name: string
+        Roles: string list
+        getOracleInstanceAffinity: string list -> string list
+    }
+    override x.Equals(yobj) =
+        match yobj with
+        | :? User as u -> u.Name = x.Name && u.Roles = x.Roles
+        | _ -> false
+
+    override __.GetHashCode() = 0
 
 let consUser getOracleInstanceAffinity roles name = { Name = name; Roles = roles; getOracleInstanceAffinity = getOracleInstanceAffinity }
 let consUserWithDefaults = consUser id
 
 let [<Literal>]rolePrefix = "pdb_"
+let [<Literal>]userRole = "user"
 let [<Literal>]adminRole = "admin"
 let [<Literal>]unlockerRole = "unlocker"
 let [<Literal>]forceInstance= "force_instance"

@@ -265,6 +265,8 @@ let spawnMasterPDBActor = MasterPDBActor.spawn parameters
 let me = "me" |> UserRights.consUserWithDefaults []
 let notMe = "not_me" |> UserRights.consUserWithDefaults []
 
+let context tck orchestrator = API.consAPIContext tck orchestrator loggerFactory "localhost" 443
+
 [<Fact>]
 let ``State transfer`` () = test <| fun tck ->
     let aref1 = spawnOracleInstanceActor tck "server1"
@@ -277,7 +279,7 @@ let ``State transfer`` () = test <| fun tck ->
 [<Fact>]
 let ``API synchronizes state`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
     let ok = API.enterMaintenanceMode ctx |> runQuick
     Assert.True(ok)
     let state = API.synchronizePrimaryInstanceWith ctx "server2" |> run
@@ -287,7 +289,7 @@ let ``API synchronizes state`` () = test <| fun tck ->
 [<Fact>]
 let ``API synchronizes version`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
     let res = API.declareMasterPDBVersionSynchronizedWithPrimary ctx "server2" "TEST2" 2 |> runQuick
     res |> Result.mapError failwith |> ignore
     let state = API.getMasterPDBState ctx "server2" "TEST2" |> runQuick
@@ -375,7 +377,7 @@ let throwIfRequestNotCompletedWithError (ctx:API.APIContext) request =
 [<Fact>]
 let ``API creates PDB`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let stateBefore = API.getInstanceState ctx "primary" |> runQuick
     stateBefore |> Result.mapError failwith |> ignore
@@ -401,7 +403,7 @@ let ``API creates PDB`` () = test <| fun tck ->
 [<Fact>]
 let ``API fails to create a PDB`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = 
         let pars = 
@@ -454,7 +456,7 @@ let ``OracleInstance locks master PDB`` () = test <| fun tck ->
 [<Fact>]
 let ``API edits and rolls back master PDB`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.prepareMasterPDBForModification ctx me "test1" 1 |> runQuick
     let _ = request |> throwIfRequestNotCompletedOk ctx
@@ -477,7 +479,7 @@ let ``API edits and rolls back master PDB`` () = test <| fun tck ->
 [<Fact>]
 let ``API edits and commits master PDB`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.prepareMasterPDBForModification ctx me "test1" 1 |> runQuick
     let _ = request |> throwIfRequestNotCompletedOk ctx
@@ -496,7 +498,7 @@ let ``API edits and commits master PDB`` () = test <| fun tck ->
 [<Fact>]
 let ``API cannot edit a master PDB if user not granted`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let notQAguy = UserRights.consUserWithDefaults [ "anyRole" ] "notQA"
     let request = API.prepareMasterPDBForModification ctx notQAguy "golden" 1 |> runQuick
@@ -505,7 +507,7 @@ let ``API cannot edit a master PDB if user not granted`` () = test <| fun tck ->
 [<Fact>]
 let ``API can edit a master PDB if user granted`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let QAguy = UserRights.consUserWithDefaults [ UserRights.rolePrefix+"qaRole"; "otherRole" ] "QA"
     let request = API.prepareMasterPDBForModification ctx QAguy "golden" 1 |> runQuick
@@ -514,7 +516,7 @@ let ``API can edit a master PDB if user granted`` () = test <| fun tck ->
 [<Fact>]
 let ``API deletes a version of master PDB`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let state = API.getMasterPDBState ctx orchestratorState.PrimaryInstance "test2" |> run
     match state with
@@ -548,7 +550,7 @@ let ``API deletes a version of master PDB`` () = test <| fun tck ->
 [<Fact>]
 let ``API creates a snapshot working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.createWorkingCopy ctx me "auto" "test2" 2 "workingcopy" true false false |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
@@ -566,7 +568,7 @@ let ``API must create the PDB if not exists even if working copy registered`` ()
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "WORKINGCOPY", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" true "WORKINGCOPY" ] |> Map.ofList }) :> IOracleInstanceRepository
     let oracleAPI = FakeOracleAPI(Set.empty) :> IOracleAPI
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.createWorkingCopy ctx me "server1" "test1" 1 "WORKINGCOPY" true false false |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
@@ -586,7 +588,7 @@ let ``API must create the PDB if not exists even if working copy registered`` ()
 [<Fact>]
 let ``API cannot delete a version with working copy if not forcing`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.createWorkingCopy ctx me "server1" "test2" 2 "workingcopy" true false false |> runQuick
     request |> throwIfRequestNotCompletedOk ctx |> ignore
@@ -597,7 +599,7 @@ let ``API cannot delete a version with working copy if not forcing`` () = test <
 [<Fact>]
 let ``API can delete a version with working copy if forcing`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.createWorkingCopy ctx me "server1" "test2" 2 "workingcopy" true false false |> runQuick
     request |> throwIfRequestNotCompletedOk ctx |> ignore
@@ -608,7 +610,7 @@ let ``API can delete a version with working copy if forcing`` () = test <| fun t
 [<Fact>]
 let ``API skips creation of a snapshot working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.createWorkingCopy ctx me "server1" "test1" 1 "workingcopy" true false false |> runQuick
     request |> throwIfRequestNotCompletedOk ctx |> ignore
@@ -632,7 +634,7 @@ let ``API skips creation of a snapshot working copy`` () = test <| fun tck ->
 [<Fact>]
 let ``API overwrites an existing working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.createWorkingCopy ctx me "server1" "test2" 1 "workingcopy" true false false |> runQuick
     request |> throwIfRequestNotCompletedOk ctx |> ignore
@@ -661,7 +663,7 @@ let ``API overwrites an existing working copy`` () = test <| fun tck ->
 [<Fact>]
 let ``API fails to overwrite an existing temporary working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     // create temp working copy
     let request = API.createWorkingCopy ctx me "server1" "test1" 1 "workingcopy" true false false |> runQuick
@@ -703,7 +705,7 @@ let ``API fails to overwrite an existing temporary working copy`` () = test <| f
 [<Fact>]
 let ``API fails to overwrite an existing durable working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     // create durable working copy
     let request = API.createWorkingCopy ctx me "server1" "test1" 1 "workingcopy" true true false |> runQuick
@@ -749,7 +751,7 @@ let ``API fails to overwrite an existing durable working copy`` () = test <| fun
 [<Fact>]
 let ``API creates a clone working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.createWorkingCopy ctx me "server1" "test1" 1 "workingcopy" false false false |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
@@ -765,7 +767,7 @@ let ``API creates a clone working copy`` () = test <| fun tck ->
 [<Fact>]
 let ``API fails to create a snapshot working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.createWorkingCopy ctx me "server1" "test1" 10 "workingcopy" true false false |> runQuick
     request |> throwIfRequestValid
@@ -778,7 +780,7 @@ let ``API fails to create a snapshot working copy`` () = test <| fun tck ->
 [<Fact>]
 let ``API fails to create a clone working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.createWorkingCopy ctx me "server1" "test1" 10 "workingcopy" false false false |> runQuick
     request |> throwIfRequestValid
@@ -791,7 +793,7 @@ let ``API fails to create a clone working copy`` () = test <| fun tck ->
 [<Fact>]
 let ``API creates a working copy of edition`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.prepareMasterPDBForModification ctx me "test1" 1 |> runQuick
     let _ = request |> throwIfRequestNotCompletedOk ctx
@@ -805,7 +807,7 @@ let ``API creates a working copy of edition`` () = test <| fun tck ->
 [<Fact>]
 let ``API fails to create a working copy of edition`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     // Test1 not being edited
     let request = API.createWorkingCopyOfEdition ctx me "test1" "workingcopy" false false |> runQuick
@@ -818,7 +820,7 @@ let ``API fails to create a working copy of edition`` () = test <| fun tck ->
 [<Fact>]
 let ``API gets no pending changes`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
     API.createWorkingCopy ctx me "server1" "test1" 1 "snap1" true false false |> runQuick |> ignore
     let pendingChangesMaybe = API.getPendingChanges ctx |> runQuick
     match pendingChangesMaybe with
@@ -839,7 +841,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with MasterPDBs = "LOCKED" :: instance1.MasterPDBs }) :> IOracleInstanceRepository
     let orchestratorRepo = FakeOrchestratorRepo { OracleInstanceNames = [ "server1" ]; PrimaryInstance = "server1" }
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "locked"; "locked_EDITION" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
     // Enqueue a read-only request
     API.createWorkingCopy ctx me "server1" "test1" 1 "snap1" true false false |> runQuick |> ignore
     // Enqueue a change request
@@ -858,7 +860,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
 let ``API can delete an existing temp working copy`` () = test <| fun tck ->
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "TEST1WC", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" true "TEST1WC" ] |> Map.ofList }) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
@@ -885,7 +887,7 @@ let ``API cannot delete a working copy of different durability than requested`` 
                 ] |> Map.ofList }
         ) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc"; "TEST1WC_durable" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.deleteWorkingCopy ctx me "server1" "TEST1WC_durable" false |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx
@@ -897,7 +899,7 @@ let ``API cannot delete a working copy of different durability than requested`` 
 let ``API can delete an existing durable working copy`` () = test <| fun tck ->
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "TEST1WC", newDurableWorkingCopy "me" (SpecificVersion 1) "TEST1" true "TEST1WC" ] |> Map.ofList }) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
@@ -918,7 +920,7 @@ let ``API can delete a temp working copy even if not registered`` () = test <| f
     let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
     oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder false)
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.deleteWorkingCopy ctx me "server1" "test1wc" false |> runQuick
     let data = request |> throwIfRequestNotCompletedOk ctx
@@ -929,7 +931,7 @@ let ``API cannot delete a durable working copy if not registered`` () = test <| 
     let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
     oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder true)
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.deleteWorkingCopy ctx me "server1" "test1wc" true |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx
@@ -939,7 +941,7 @@ let ``API can overwrite a temp working copy that exists but is not registered`` 
     let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
     oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder false)
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
@@ -970,7 +972,7 @@ let ``API cannot create a temp working copy if durable copy exists with same nam
     let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
     oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder true)
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
@@ -994,7 +996,7 @@ let ``API can force creating a durable working copy if temp copy exists with sam
     let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
     oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder false)
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
     match instanceState with
@@ -1015,7 +1017,7 @@ let ``API extends a temporary working copy`` () = test <| fun tck ->
     let wc = consWorkingCopy (System.DateTime.Parse "01/01/2020") (Temporary (System.DateTime.Parse "02/01/2020")) "me" (SpecificVersion 1) "TEST1" true "TEST1WC"
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ wc.Name, wc ] |> Map.ofList }) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let result = API.extendWorkingCopy ctx "server1" "test1wc" |> runQuick
     result |> Result.mapError failwith |> ignore
@@ -1036,7 +1038,7 @@ let ``API extends a durable working copy`` () = test <| fun tck ->
     let wc = consWorkingCopy (System.DateTime.Parse "01/01/2020") Durable "me" (SpecificVersion 1) "TEST1" true "TEST1WC"
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ wc.Name, wc ] |> Map.ofList }) :> IOracleInstanceRepository
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let result = API.extendWorkingCopy ctx "server1" "test1wc" |> runQuick
     result |> Result.mapError failwith |> ignore
@@ -1055,7 +1057,7 @@ let ``API extends a durable working copy`` () = test <| fun tck ->
 [<Fact>]
 let ``API fails to delete a working copy`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
-    let ctx = API.consAPIContext tck orchestrator loggerFactory ""
+    let ctx = context tck orchestrator
 
     let request = API.deleteWorkingCopy ctx me "server1" "doesnotexist" false |> runQuick
     request |> throwIfRequestNotCompletedWithError ctx

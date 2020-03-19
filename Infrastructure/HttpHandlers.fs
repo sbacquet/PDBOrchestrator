@@ -37,7 +37,11 @@ let errorText error = sprintf "Error : %s." error |> text
 let getCulture (ctx:HttpContext) =
     ctx.Features.Get<Microsoft.AspNetCore.Localization.IRequestCultureFeature>().RequestCulture.Culture
 
+let withRole role : HttpHandler =
+    Auth.requiresRole (UserRights.rolePrefix+role) (RequestErrors.forbidden (sprintf "User/client must have role '%s'." role |> text))
+
 let withUser f : HttpHandler =
+    withRole UserRights.userRole >=>
     fun next (ctx:HttpContext) -> task {
         let user : Application.UserRights.User =
             let identity = ctx.User.Identity :?> ClaimsIdentity
@@ -49,9 +53,6 @@ let withUser f : HttpHandler =
             identity.Name |> Application.UserRights.consUser (identity |> OracleInstanceAffinity.userAffinity) roles
         return! f user next ctx
     }
-
-let withRole role : HttpHandler =
-    Auth.requiresRole (UserRights.rolePrefix+role) (RequestErrors.forbidden (sprintf "User/client must have role '%s'." role |> text))
 
 let withAdmin f = 
     withRole UserRights.adminRole >=> 
@@ -209,7 +210,7 @@ let getRequestStatus (apiCtx:API.APIContext) (requestId:PendingRequest.RequestId
     | OrchestratorActor.PDBService service -> "PDB service", service
     | OrchestratorActor.SchemaLogon (schemaType, schemaLogon) -> sprintf "%s schema logon" schemaType, schemaLogon
     | OrchestratorActor.OracleInstance instance -> "Oracle instance", instance.ToLower()
-    | OrchestratorActor.ResourceLink link -> "Resource link", apiCtx.Endpoint + link
+    | OrchestratorActor.ResourceLink link -> "Resource link", sprintf "https://%s%s" apiCtx.Hostname link
 
     let! (_, requestStatus) = API.getRequestStatus apiCtx requestId
     
