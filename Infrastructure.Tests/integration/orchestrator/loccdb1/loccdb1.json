@@ -1,0 +1,23 @@
+{
+  "name": "loccdb1",
+  "snapshotCapable": false,
+  "server": "192.168.1.11",
+  "dbaUser": "sys",
+  "dbaPassword": "pass",
+  "userForImport": "system",
+  "userForImportPassword": "pass",
+  "userForFileTransfer": "",
+  "userForFileTransferPassword": "",
+  "serverHostkeySHA256": "",
+  "serverHostkeyMD5": "",
+  "masterPDBManifestsPath": "c:\\Tools\\Oracle122\\oradata\\LOCCDB1",
+  "masterPDBDestPath": "c:\\Tools\\Oracle122\\oradata\\LOCCDB1",
+  "snapshotSourcePDBDestPath": "c:\\Tools\\Oracle122\\oradata\\LOCCDB1\\SnapshotSources",
+  "workingCopyDestPath": "c:\\Tools\\Oracle122\\oradata\\LOCCDB1\\WorkingCopies",
+  "oracleDirectoryForDumps": "DP_DIR",
+  "oracleDirectoryPathForDumps": "c:\\Tools\\Oracle122\\admin\\loccdb1\\dpdump",
+  "masterPDBs": [
+    "TEST1"
+  ],
+  "_version": 1
+}
