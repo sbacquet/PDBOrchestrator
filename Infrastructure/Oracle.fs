@@ -530,7 +530,7 @@ let getPDBsWithFilesFolder connAsDBA filter = async {
         use! result = 
             Sql.asyncExecReader 
                 connAsDBA 
-                (sprintf "select p.name, regexp_replace(f.file_name, '(^.+)/[[:alnum:]_]+\.[[:alnum:]_]+$', '\1') as folder from (select con_id, file_name, row_number() over (partition by con_id order by file_name) as rownumber from cdb_data_files) f, v$pdbs p where f.rownumber=1 and p.con_id=f.con_id%s" filter)
+                (sprintf "select p.name, regexp_replace(f.name, '(^.+)/[[:alnum:]_]+\.[[:alnum:]_]+$', '\1') as folder from (select con_id, name, row_number() over (partition by con_id order by name) as rownumber from v$datafile) f, v$pdbs p where f.rownumber=1 and p.con_id=f.con_id%s" filter)
                 [] 
         let pdbs:(string*string) list = result |> Sql.map (Sql.asTuple2) |> Seq.toList
         return Ok pdbs
@@ -544,7 +544,7 @@ let getPDBsHavingFilesFolderStartWith connAsDBA folder filter = async {
         use! result = 
             Sql.asyncExecReader 
                 connAsDBA 
-                (sprintf "select distinct p.name from cdb_data_files f, v$pdbs p where p.con_id=f.con_id and f.file_name like '%s/%%'%s" folder filter)
+                (sprintf "select distinct p.name from v$datafile f, v$pdbs p where p.con_id=f.con_id and f.name like '%s/%%'%s" folder filter)
                 [] 
         let pdbs:string list = result |> Sql.map (Sql.asScalar) |> Seq.toList
         return Ok pdbs
@@ -609,7 +609,7 @@ let pdbFiltered filter connAsDBA (name:string) = async {
 
 let isSnapshotOfClause (pdb:string) = sprintf "SNAPSHOT_PARENT_CON_ID=(select CON_ID from v$pdbs where upper(name)='%s')" (pdb.ToUpper())
 
-let isInFolderClause (folder:string) = sprintf "con_id in (select con_id from cdb_data_files where file_name like '%s/%%')" folder
+let isInFolderClause (folder:string) = sprintf "con_id in (select con_id from v$datafile where name like '%s/%%')" folder
 
 let olderThanClause prefix (olderThan:System.TimeSpan) = 
     let prefix = prefix |> Option.defaultValue "v$pdbs"
