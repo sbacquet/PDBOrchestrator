@@ -16,6 +16,7 @@ type CreatePDBFromDumpParams = {
 
 type Command =
 | CreatePDBFromDump of WithOptionalRequestId<CreatePDBFromDumpParams> // responds with OraclePDBResultWithReqId
+| OpenPDB of WithOptionalRequestId<string,bool> // responds with OraclePDBResultWithReqId
 | ClosePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
 | SnapshotPDB of WithOptionalRequestId<string, string, string> // responds with OraclePDBResultWithReqId
 | ExportPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
@@ -38,6 +39,13 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
                     pars.DumpPath 
                     pars.Schemas 
                     pars.TargetSchemas 
+            match requestId with
+            | Some reqId -> ctx.Sender() <! (reqId, result)
+            | None -> ctx.Sender() <! result
+            return! loop ()
+
+        | OpenPDB (requestId, name, readWrite) -> 
+            let! result = oracleAPI.OpenPDB readWrite name
             match requestId with
             | Some reqId -> ctx.Sender() <! (reqId, result)
             | None -> ctx.Sender() <! result

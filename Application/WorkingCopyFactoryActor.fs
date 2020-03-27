@@ -63,6 +63,9 @@ let private workingCopyFactoryActorBody
         match requestId with
         | Some requestId -> ctx.Sender() <! (requestId, result)
         | None -> ctx.Sender() <! result
+    let openPDB readWrite pdb =
+        oracleLongTaskExecutor <? OracleLongTaskExecutor.OpenPDB (None, pdb, readWrite)
+        |> runWithin parameters.LongTimeout id (fun () -> sprintf "cannot open PDB %s : timeout exceeded" pdb |> exn |> Error)
     let createWorkingCopyIfNeeded workingCopyName durable force builder = result {
         let! wcExists = pdbExists workingCopyName
         // if the working copy already exists and not forcing, keep it if same durability
@@ -71,7 +74,7 @@ let private workingCopyFactoryActorBody
             if isDurable <> durable then
                 return! Error <| (sprintf "working copy %s already exists but for a different durability (%s)" workingCopyName (Lifetime.text isDurable) |> exn)
             else
-                return workingCopyName
+                return! openPDB true workingCopyName
         else
             let! _ = result {
                 if wcExists then
