@@ -3,6 +3,7 @@
 open Infrastructure.Oracle
 open Microsoft.Extensions.Logging
 open Application.Oracle
+open Domain.Common
 
 let connAsDBAInFromInstance (logger:ILogger) (instance:Domain.OracleInstance.OracleInstance) service =
     let port = instance.Port |> Option.defaultValue 1521
@@ -35,6 +36,21 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
                 manifest
                 true // tolerant to import errors
                 name
+
+        member __.OpenPDB readWrite name = asyncResult {
+            let modeString = if readWrite then "READ WRITE" else "READ ONLY"
+            let! pdb = getPDBOnServer connAsDBA name |> toOraclePDBResultAsync
+            match pdb with
+            | Some pdb ->
+                if pdb.OpenMode <> modeString then
+                    return!
+                        openPDB logger connAsDBA readWrite name
+                        |> toOraclePDBResultAsync
+                else
+                    return name
+            | None ->
+                return! Error <| (sprintf "cannot find PDB %s on Oracle server %s" name instance.Name |> exn)
+        }
 
         member __.ClosePDB name =
             closePDB logger connAsDBA name

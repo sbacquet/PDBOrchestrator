@@ -153,6 +153,10 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
 #endif
             return Ok name
         }
+        member this.OpenPDB readWrite name = async { 
+            this.Logger.LogDebug("Opening PDB {PDB} {mode}...", name, if readWrite then "read/write" else "read only")
+            return Ok name 
+        }
         member this.ClosePDB name = async { 
             this.Logger.LogDebug("Closing PDB {PDB}...", name)
             return Ok name 

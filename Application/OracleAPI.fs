@@ -17,6 +17,8 @@ type IOracleAPI =
         targetSchemas:(string * string) list
         -> Async<OraclePDBResult>
 
+    abstract member OpenPDB : readWrite:bool -> name:string -> Async<OraclePDBResult>
+
     abstract member ClosePDB : name:string -> Async<OraclePDBResult>
 
     abstract member DeletePDB : name:string -> Async<OraclePDBResult>
