@@ -19,17 +19,21 @@ open Application.Common
 open Domain.MasterPDBWorkingCopy
 open Domain.MasterPDBVersion
 
+let s, l, v =
+    if (System.Diagnostics.Debugger.IsAttached) then
+        None,
+        None,
+        None
+    else
+        TimeSpan.FromSeconds(1.) |> Some,
+        TimeSpan.FromSeconds(1.) |> Some,
+        TimeSpan.FromSeconds(1.) |> Some
+
 let parameters : Application.Parameters.Parameters = {
     ServerInstanceName = "A"
-#if DEBUG
-    ShortTimeout = None
-    LongTimeout = None
-    VeryLongTimeout = None
-#else
-    ShortTimeout = TimeSpan.FromSeconds(5.) |> Some
-    LongTimeout = TimeSpan.FromMinutes(2.) |> Some
-    VeryLongTimeout = TimeSpan.FromMinutes(20.) |> Some
-#endif
+    ShortTimeout = s
+    LongTimeout = l
+    VeryLongTimeout = v
     NumberOfOracleShortTaskExecutors = 10
     NumberOfOracleLongTaskExecutors = 3
     NumberOfOracleDiskIntensiveTaskExecutors = 1
@@ -37,8 +41,13 @@ let parameters : Application.Parameters.Parameters = {
     TemporaryWorkingCopyLifetime = TimeSpan.FromMinutes(1.)
 }
 
+let quickTimeout = 
+    if (System.Diagnostics.Debugger.IsAttached) then
+        None
+    else
+        TimeSpan.FromMilliseconds(1000.) |> Some
+
 #if DEBUG
-let quickTimeout = None
 
 let expectMsg tck =
     if (System.Diagnostics.Debugger.IsAttached) then
@@ -85,8 +94,13 @@ let test, (loggerFactory : ILoggerFactory) =
         Akkling.TestKit.test config, 
         (new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory() :> ILoggerFactory)
 #else
-let quickTimeout = TimeSpan.FromSeconds(1.) |> Some
-let test = Akkling.TestKit.test (ConfigurationFactory.ParseString @"akka { actor { ask-timeout = 1s } }")
+let test = Akkling.TestKit.test (ConfigurationFactory.ParseString @"
+    akka { actor { ask-timeout = 1s } }
+    OracleDiskIntensiveTaskExecutorMailbox {
+        mailbox-type : ""Application.OracleDiskIntensiveTaskExecutorMailbox, Application""
+    }
+"
+)
 let (loggerFactory : ILoggerFactory) = new Microsoft.Extensions.Logging.Abstractions.NullLoggerFactory() :> ILoggerFactory
 #endif
 
@@ -148,9 +162,6 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
     interface IOracleAPI with
         member this.NewPDBFromDump _ name _ _ _ = async {
             this.Logger.LogDebug("Creating new PDB {PDB}...", name)
-#if DEBUG
-            do! Async.Sleep 3000
-#endif
             return Ok name
         }
         member this.OpenPDB readWrite name = async { 
@@ -338,12 +349,7 @@ let pollRequestStatus (ctx:API.APIContext) requestId =
         let status : WithRequestId<RequestStatus> = ctx.Orchestrator <? OrchestratorActor.GetRequest requestId |> runQuick
         match snd status with
         | Pending -> 
-#if DEBUG
-            ctx.Logger.LogInformation("The request {RequestId} is pending, waiting...", requestId)
-            do! Async.Sleep 1000
-#else
             do! Async.Sleep 10
-#endif
             return! requestStatus ()
         | s -> return s
     }
@@ -530,6 +536,7 @@ let ``API deletes a version of master PDB`` () = test <| fun tck ->
     let result = API.deleteMasterPDBVersion ctx "test2" 2 false |> runQuick
     result |> Result.mapError failwith |> ignore
     result |> Result.map (fun invalidInstances -> Assert.False(invalidInstances |> List.isEmpty)) |> ignore
+    Async.Sleep 100 |> Async.RunSynchronously // handle pending messages
 
     let state = API.getMasterPDBState ctx orchestratorState.PrimaryInstance "test2" |> run
     match state with
@@ -599,6 +606,7 @@ let ``API cannot delete a version with working copy if not forcing`` () = test <
 
     let result = API.deleteMasterPDBVersion ctx "test2" 2 false |> runQuick
     result |> Result.map (fun _ -> failwith "version should not be deletable") |> ignore
+    Async.Sleep 100 |> Async.RunSynchronously // handle pending messages
 
 [<Fact>]
 let ``API can delete a version with working copy if forcing`` () = test <| fun tck ->
@@ -610,6 +618,7 @@ let ``API can delete a version with working copy if forcing`` () = test <| fun t
 
     let result = API.deleteMasterPDBVersion ctx "test2" 2 true |> runQuick
     result |> Result.mapError failwith |> ignore
+    Async.Sleep 100 |> Async.RunSynchronously // handle pending messages
 
 [<Fact>]
 let ``API skips creation of a snapshot working copy`` () = test <| fun tck ->
