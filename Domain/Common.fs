@@ -156,33 +156,13 @@ module Async =
     }
 
     // Sequential traverse/sequence
-#if !Async_Sequential_bug_fixed
-    let retn x = async {
-        return x
-    }
-
-    let bind f xAsync = async {
-        let! x = xAsync 
-        return! f x
-    }
-
-    let apply (f:Async<'a->'b>) (xAsync:Async<'a>) : Async<'b> =
-        f |> bind (fun g -> xAsync |> map g)
-
-    let traverseS f list =
-        let (<*>) = apply
-        let cons head tail = head :: tail
-        let folder head tail = retn cons <*> (f head) <*> tail
-        List.foldBack folder list (retn []) 
-#else
     let traverseS f list =
         list 
         |> List.map f 
         |> Async.Sequential
         |> map Array.toList 
-#endif
 
-    let sequenceS list = traverseS id list
+    let sequenceS (list:List<Async<_>>)  = list |> Async.Sequential |> map Array.toList
 
     // Parallel traverse/sequence
     let traverseP f list =

@@ -19,7 +19,7 @@ type CommandToParent =
 | CollectVersionsGarbage of (string * int list)
 | WorkingCopiesDeleted of (MasterPDBWorkingCopy * exn option) list
 
-let private masterPDBGarbageCollectorBody 
+let private oracleInstanceGarbageCollectorBody 
     (parameters:Parameters)
     (oracleShortTaskExecutor:IActorRef<Application.OracleShortTaskExecutor.Command>)
     (oracleLongTaskExecutor:IActorRef<OracleLongTaskExecutor.Command>) 
@@ -87,7 +87,7 @@ let spawn parameters shortTaskExecutor longTaskExecutor workingCopyFactory (inst
 
     (Akkling.Spawn.spawnAnonymous actorFactory
         <| props (
-            masterPDBGarbageCollectorBody
+            oracleInstanceGarbageCollectorBody
                 parameters
                 shortTaskExecutor
                 longTaskExecutor
