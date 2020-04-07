@@ -10,12 +10,14 @@ type Microsoft.FSharp.Control.Async with
         async {
             use cts = new CancellationTokenSource()
             use timer = Task.Delay (timeout |> Option.defaultValue -1, cts.Token)
-            let! completed = Async.AwaitTask <| Task.WhenAny(t, timer)
-            if completed = (t :> Task) then
-                cts.Cancel ()
-                let! result = Async.AwaitTask t
-                return Some result
-            else return None
+            try
+                let! completed = Async.AwaitTask <| Task.WhenAny(t, timer)
+                if completed = (t :> Task) then
+                    cts.Cancel ()
+                    let! result = Async.AwaitTask t
+                    return Ok result
+                else return Error ("unknown error" |> exn)
+            with ex -> return Error ex
         }
 
 let private runProcessAsyncInternal (timeout:System.TimeSpan option) (proc:Process) = async {
@@ -24,13 +26,15 @@ let private runProcessAsyncInternal (timeout:System.TimeSpan option) (proc:Proce
     proc.OutputDataReceived.Add(fun args -> Console.WriteLine(args.Data))
     proc.ErrorDataReceived.Add(fun args -> Console.Error.WriteLine(args.Data))
 
-    let started = proc.Start()
-    if not started then
-        let error = sprintf "Could not start process: %A" proc
-        tcs.SetException(exn error)
-    else
-        proc.BeginOutputReadLine();
-        proc.BeginErrorReadLine();
+    try
+        let started = proc.Start()
+        if not started then
+            let error = sprintf "Could not start process: %A" proc
+            tcs.SetException(exn error)
+        else
+            proc.BeginOutputReadLine()
+            proc.BeginErrorReadLine()
+    with ex -> tcs.SetException(ex)
     return! Async.AwaitTask(tcs.Task, timeout |> Option.map (fun t -> (int)t.TotalMilliseconds))
 }
 
@@ -43,9 +47,5 @@ let runProcessAsync timeout fileName args = async {
     proc.StartInfo.RedirectStandardOutput <- true
     proc.StartInfo.RedirectStandardError <- true
     proc.EnableRaisingEvents <- true
-    let! run = proc |> runProcessAsyncInternal timeout
-    return 
-        match run with
-        | Some exitCode -> Ok exitCode
-        | None -> sprintf "timeout exceeded while running %s" fileName |> exn |> Error
+    return! proc |> runProcessAsyncInternal timeout
 }    

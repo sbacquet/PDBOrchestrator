@@ -25,9 +25,9 @@ let s, l, v =
         None,
         None
     else
-        TimeSpan.FromSeconds(1.) |> Some,
-        TimeSpan.FromSeconds(1.) |> Some,
-        TimeSpan.FromSeconds(1.) |> Some
+        TimeSpan.FromMilliseconds(100.) |> Some,
+        TimeSpan.FromMilliseconds(100.) |> Some,
+        TimeSpan.FromMilliseconds(100.) |> Some
 
 let parameters : Application.Parameters.Parameters = {
     ServerInstanceName = "A"
@@ -45,7 +45,7 @@ let quickTimeout =
     if (System.Diagnostics.Debugger.IsAttached) then
         None
     else
-        TimeSpan.FromMilliseconds(1000.) |> Some
+        TimeSpan.FromMilliseconds(100.) |> Some
 
 #if DEBUG
 
@@ -835,10 +835,11 @@ let ``API gets no pending changes`` () = test <| fun tck ->
     let orchestrator = tck |> spawnOrchestratorActor
     let ctx = context tck orchestrator
     API.createWorkingCopy ctx me "server1" "test1" 1 "snap1" true false false |> runQuick |> ignore
-    let pendingChangesMaybe = API.getPendingChanges ctx |> runQuick
+    let pendingChangesMaybe = API.getPendingChanges ctx |> run
     match pendingChangesMaybe with
     | Ok pendingChanges -> Assert.True(pendingChanges.IsNone)
     | Error error -> failwith error
+    Async.Sleep 100 |> Async.RunSynchronously // handle pending messages
 
 [<Fact>]
 let ``API gets pending changes`` () = test <| fun tck ->
@@ -868,6 +869,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
         Assert.Equal("lockman", lockInfo.Editor)
         Assert.Equal(1, pendingChanges.Value.Commands.Length)
     | Error error -> failwith error
+    Async.Sleep 100 |> Async.RunSynchronously // handle pending messages
 
 [<Fact>]
 let ``API can delete an existing temp working copy`` () = test <| fun tck ->

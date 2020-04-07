@@ -671,7 +671,7 @@ let deletePDBSnapshots (logger:ILogger) connAsDBA (folder:string option) (olderT
     let! hasSnapshots = pdbHasSnapshots connAsDBA sourceName
     if not hasSnapshots then
         if deleteSource then
-            let! _ = deletePDB logger connAsDBA true sourceName
+            let! (_:string) = deletePDB logger connAsDBA true sourceName
             logger.LogDebug("Deleted PDB {pdb} and all snapshot copies.", sourceName)
             return true
         else
