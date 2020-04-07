@@ -1,5 +1,7 @@
 ﻿module Domain.Common
 
+open System.Threading.Tasks
+
 let (=~) s1 s2 =
      System.String.Equals(s1, s2, System.StringComparison.CurrentCultureIgnoreCase)
 
@@ -251,32 +253,143 @@ module AsyncValidation =
         list |> Async.sequenceP |> Async.map Validation.sequence
 
     type AsyncValidationBuilder() =
-        member __.Return(x) = retn x
-        member __.ReturnFrom(m: Async<Validation<_, _>>) = m
-        member __.Bind(m:Async<Validation<'a,'e>>, f:('a -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f m
-        member __.Bind(m:Validation<'a,'e>, f:('a -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f (async { return m })
-        member __.Bind(m:Async<Result<'a,'e>>, f:('a -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f (m |> ofAsyncResult)
-        member __.Bind(m:Result<'a,'e>, f:('a -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f (async { return m |> Validation.ofResult })
-        member __.Bind(_:unit, f:(unit -> Async<Validation<'b,'e>>)) : Async<Validation<'b,'e>> = bind f (async { return Validation.retn () })
-        member __.Zero() = async { return Valid () }
-        member __.Delay(f) = f
-        member __.Run(f) = f()
-        member __.TryWith(body : unit -> Async<Validation<'a, 'b>>, handler: exn -> Async<Validation<'a, 'b>>) : Async<Validation<'a, 'b>> =
-            try 
-                __.ReturnFrom(body())
-            with 
-            | e -> handler e
-        member __.TryFinally(body : unit -> Async<Validation<'a, 'b>>, compensation: unit -> unit) : Async<Validation<'a, 'b>> =
-            try 
-                __.ReturnFrom(body())
-            finally 
-                compensation() 
-        member __.Using(disposable:#System.IDisposable, body:#System.IDisposable -> Async<Validation<_, _>>) =
-            let body' = fun () -> body disposable
-            __.TryFinally(body', fun () -> 
-                match disposable with 
-                    | null -> () 
-                    | disp -> disp.Dispose())
+
+         member __.Return (value: 'T) : Async<Validation.Validation<'T, 'TError>> =
+             async.Return <| Validation.retn value
+
+         member __.ReturnFrom
+             (asyncValidation: Async<Validation.Validation<'T, 'TError>>)
+             : Async<Validation.Validation<'T, 'TError>> =
+             asyncValidation
+
+         member __.ReturnFrom
+             (taskValidation: Task<Validation.Validation<'T, 'TError>>)
+             : Async<Validation.Validation<'T, 'TError>> =
+             Async.AwaitTask taskValidation
+
+         member __.ReturnFrom
+             (validation: Validation.Validation<'T, 'TError>)
+             : Async<Validation.Validation<'T, 'TError>> =
+             async.Return validation
+
+         member __.Zero () : Async<Validation.Validation<unit, 'TError>> =
+             async.Return <| Validation.retn ()
+
+         member __.Bind
+             (asyncValidation: Async<Validation.Validation<'T, 'TError>>,
+                 binder: 'T -> Async<Validation.Validation<'U, 'TError>>)
+             : Async<Validation.Validation<'U, 'TError>> =
+             async {
+                 let! result = asyncValidation
+                 match result with
+                 | Validation.Valid x -> return! binder x
+                 | Validation.Invalid x -> return Validation.Invalid x
+             }
+
+         member this.Bind
+             (taskResult: Task<Validation.Validation<'T, 'TError>>,
+                 binder: 'T -> Async<Validation.Validation<'U, 'TError>>)
+             : Async<Validation.Validation<'U, 'TError>> =
+             this.Bind(Async.AwaitTask taskResult, binder)
+
+         member this.Bind
+             (result: Validation.Validation<'T, 'TError>, binder: 'T -> Async<Validation.Validation<'U, 'TError>>)
+             : Async<Validation.Validation<'U, 'TError>> =
+             this.Bind(this.ReturnFrom result, binder)
+
+         member __.Bind(_:unit, f:(unit -> Async<Validation.Validation<'b,'e>>)) : Async<Validation.Validation<'b,'e>> = bind f (async { return Validation.Valid () })
+
+         member __.Delay
+             (generator: unit -> Async<Validation.Validation<'T, 'TError>>)
+             : Async<Validation.Validation<'T, 'TError>> =
+             async.Delay generator
+
+         member this.Combine
+             (computation1: Async<Validation.Validation<unit, 'TError>>,
+                 computation2: Async<Validation.Validation<'U, 'TError>>)
+             : Async<Validation.Validation<'U, 'TError>> =
+             this.Bind(computation1, fun () -> computation2)
+
+         member __.TryWith
+             (computation: Async<Validation.Validation<'T, 'TError>>,
+                 handler: System.Exception -> Async<Validation.Validation<'T, 'TError>>)
+             : Async<Validation.Validation<'T, 'TError>> =
+             async.TryWith(computation, handler)
+
+         member __.TryFinally
+             (computation: Async<Validation.Validation<'T, 'TError>>,
+                 compensation: unit -> unit)
+             : Async<Validation.Validation<'T, 'TError>> =
+             async.TryFinally(computation, compensation)
+
+         member __.Using
+             (resource: 'T when 'T :> System.IDisposable,
+                 binder: 'T -> Async<Validation.Validation<'U, 'TError>>)
+             : Async<Validation.Validation<'U, 'TError>> =
+             async.Using(resource, binder)
+
+         member this.While
+             (guard: unit -> bool, computation: Async<Validation.Validation<unit, 'TError>>)
+             : Async<Validation.Validation<unit, 'TError>> =
+             if not <| guard () then this.Zero ()
+             else this.Bind(computation, fun () -> this.While (guard, computation))
+
+         member this.For
+             (sequence: #seq<'T>, binder: 'T -> Async<Validation.Validation<unit, 'TError>>)
+             : Async<Validation.Validation<unit, 'TError>> =
+             this.Using(sequence.GetEnumerator (), fun enum ->
+             this.While(enum.MoveNext,
+                 this.Delay(fun () -> binder enum.Current)))
+
+[<AutoOpen>]
+module AsyncValidationExtensions =
+ // Having Async<_> members as extensions gives them lower priority in
+ // overload resolution between Async<_> and Async<Validation<_,_>>.
+    type AsyncValidation.AsyncValidationBuilder with
+
+        member __.ReturnFrom (async': Async<'T>) : Async<Validation.Validation<'T, 'TError>> =
+             async {
+                 let! x = async'
+                 return Validation.Valid x
+             }
+
+        member __.ReturnFrom (task: Task<'T>) : Async<Validation.Validation<'T, 'TError>> =
+             async {
+                 let! x = Async.AwaitTask task
+                 return Validation.Valid x
+             }
+
+        member __.ReturnFrom (task: Task) : Async<Validation.Validation<unit, 'TError>> =
+             async {
+                 do! Async.AwaitTask task
+                 return Validation.retn ()
+             }
+
+        member this.Bind
+             (async': Async<'T>, binder: 'T -> Async<Validation.Validation<'U, 'TError>>)
+             : Async<Validation.Validation<'U, 'TError>> =
+             let asyncResult = async {
+                 let! x = async'
+                 return Validation.Valid x
+             }
+             this.Bind(asyncResult, binder)
+
+
+        member this.Bind
+             (task: Task<'T>, binder: 'T -> Async<Validation.Validation<'U, 'TError>>)
+             : Async<Validation.Validation<'U, 'TError>> =
+             this.Bind(Async.AwaitTask task, binder)
+
+        member this.Bind
+             (task: Task, binder: unit -> Async<Validation.Validation<'T, 'TError>>)
+             : Async<Validation.Validation<'T, 'TError>> =
+             this.Bind(Async.AwaitTask task, binder)
+
+        member __.Bind(m:Async<Result<'a,'e>>, f:('a -> Async<Validation.Validation<'b,'e>>)) : Async<Validation.Validation<'b,'e>> = 
+            AsyncValidation.bind f (m |> AsyncValidation.ofAsyncResult)
+
+        member __.Bind(m:Result<'a,'e>, f:('a -> Async<Validation.Validation<'b,'e>>)) : Async<Validation.Validation<'b,'e>> =
+            AsyncValidation.bind f (async { return m |> Validation.ofResult })
 
 let asyncValidation = new AsyncValidation.AsyncValidationBuilder()
 
