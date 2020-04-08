@@ -174,7 +174,7 @@ let ``Create and delete PDB`` () =
 
 [<Fact>]
 let ``Create PDB and import schema`` () =
-    let res = oracleAPI.NewPDBFromDump (TimeSpan.FromMinutes(3.) |> Some) "testsb" @"\\sophis\dumps\NEW_USER.DMP" [ "NEW_USER" ] [ "NEW_USER", "pass" ] |> Async.RunSynchronously
+    let res = oracleAPI.NewPDBFromDump (TimeSpan.FromMinutes(3.) |> Some) "testsb" @"\\sophis.misys.global.ad\dumps\NEW_USER.DMP" [ "NEW_USER" ] [ "NEW_USER", "pass" ] |> Async.RunSynchronously
     let deletionResult = result {
         use! session = FileTransfer.newSessionFromInstance (System.TimeSpan.FromMinutes(1.) |> Some) instance
         return! sprintf "%s/TESTSB_V001.XML" instance.MasterPDBManifestsPath |> FileTransfer.deleteRemoteFile session
