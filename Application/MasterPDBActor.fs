@@ -263,16 +263,19 @@ let private masterPDBActorBody
                 | CollectVersionsGarbage versions ->
                     ctx.Log.Value.Info("Garbage collection of versions of PDB {pdb} requested", masterPDB.Name)
                     let collectVersionGarbage collabs version =
-                        let versionPDBMaybe = masterPDB.Versions |> Map.tryFind version
-                        match versionPDBMaybe with
-                        | Some versionPDB -> 
-                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name versionPDB collabs workingCopyFactory ctx
+                        match masterPDB.Versions |> Map.tryFind version with
+                        | Some version -> 
+                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collabs workingCopyFactory ctx
                             versionActor <! MasterPDBVersionActor.CollectGarbage
                             newCollabs
                         | None -> 
                             ctx.Log.Value.Warning("Cannot garbage version {0} because it is not a version of {pdb}", version, masterPDB.Name)
                             collabs
-                    let newCollabs = versions |> List.fold collectVersionGarbage state.Collaborators
+                    let latestVersion = masterPDB |> getLatestAvailableVersionNumber
+                    let newCollabs =
+                        versions
+                        |> List.filter ((<>) latestVersion)
+                        |> List.fold collectVersionGarbage state.Collaborators
                     return! loop { state with Collaborators = newCollabs }
 
                 | AddVersion version ->
