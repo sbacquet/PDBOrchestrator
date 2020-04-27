@@ -14,6 +14,7 @@
   <ItemGroup>
     <Compile Include="Common.fs" />
     <Compile Include="GIT.fs" />
+    <Compile Include="GITActor.fs" />
     <Compile Include="FileTransfer.fs" />
     <Compile Include="RunProcessAsync.fs" />
     <Compile Include="Parameters.fs" />
@@ -34,7 +35,7 @@
     <Compile Include="OracleInstanceAffinity.fs" />
     <Compile Include="HttpHandlers.fs" />
     <Compile Include="RestAPI.fs" />
-    <Compile Include="Migration.fs" />
+    <None Include="Migration.fs" />
     <Compile Include="Config.fs" />
     <Compile Include="OrchestratorWatcher.fs" />
     <Compile Include="Program.fs" />

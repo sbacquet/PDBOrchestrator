@@ -25,3 +25,5 @@ let runGitCommand folder args =
 let addFile folder file = runGitCommand folder (addFileArgument file)
 
 let commitFile folder comment file = runGitCommand folder (commitFileArgument comment file)
+
+let initRepo folder = runGitCommand folder "init"

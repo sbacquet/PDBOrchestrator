@@ -184,23 +184,26 @@ let main args =
         GetModifyComment = fun name -> sprintf "Modified master PDB %s on Oracle instance %s" name instance.Name
         GetAddComment = fun name -> sprintf "Added master PDB %s to Oracle instance %s" name instance.Name
     }
+    let loggerFactory = new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory
+    let getOracleAPI (instance:OracleInstance) = OracleInstanceAPI.OracleInstanceAPI(loggerFactory, instance)
+
+    use system = Akkling.System.create "sys" (Config.akkaConfig (config.GetValue("Akka:LogLevel", "INFO")))
+    let gitActor = system |> Infrastructure.GITActor.spawn
     let getMasterPDBRepo (instance:OracleInstance) name = 
         MasterPDBRepository.MasterPDBRepository(
             logMasterPDBSaveFailure,
-            ifGit (gitParamsForMasterPDB instance),
+            gitActor,
+            gitParamsForMasterPDB instance,
             getInstanceFolder instance.Name, 
             name) :> IMasterPDBRepository
     let newMasterPDBRepo (instance:OracleInstance) pdb = 
         MasterPDBRepository.NewMasterPDBRepository(
             logMasterPDBSaveFailure, 
-            ifGit (gitParamsForMasterPDB instance),
+            gitActor,
+            gitParamsForMasterPDB instance,
             getInstanceFolder instance.Name, 
             pdb) :> IMasterPDBRepository
 
-    let loggerFactory = new Serilog.Extensions.Logging.SerilogLoggerFactory(dispose=true) :> ILoggerFactory
-    let getOracleAPI (instance:OracleInstance) = OracleInstanceAPI.OracleInstanceAPI(loggerFactory, instance)
-
-    use system = Akkling.System.create "sys" (Config.akkaConfig (config.GetValue("Akka:LogLevel", "INFO")))
     try
         let orchestratorActor = system |> OrchestratorActor.spawn validApplicationParameters getOracleAPI getOracleInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
         system |> OrchestratorWatcher.spawn orchestratorActor |> ignore

@@ -7,6 +7,7 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="GITTests.fs" />
     <Compile Include="InstanceAffinityTests.fs" />
     <Compile Include="FileTransfer.fs" />
     <Compile Include="RunProcessAsync.fs" />
@@ -15,7 +16,7 @@
     <Compile Include="OracleInstanceRepositoryTests.fs" />
     <Compile Include="OrchestratorRepositoryTests.fs" />
     <Compile Include="Oracle.fs" />
-    <Compile Include="Migration.fs" />
+    <None Include="Migration.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>

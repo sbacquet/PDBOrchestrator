@@ -5,6 +5,7 @@ open System.IO
 open Chiron
 open Infrastructure
 open Application.Common
+open Akkling
 
 let masterPDBFolder folder _ = Path.Combine(folder, "masterPDBs")
 let masterPDBPath folder name = Path.Combine(masterPDBFolder folder name, sprintf "%s.json"  name)
@@ -20,10 +21,12 @@ let loadMasterPDB folder name : MasterPDB =
 
 let saveMasterPDB folder name pdb = 
     Directory.CreateDirectory (masterPDBFolder folder name) |> ignore
-    use stream = File.CreateText (masterPDBPath folder name)
+    let filePath = masterPDBPath folder name
+    use stream = File.CreateText filePath
     let json = pdb |> MasterPDBJson.masterPDBtoJson
     stream.Write json
     stream.Flush()
+    filePath
     
 type GitParams = {
     LogError : string -> string -> unit
@@ -31,43 +34,31 @@ type GitParams = {
     GetAddComment : string -> string
 }
 
-type MasterPDBRepository(logFailure, gitParams, folder, name) = 
+type MasterPDBRepository(logFailure, gitActor:IActorRef<GITActor.Command>, gitParams, folder, name) = 
     interface IMasterPDBRepository with
         member __.Get () = loadMasterPDB folder name
-        member __.Put pdb =
+        member this.Put pdb =
             try
                 // 1. Save instance to file
-                pdb |> saveMasterPDB folder name
+                let filePath = pdb |> saveMasterPDB folder name
                 // 2. Commit file to Git
-                gitParams |> Option.map (fun gitParams ->
-                masterPDBPath "." name
-                |> GIT.commitFile folder (gitParams.GetModifyComment name)
-                |> Result.mapError (gitParams.LogError pdb.Name)) 
-                |> ignore
+                gitActor <! GITActor.Commit (folder, filePath, name, (gitParams.GetModifyComment name), gitParams.LogError)
             with
             | ex -> logFailure pdb.Name (masterPDBPath folder name) ex
-            upcast __
+            upcast this
 
-type NewMasterPDBRepository(logFailure, gitParams, folder, pdb) = 
+type NewMasterPDBRepository(logFailure, gitActor, gitParams, folder, pdb) = 
     interface IMasterPDBRepository with
         member __.Get () = pdb
-        member __.Put _ = 
-            let filePath = masterPDBPath "." pdb.Name
-            // 1. Add file to Git
-            gitParams |> Option.map (fun gitParams ->
-            filePath 
-            |> GIT.addFile folder
-            |> Result.mapError (gitParams.LogError pdb.Name))
-            |> ignore
-            // 2. Save and commit it
+        member this.Put _ = 
             try
-                pdb |> saveMasterPDB folder pdb.Name
-                gitParams |> Option.map (fun gitParams ->
-                filePath
-                |> GIT.commitFile folder (gitParams.GetAddComment pdb.Name)
-                |> Result.mapError (gitParams.LogError pdb.Name))
-                |> ignore
+                // 1. Save instance to file
+                let filePath = pdb |> saveMasterPDB folder pdb.Name
+                // 2. Add and commit file to Git
+                gitActor <! GITActor.AddAndCommit (folder, filePath, pdb.Name, (gitParams.GetAddComment pdb.Name), gitParams.LogError)
+                // 3. Return a repository ready to use
+                MasterPDBRepository(logFailure, gitActor, gitParams, folder, pdb.Name) :> IMasterPDBRepository
             with
-            | ex -> logFailure pdb.Name (masterPDBPath folder pdb.Name) ex
-            // Return a repository ready to use
-            MasterPDBRepository(logFailure, gitParams, folder, pdb.Name) :> IMasterPDBRepository
+            | ex ->
+                logFailure pdb.Name (masterPDBPath folder pdb.Name) ex
+                upcast this

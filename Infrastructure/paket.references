@@ -10,3 +10,4 @@ Serilog.Settings.Configuration
 Serilog.AspNetCore
 Serilog.Sinks.Http
 WinSCP
+Akkling
