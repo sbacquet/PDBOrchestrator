@@ -6,6 +6,7 @@ open Chiron
 open Infrastructure
 open Application.Common
 open Domain.MasterPDBWorkingCopy
+open Akkling
 
 let instanceFolder folder name = Path.Combine(folder, name)
 let instancePath folder name = Path.Combine(instanceFolder folder name, sprintf "%s.json" name)
@@ -46,11 +47,13 @@ let saveTemporaryWorkingCopies folder name suffix instance =
 
 let saveOracleInstance folder name suffix instance =
     Directory.CreateDirectory(instanceFolder folder name) |> ignore
-    use stream = File.CreateText(instancePath folder name)
+    let filePath = instancePath folder name
+    use stream = File.CreateText(filePath)
     let json = instance |> OracleInstanceJson.oracleInstanceToJson
     stream.Write json
     stream.Flush()
     instance |> saveTemporaryWorkingCopies folder name suffix
+    filePath
 
 type GitParams = {
     LogError : string -> string -> unit // instance -> error -> ()
@@ -58,58 +61,44 @@ type GitParams = {
     GetAddComment : string -> string
 }
 
-type OracleInstanceRepository(temporaryTimespan, logFailure, gitParams, folder, name, suffix) = 
+type OracleInstanceRepository(temporaryTimespan, logFailure, gitActor:IActorRef<GITActor.Command>, gitParams, folder, name, suffix) = 
     interface IOracleInstanceRepository with
 
         member __.Get () = loadOracleInstance temporaryTimespan folder name suffix
 
-        member __.Put instance = 
+        member this.Put instance = 
             try
                 // 1. Save instance to file
-                instance |> saveOracleInstance folder name suffix
+                let filePath = instance |> saveOracleInstance folder name suffix
                 // 2. Commit file to Git
-                gitParams |> Option.map (fun gitParams ->
-                instancePath "." name
-                |> GIT.commitFile folder (gitParams.GetModifyComment name)
-                |> Result.mapError (gitParams.LogError name))
-                |> ignore
+                gitActor <! GITActor.Commit (folder, filePath, name, (gitParams.GetModifyComment name), gitParams.LogError)
             with
             | ex -> logFailure instance.Name (instancePath folder name) ex
-            upcast __
+            upcast this
 
-        member __.PutWorkingCopiesOnly instance = 
+        member this.PutWorkingCopiesOnly instance = 
             try
                 instance |> saveTemporaryWorkingCopies folder name suffix
             with
             | ex -> logFailure instance.Name (instancePath folder name) ex
-            upcast __
+            upcast this
 
-type NewOracleInstanceRepository(temporaryTimespan, logFailure, gitParams, folder, instance, suffix) = 
+type NewOracleInstanceRepository(temporaryTimespan, logFailure, gitActor, gitParams, folder, instance, suffix) = 
     interface IOracleInstanceRepository with
 
         member __.Get () = instance
 
-        member __.Put _ = 
-            // 1. Add file to Git
-            let filePath = instancePath "." instance.Name
-            gitParams |> Option.map (fun gitParams ->
-            filePath 
-            |> GIT.addFile folder 
-            |> Result.mapError (gitParams.LogError instance.Name))
-            |> ignore
-            // 2. Save and commit it
+        member this.Put _ = 
             try
                 // 1. Save instance to file
-                instance |> saveOracleInstance folder instance.Name suffix
-                // 2. Commit file to Git
-                gitParams |> Option.map (fun gitParams ->
-                instancePath "." instance.Name
-                |> GIT.commitFile folder (gitParams.GetAddComment instance.Name)
-                |> Result.mapError (gitParams.LogError instance.Name))
-                |> ignore
+                let filePath = instance |> saveOracleInstance folder instance.Name suffix
+                // 2. Add and commit file to Git
+                gitActor <! GITActor.AddAndCommit (folder, filePath, instance.Name, (gitParams.GetAddComment instance.Name), gitParams.LogError)
+                // 3. Return a repository ready to use
+                OracleInstanceRepository(temporaryTimespan, logFailure, gitActor, gitParams, folder, instance.Name, suffix) :> IOracleInstanceRepository
             with
-            | ex -> logFailure instance.Name (instancePath folder instance.Name) ex
-            // Return a repository ready to use
-            OracleInstanceRepository(temporaryTimespan, logFailure, gitParams, folder, instance.Name, suffix) :> IOracleInstanceRepository
+            | ex ->
+                logFailure instance.Name (instancePath folder instance.Name) ex
+                upcast this
 
-        member __.PutWorkingCopiesOnly _ = upcast __
+        member this.PutWorkingCopiesOnly _ = upcast this

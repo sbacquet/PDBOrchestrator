@@ -5,7 +5,6 @@ open Infrastructure.MasterPDBRepository
 open Domain.MasterPDB
 open Application.Common
 open Akkling.TestKit
-open Akkling
 
 let [<Literal>]testFolder = __SOURCE_DIRECTORY__ + @"\tests\masterPDBs"
 let onRepoFailure _ _ = raise

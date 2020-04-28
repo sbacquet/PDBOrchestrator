@@ -34,12 +34,12 @@ type GitParams = {
     GetAddComment : string -> string
 }
 
-type MasterPDBRepository(logFailure, gitActor:IActorRef<GITActor.Command>, gitParams, folder, name) = 
+type MasterPDBRepository(logFailure, gitActor, gitParams, folder, name) = 
     interface IMasterPDBRepository with
         member __.Get () = loadMasterPDB folder name
         member this.Put pdb =
             try
-                // 1. Save instance to file
+                // 1. Save master PDB to file
                 let filePath = pdb |> saveMasterPDB folder name
                 // 2. Commit file to Git
                 gitActor <! GITActor.Commit (folder, filePath, name, (gitParams.GetModifyComment name), gitParams.LogError)
@@ -52,7 +52,7 @@ type NewMasterPDBRepository(logFailure, gitActor, gitParams, folder, pdb) =
         member __.Get () = pdb
         member this.Put _ = 
             try
-                // 1. Save instance to file
+                // 1. Save master PDB to file
                 let filePath = pdb |> saveMasterPDB folder pdb.Name
                 // 2. Add and commit file to Git
                 gitActor <! GITActor.AddAndCommit (folder, filePath, pdb.Name, (gitParams.GetAddComment pdb.Name), gitParams.LogError)
