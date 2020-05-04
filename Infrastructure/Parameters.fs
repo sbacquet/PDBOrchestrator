@@ -5,7 +5,6 @@ type Parameters = {
     Port: int
     DNSName: string
     Domain: string
-    UseGit: bool
     OpenIdConnectUrl: string
     CertificatePath: string
 }
@@ -15,7 +14,6 @@ let consParameters
     port
     dnsName
     domain
-    useGit
     openIdConnectUrl
     certificatePath
     =
@@ -24,7 +22,6 @@ let consParameters
         Port = port
         DNSName = dnsName
         Domain = domain
-        UseGit = useGit
         OpenIdConnectUrl = openIdConnectUrl
         CertificatePath = certificatePath
     }

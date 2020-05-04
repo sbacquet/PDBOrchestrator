@@ -159,13 +159,6 @@ let validateDNSName (config:IConfigurationRoot) =
     with _ -> 
         Invalid [ sprintf "config entry %s is not a valid string" configEntry ] 
 
-let validateUseGit (config:IConfigurationRoot) =
-    let configEntry = "UseGit"
-    try
-        let useGit = config.GetValue(configEntry, false)
-        Valid useGit
-    with _ -> Invalid [ sprintf "config entry %s is not a valid boolean" configEntry ] 
-
 let validateOpenIdConnectUrl (config:IConfigurationRoot) =
     let configEntry = "OpenIdConnectUrl"
     try
@@ -208,7 +201,6 @@ let configToInfrastuctureParameters (config:IConfigurationRoot) =
     let port = validatePort config
     let dnsName = validateDNSName config
     let domain = validateDomain config
-    let useGit = validateUseGit config
     let openIdConnectUrl = validateOpenIdConnectUrl config
     let certificatePath = root |> Domain.Common.Validation.bind (fun root -> validateCertificatePath root config)
     retn Infrastructure.Parameters.consParameters 
@@ -216,7 +208,6 @@ let configToInfrastuctureParameters (config:IConfigurationRoot) =
         <*> port
         <*> dnsName
         <*> domain
-        <*> useGit
         <*> openIdConnectUrl
         <*> certificatePath
 
