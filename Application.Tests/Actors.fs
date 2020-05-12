@@ -45,7 +45,7 @@ let quickTimeout =
     if (System.Diagnostics.Debugger.IsAttached) then
         None
     else
-        TimeSpan.FromMilliseconds(100.) |> Some
+        TimeSpan.FromMilliseconds(300.) |> Some
 
 #if DEBUG
 
