@@ -807,12 +807,17 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             | Some request ->
                 let status = 
                     match result with
-                    | Ok (pdb, versionNumber, workingCopyName, workingCopyService, oracleInstance) -> 
+                    | Ok (pdb, versionNumber, workingCopyName, workingCopyService, oracleInstance) ->
+                        let durable = 
+                            match request.Command with
+                            | CreateWorkingCopy (_,_,_,_,_,_,durable,_)
+                            | CreateWorkingCopyOfEdition (_,_,_,durable,_) -> durable 
+                            | _ -> false
                         completedOk [ 
                             PDBName workingCopyName
                             PDBService workingCopyService
                             OracleInstance oracleInstance
-                            ResourceLink (sprintf "/instances/%s/working-copies/%s" oracleInstance workingCopyName)
+                            ResourceLink (sprintf "/instances/%s/working-copies/%s?durable=%s" oracleInstance workingCopyName (durable.ToString()))
                         ] 
                         <| match versionNumber with
                            | 0 -> sprintf "Working copy of edition of PDB %s created successfully with name %s." pdb workingCopyName
