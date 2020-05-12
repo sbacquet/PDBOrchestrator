@@ -22,14 +22,17 @@ let private oracleShortTaskExecutorBody (parameters:Parameters) (oracleAPI : IOr
         | PDBExists pdb ->
             let! exists = oracleAPI.PDBExists pdb
             ctx.Sender() <! exists
+            return! loop ()
 
         | GetPDBFilesFolder pdb ->
             let! folder = oracleAPI.GetPDBFilesFolder pdb
             ctx.Sender() <! folder
+            return! loop ()
 
         | GetPDBNamesLike like ->
             let! names = oracleAPI.GetPDBNamesLike like
             ctx.Sender() <! names
+            return! loop ()
         
         }
     
