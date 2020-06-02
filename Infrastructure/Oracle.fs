@@ -10,32 +10,8 @@ open System.Globalization
 open Infrastructure.RunProcessAsync
 open Domain.Common.Validation
 
-type PDBCompensableAction = CompensableAction<string, Oracle.ManagedDataAccess.Client.OracleException>
-type PDBCompensableAsyncAction = CompensableAsyncAction<string, Oracle.ManagedDataAccess.Client.OracleException>
-
-let toOraclePDBResult result =
-    result |> Result.mapError (fun error -> error :> exn)
-
-let toOraclePDBResultAsync result = async {
-    let! r = result
-    return toOraclePDBResult r
-}
-
-let toOraclePDBValidation validation =
-    validation |> Validation.mapError (fun error -> error :> exn)
-
-let toOraclePDBValidationAsync validation = async {
-    let! r = validation
-    return toOraclePDBValidation r
-}
-
-let convertComp (comp:PDBCompensableAsyncAction) : CompensableAsyncAction<string, exn> =
-    let (action, compensation) = comp
-    let newAction t = async {
-        let! x = action t
-        return toOraclePDBResult x
-    }
-    (newAction, compensation)
+type PDBCompensableAction = CompensableAction<string, exn>
+type PDBCompensableAsyncAction = CompensableAsyncAction<string, exn>
 
 let openConnF (f:string -> IDbConnection) host port service user password sysdba () =
     let connectionString = 
@@ -72,7 +48,7 @@ let exec result conn a =
     try 
         Sql.execNonQuery conn a [] |> ignore
         Ok result 
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         Error ex
 
 let execAsync result conn a = async {
@@ -82,7 +58,7 @@ let execAsync result conn a = async {
         use! reader = Sql.asyncExecReader conn a []
         reader |> List.ofDataReader |> ignore
         return Ok result 
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return Error ex
 }
 
@@ -152,13 +128,16 @@ let closePDB (logger:ILogger) connAsDBA (name:string) = async {
         | Ok _ -> 
             logger.LogDebug("Closed PDB {pdb}", name)
             result
-        | Error ex -> 
-            match ex.Number with
-            | 65020 -> // already closed -> ignore it
-                logger.LogDebug("Closed PDB {pdb}", name)
-                Ok name
-            | _ -> 
-                result
+        | Error ex ->
+            match ex with
+            | :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+                match ex.Number with
+                | 65020 -> // already closed -> ignore it
+                    logger.LogDebug("Closed PDB {pdb}", name)
+                    Ok name
+                | _ -> 
+                    result
+            | ex -> Error ex
 }
 
 // Warning! Does not check existence of snapshots
@@ -204,7 +183,7 @@ let getOracleDirectoryPath connAsDBAIn pdb (dir:string) = async {
                 [] 
         let path:string option = path |> Sql.mapFirst (Sql.asScalar)
         return path |> Option.map Ok |> Option.defaultValue (sprintf "Oracle directory %s does not exist in PDB %s" dir pdb |> exn |> Error)
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return sprintf "cannot get Oracle directory %s in PDB %s" dir pdb |> exn |> Error
 }
 
@@ -216,7 +195,7 @@ let schemaExists connAsDBAIn (schema:string) (name:string) = async {
                 (sprintf "select count(*) from dba_users where upper(username)='%s'" (schema.ToUpper()))
                 [] 
         return result |> Option.get <> 0M |> Ok
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return Error ex
 }
 
@@ -388,9 +367,9 @@ let createManifestFromDump
     (tolerantToImportErrors:bool)
     =
     [
-        createPDBCompensable logger connAsDBA adminUserName adminUserPassword dest true |> convertComp
-        notCompensableAsync (grantPDB logger connAsDBAIn) |> convertComp
-        notCompensableAsync (createDirectory logger connAsDBAIn directory directoryPath userForImport) |> convertComp
+        createPDBCompensable logger connAsDBA adminUserName adminUserPassword dest true
+        notCompensableAsync (grantPDB logger connAsDBAIn)
+        notCompensableAsync (createDirectory logger connAsDBAIn directory directoryPath userForImport)
         notCompensableAsync 
             (createAndImportSchemas 
                 logger 
@@ -403,8 +382,8 @@ let createManifestFromDump
                 true 
                 directory
                 tolerantToImportErrors)
-        notCompensableAsync (closePDB logger connAsDBA) |> convertComp
-        notCompensableAsync (exportPDB logger connAsDBA manifest) |> convertComp
+        notCompensableAsync (closePDB logger connAsDBA)
+        notCompensableAsync (exportPDB logger connAsDBA manifest)
     ] |> composeAsync logger
 
 let importPDB (logger:ILogger) connAsDBA manifest dest (name:string) =
@@ -508,7 +487,7 @@ let getPDBsOnServer connAsDBA = async {
     try
         use! result = Sql.asyncExecReader connAsDBA "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs" [] 
         return result |> Sql.map (Sql.asRecord<RawOraclePDB> "") |> Ok
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return Error ex
 }
 
@@ -520,7 +499,7 @@ let getPDBOnServer connAsDBA (name:string) = async {
                 (sprintf "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs where upper(Name)='%s'" (name.ToUpper()))
                 [] 
         return result |> Sql.mapFirst (Sql.asRecord<RawOraclePDB> "") |> Ok
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return Error ex
 }
 
@@ -534,7 +513,7 @@ let getPDBsWithFilesFolder connAsDBA filter = async {
                 [] 
         let pdbs:(string*string) list = result |> Sql.map (Sql.asTuple2) |> Seq.toList
         return Ok pdbs
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return Error ex
 }
 
@@ -548,7 +527,7 @@ let getPDBsHavingFilesFolderStartWith connAsDBA folder filter = async {
                 [] 
         let pdbs:string list = result |> Sql.map (Sql.asScalar) |> Seq.toList
         return Ok pdbs
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return Error ex
 }
 
@@ -566,7 +545,7 @@ let getPDBNamesLike connAsDBA (like:string) = async {
                 [] 
         let names = result |> Sql.map (fun dr -> (string)dr?name.Value) |> Seq.toList
         return Ok names
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return Error ex
 }
 
@@ -578,7 +557,7 @@ let getPDBOnServerLike connAsDBA (like:string) = async {
                 (sprintf "select con_id as Id, Name, open_mode as OpenMode, rawtohex(guid) as Guid, SNAPSHOT_PARENT_CON_ID as SnapId from v$pdbs where upper(Name) like '%s'" (like.ToUpper()))
                 [] 
         return result |> Sql.map (Sql.asRecord<RawOraclePDB> "") |> Seq.toList |> Ok
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return Error ex
 }
 
@@ -590,7 +569,7 @@ let PDBExistsOnServer connAsDBA (name:string) = async {
                 (sprintf "select count(*) from v$pdbs where upper(Name)='%s'" (name.ToUpper()))
                 [] 
         return result |> Option.get > 0M |> Ok
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return Error ex
 }
 
@@ -603,7 +582,7 @@ let pdbFiltered filter connAsDBA (name:string) = async {
                 (sprintf @"select name from v$pdbs%s" filterClause)
                 []
         return result |> Sql.map (fun d -> (string)d?name.Value) |> List.ofSeq |> Ok
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return Error ex
 }
 
@@ -639,7 +618,7 @@ let pdbHasSnapshots connAsDBA (name:string) = async {
                 (sprintf @"select count(*) from v$pdbs where %s" (isSnapshotOfClause name))
                 []
         return result |> Option.get > 0M |> Ok
-    with :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
+    with ex -> 
         return Error ex
 }
 
@@ -649,9 +628,9 @@ let deleteSourcePDB (logger:ILogger) connAsDBA (name:string) = async {
     match hasSnapshotsMaybe with
     | Ok hasSnapshots ->
         match hasSnapshots with
-        | false -> return! deletePDB logger connAsDBA true name |> toOraclePDBResultAsync
+        | false -> return! deletePDB logger connAsDBA true name
         | true -> return Error (sprintf "PDB %s cannot be deleted because open snapshots have been created from it" name |> exn)
-    | Error error -> return Error (upcast error)
+    | Error error -> return Error error
 }
 
 let deletePDBSnapshots (logger:ILogger) connAsDBA (folder:string option) (olderThan:System.TimeSpan option) (deleteSource:bool) (sourceName:string) = asyncValidation {

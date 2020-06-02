@@ -39,59 +39,44 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
 
         member __.OpenPDB readWrite name = asyncResult {
             let modeString = if readWrite then "READ WRITE" else "READ ONLY"
-            let! pdb = getPDBOnServer connAsDBA name |> toOraclePDBResultAsync
+            let! pdb = getPDBOnServer connAsDBA name
             match pdb with
             | Some pdb ->
                 if pdb.OpenMode <> modeString then
                     return!
                         openPDB logger connAsDBA readWrite name
-                        |> toOraclePDBResultAsync
                 else
                     return name
             | None ->
                 return! Error <| (sprintf "cannot find PDB %s on Oracle server %s" name instance.Name |> exn)
         }
 
-        member __.ClosePDB name =
-            closePDB logger connAsDBA name
-            |> toOraclePDBResultAsync
+        member __.ClosePDB name = closePDB logger connAsDBA name
 
-        member __.DeletePDB name =
-            deleteSourcePDB logger connAsDBA name
+        member __.DeletePDB name = deleteSourcePDB logger connAsDBA name
 
-        member __.ExportPDB manifest name = 
-            closeAndExportPDB logger connAsDBA (getManifestPath manifest) name
-            |> toOraclePDBResultAsync
+        member __.ExportPDB manifest name = closeAndExportPDB logger connAsDBA (getManifestPath manifest) name
 
-        member __.ImportPDB manifest destFolder name = 
-            importAndOpen logger connAsDBA (getManifestPath manifest) destFolder name
-            |> toOraclePDBResultAsync
+        member __.ImportPDB manifest destFolder name = importAndOpen logger connAsDBA (getManifestPath manifest) destFolder name
 
-        member __.SnapshotPDB sourcePDB destFolder name = 
-            snapshotAndOpenPDB logger connAsDBA sourcePDB destFolder name
-            |> toOraclePDBResultAsync
+        member __.SnapshotPDB sourcePDB destFolder name = snapshotAndOpenPDB logger connAsDBA sourcePDB destFolder name
 
-        member __.ClonePDB sourcePDB destFolder name = 
-            cloneAndOpenPDB logger connAsDBA sourcePDB destFolder name
-            |> toOraclePDBResultAsync
+        member __.ClonePDB sourcePDB destFolder name = cloneAndOpenPDB logger connAsDBA sourcePDB destFolder name
 
-        member __.PDBHasSnapshots name = 
-            pdbHasSnapshots connAsDBA name
-            |> toOraclePDBResultAsync
+        member __.PDBHasSnapshots name = pdbHasSnapshots connAsDBA name
 
-        member __.PDBExists name = 
-            PDBExistsOnServer connAsDBA name
-            |> toOraclePDBResultAsync
+        member __.PDBExists name = async {
+            let! result = PDBExistsOnServer connAsDBA name
+            match result with
+            | Ok _ -> return result
+            | Error _ ->
+                // Retry 1 time, because seems to fail sometimes for unknown reason
+                do! Async.Sleep 5000
+                return! PDBExistsOnServer connAsDBA name
+        }
 
-        member __.PDBSnapshots name =
-            name
-            |> pdbSnapshots connAsDBA None None
-            |> toOraclePDBResultAsync
+        member __.PDBSnapshots name = pdbSnapshots connAsDBA None None name
 
-        member __.GetPDBNamesLike like = 
-            getPDBNamesLike connAsDBA like
-            |> toOraclePDBResultAsync
+        member __.GetPDBNamesLike like = getPDBNamesLike connAsDBA like
 
-        member __.GetPDBFilesFolder name =
-            getPDBFilesFolder connAsDBA name
-            |> toOraclePDBResultAsync
+        member __.GetPDBFilesFolder name = getPDBFilesFolder connAsDBA name
