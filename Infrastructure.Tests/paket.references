@@ -4,3 +4,4 @@ FSharp.Core
 Serilog.Sinks.Trace
 WinSCP
 Akkling.TestKit
+Microsoft.NET.Test.Sdk

@@ -4,3 +4,4 @@ Akkling.TestKit
 Akka.Logger.Serilog
 Serilog.Sinks.Trace
 Serilog.Extensions.Logging
+Microsoft.NET.Test.Sdk

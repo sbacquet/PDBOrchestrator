@@ -1,3 +1,4 @@
 xunit
 xunit.runner.visualstudio
 unquote
+Microsoft.NET.Test.Sdk
