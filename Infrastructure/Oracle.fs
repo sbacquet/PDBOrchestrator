@@ -184,7 +184,7 @@ let getOracleDirectoryPath connAsDBAIn pdb (dir:string) = async {
         let path:string option = path |> Sql.mapFirst (Sql.asScalar)
         return path |> Option.map Ok |> Option.defaultValue (sprintf "Oracle directory %s does not exist in PDB %s" dir pdb |> exn |> Error)
     with ex -> 
-        return sprintf "cannot get Oracle directory %s in PDB %s" dir pdb |> exn |> Error
+        return sprintf "cannot get Oracle directory %s in PDB %s : %s" dir pdb ex.Message |> exn |> Error
 }
 
 let schemaExists connAsDBAIn (schema:string) (name:string) = async {
