@@ -4,12 +4,12 @@
   "schemas": [
     {
       "user": "fusioninvest",
-      "password": "O5uROhNCgndZ4snbYZ6VKw==",
+      "password": "eJR9vJWJjdObZuWTQYrCmA==",
       "type": "Invest"
     },
     {
       "user": "af",
-      "password": "O5uROhNCgndZ4snbYZ6VKw==",
+      "password": "eJR9vJWJjdObZuWTQYrCmA==",
       "type": "SRM"
     }
   ],
@@ -19,8 +19,14 @@
       "createdBy": "jenkins.sophis",
       "creationDate": "2019-09-04T22:00:00.0000000Z",
       "comment": "Import new dump file."
+    },
+    {
+      "versionNumber": 98,
+      "createdBy": "sbacquet",
+      "creationDate": "2020-07-01T09:40:57.6529727Z",
+      "comment": "test"
     }
   ],
   "_version": 1,
-  "_iv": "7qFzvTRMu2rhYEzVyaX/rQ=="
+  "_iv": "174QdsxzVN/aCKVJ82AjRw=="
 }
