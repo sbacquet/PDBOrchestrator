@@ -69,8 +69,9 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
             let! result = PDBExistsOnServer connAsDBA name
             match result with
             | Ok _ -> return result
-            | Error _ ->
+            | Error error ->
                 // Retry 1 time, because seems to fail sometimes for unknown reason
+                logger.LogError("PDBExists failed ({0}), retrying 1 more time...", error.Message)
                 do! Async.Sleep 5000
                 return! PDBExistsOnServer connAsDBA name
         }
