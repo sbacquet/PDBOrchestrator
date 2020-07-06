@@ -160,6 +160,9 @@ let openPDB (logger:ILogger) connAsDBA readWrite (name:string) = asyncResult {
     let! result = 
         sprintf @"ALTER PLUGGABLE DATABASE %s OPEN %s FORCE" name readMode
         |> execAsync name connAsDBA
+    if readWrite then
+        // TODO: Temporary? Wait for a few extra seconds to be sure the freshly mounted PDB is ready (fix candidate for ORA-03135 error)
+        do! Async.Sleep 5000
     logger.LogDebug("Opened PDB {pdb}", name)
     return result
 }
