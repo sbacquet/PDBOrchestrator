@@ -21,6 +21,7 @@ open Microsoft.IdentityModel.Protocols
 open Microsoft.IdentityModel.Protocols.OpenIdConnect
 open Microsoft.IdentityModel.Tokens
 open Giraffe
+open Microsoft.Extensions.Hosting
 
 [<RequireQualifiedAccess>]
 module Config =
@@ -67,7 +68,7 @@ module Config =
             " level)
 
 let configureApp (apiCtx:API.APIContext) (app : IApplicationBuilder) =
-    let env = app.ApplicationServices.GetService<IHostingEnvironment>()
+    let env = app.ApplicationServices.GetService<IWebHostEnvironment>()
     let builder = 
         if env.IsDevelopment() then app.UseDeveloperExceptionPage()
         else app.UseGiraffeErrorHandler RestAPI.errorHandler
@@ -242,7 +243,7 @@ let main args =
                 .UseSerilog()
                 .Build()
         // Set up termination of web server on Akka system failure
-        let appLifetime = host.Services.GetRequiredService<IApplicationLifetime>()
+        let appLifetime = host.Services.GetRequiredService<IHostApplicationLifetime>()
         Async.Start (async {
             do! system.WhenTerminated |> Async.AwaitTask
             appLifetime.StopApplication()

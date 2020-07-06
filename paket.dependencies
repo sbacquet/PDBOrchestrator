@@ -1,7 +1,7 @@
 source "C:\Program Files (x86)\Microsoft SDKs\NuGetPackages\"
 source https://api.nuget.org/v3/index.json
 
-framework: netcoreapp2.2
+framework: netcoreapp3.1
 
 nuget Microsoft.NET.Test.Sdk
 nuget xunit
@@ -16,8 +16,8 @@ nuget Serilog.Extensions.Logging
 nuget Chiron prerelease
 nuget Serilog.Sinks.Console
 nuget Giraffe
-nuget Microsoft.AspNetCore.App
 nuget Serilog.Settings.Configuration
 nuget Serilog.AspNetCore
 nuget Serilog.Sinks.Http
 nuget WinSCP
+nuget Microsoft.AspNetCore.Authentication.JwtBearer
