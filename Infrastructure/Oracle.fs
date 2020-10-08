@@ -413,10 +413,12 @@ let importPDBCompensable (logger:ILogger) connAsDBA manifest dest =
         (importPDB logger connAsDBA manifest dest) 
         (deletePDB logger connAsDBA true)
 
-let importAndOpen (logger:ILogger) connAsDBA manifest dest =
+let importAndOpen (logger:ILogger) connAsDBA manifest dest readWrite script =
     [
         importPDBCompensable logger connAsDBA manifest dest
         openPDBCompensable logger connAsDBA true
+        notCompensableAsync (fun name -> match script with | Some script -> execAsync name connAsDBA script | None -> async { return Ok name })
+        notCompensableAsync (fun name -> if readWrite then async { return Ok name } else openPDB logger connAsDBA false name)
     ] |> composeAsync logger
 
 let snapshotPDB (logger:ILogger) connAsDBA sourcePDB destFolder name =
@@ -428,7 +430,6 @@ BEGIN
 		shared_mem_alloc_failed EXCEPTION;
 		PRAGMA EXCEPTION_INIT (shared_mem_alloc_failed, -4031);
 	BEGIN
-        execute immediate 'ALTER PLUGGABLE DATABASE %s OPEN READ ONLY FORCE';
 		execute immediate 'CREATE PLUGGABLE DATABASE %s FROM %s PARALLEL 1 SNAPSHOT COPY NOLOGGING CREATE_FILE_DEST=''%s''';
 	EXCEPTION
 		WHEN shared_mem_alloc_failed THEN
@@ -439,7 +440,7 @@ BEGIN
 	END;
 END;
 "
-        sourcePDB name sourcePDB destFolder name
+        name sourcePDB destFolder name
     |> execAsync name connAsDBA
 
 let snapshotPDBCompensable (logger:ILogger) connAsDBA sourcePDB destFolder = 
@@ -660,3 +661,96 @@ let deletePDBSnapshots (logger:ILogger) connAsDBA (folder:string option) (olderT
         logger.LogDebug("Deleted some snapshot copies of {pdb}.", sourceName)
         return false
 }
+
+let [<Literal>] cDisableScheduledJobsSQL = @"
+DECLARE
+job_is_not_running EXCEPTION;
+PRAGMA exception_init ( job_is_not_running,-27366 );
+v_count   PLS_INTEGER := 0;
+v_state   user_scheduler_jobs.state%TYPE;
+
+PROCEDURE stop_job (
+    p_job_name IN VARCHAR2
+)
+    IS
+BEGIN
+    dbms_scheduler.stop_job(job_name => p_job_name, force => true);
+EXCEPTION
+    WHEN job_is_not_running THEN --just in case the job already completed in the meantime
+        NULL;
+END;
+
+BEGIN
+FOR i IN (
+    SELECT
+        *
+    FROM
+        user_jobs
+) LOOP
+    dbms_job.broken(job => i.job,broken => true);
+END LOOP;
+
+SELECT
+    COUNT(*)
+INTO
+    v_count
+FROM
+    session_privs
+WHERE
+    privilege = 'MANAGE SCHEDULER';
+
+IF
+    ( v_count = 0 )
+THEN
+    raise_application_error(-20001,'User '||USER||' lacks MANAGE SCHEDULER privilege and cannot manage DBMS_SCHEDULER jobs!');
+END IF;
+
+FOR i IN (
+    SELECT
+        job_name,
+        state
+    FROM
+        user_scheduler_jobs
+    WHERE
+        enabled = 'TRUE'
+) LOOP
+    dbms_scheduler.disable(i.job_name, force => true);
+END LOOP;
+
+FOR i IN (
+    SELECT
+        job_name,
+        state
+    FROM
+        user_scheduler_jobs
+) LOOP
+    IF
+        i.state = 'RUNNING'
+    THEN
+        stop_job(i.job_name);
+    ELSE --double check to make sure the jobs has not started in the meantime
+        BEGIN
+            SELECT
+                state
+            INTO
+                v_state
+            FROM
+                user_scheduler_jobs
+            WHERE
+                job_name = i.job_name;
+
+            IF
+                i.state = 'RUNNING'
+            THEN
+                stop_job(i.job_name);
+            END IF;
+        EXCEPTION
+            WHEN no_data_found THEN
+                CONTINUE; --seems like someone has dropped the job in the meantime
+        END;
+    END IF;
+
+END LOOP;
+
+END;
+"

@@ -42,10 +42,9 @@ let private masterPDBVersionActorBody
     let deleteSnaphotSourcePDB pdb : OraclePDBResult = 
         oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.DeletePDB (None, pdb)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
-    let importPDB manifest path name : OraclePDBResult =
-        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, name)
+    let createSnaphotSourcePDB manifest path name : OraclePDBResult =
+        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, false, name)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot import PDB %s : timeout exceeded" name |> exn |> Error)
-
     let rec loop () =
         
         actor {
@@ -62,7 +61,7 @@ let private masterPDBVersionActorBody
                     let! snapshotSourceExists = pdbExists snapshotSourceName
                     let! _ = 
                         if (not snapshotSourceExists) then
-                            importPDB sourceManifest instance.SnapshotSourcePDBDestPath snapshotSourceName
+                            createSnaphotSourcePDB sourceManifest instance.SnapshotSourcePDBDestPath snapshotSourceName
                         else
                             ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
                             Ok ""

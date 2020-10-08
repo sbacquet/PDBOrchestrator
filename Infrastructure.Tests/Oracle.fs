@@ -57,7 +57,7 @@ let ``Import and delete PDB`` () =
         let! _ = if r.IsSome then Error (exn "PDB toto already exists") else Ok "good"
         let! r = getPDBOnServerLike conn "toto%"
         let! _ = if List.length r <> 0 then Error (exn "PDB toto% already exists") else Ok "good"
-        let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder "toto"
+        let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder true "toto"
         let! (r:Option<_>) = getPDBOnServer conn "toto"
         let! _ = if r.IsNone then Error (exn "No PDB toto ??") else Ok "good"
         let! r = getPDBOnServerLike conn "toto%"
@@ -75,7 +75,7 @@ let ``Import and delete PDB`` () =
 let ``Create a real working copy`` () =
     let commands1 = asyncResult {
         let stopWatch = System.Diagnostics.Stopwatch.StartNew()
-        let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder "source"
+        let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder false "source"
         stopWatch.Stop()
         Log.Logger.Debug("Time to import : {time}", stopWatch.Elapsed.TotalSeconds)
         stopWatch.Restart()
@@ -106,7 +106,7 @@ let ``Create a real working copy`` () =
 [<Fact>]
 let ``Get snapshots older than 15 seconds`` () =
     let commands1 = asyncResult {
-        let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder "source"
+        let! _ = oracleAPI.ImportPDB "test1.xml" cPDBFolder false "source"
         let! _ = oracleAPI.SnapshotPDB "source" cTempWCFolder "snapshot"
         let! (snapshots:string list) = oracleAPI.PDBSnapshots "source"
         let! _ = if snapshots.Length <> 1 then Error (exn "Got no snapshot!") else Ok "# snapshots is 1, good"

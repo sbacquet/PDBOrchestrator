@@ -189,7 +189,7 @@ let private masterPDBActorBody
                             return! loop state
                         else
                             let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                            oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestFromVersion version), instance.MasterPDBDestPath, editionPDBName)
+                            oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestFromVersion version), instance.MasterPDBDestPath, true, editionPDBName)
                             return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
 
                 | Commit (requestId, unlocker, _) ->

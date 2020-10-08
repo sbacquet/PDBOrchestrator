@@ -57,7 +57,8 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
 
         member __.ExportPDB manifest name = closeAndExportPDB logger connAsDBA (getManifestPath manifest) name
 
-        member __.ImportPDB manifest destFolder name = importAndOpen logger connAsDBA (getManifestPath manifest) destFolder name
+        member __.ImportPDB manifest destFolder readWrite name = 
+            importAndOpen logger connAsDBA (getManifestPath manifest) destFolder readWrite (Some Oracle.cDisableScheduledJobsSQL) name
 
         member __.SnapshotPDB sourcePDB destFolder name = snapshotAndOpenPDB logger connAsDBA sourcePDB destFolder name
 

@@ -25,7 +25,7 @@ type IOracleAPI =
 
     abstract member ExportPDB : manifest:string -> name:string -> Async<OraclePDBResult>
 
-    abstract member ImportPDB : manifest:string -> destFolder:string -> name:string -> Async<OraclePDBResult>
+    abstract member ImportPDB : manifest:string -> destFolder:string -> readWrite:bool -> name:string -> Async<OraclePDBResult>
 
     abstract member SnapshotPDB : sourcePDB:string -> destFolder:string -> name:string -> Async<OraclePDBResult>
 
