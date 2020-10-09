@@ -32,13 +32,13 @@ let openConnWithLogging (logger:ILogger) =
     let loggingConnection conn =
         { new DbConnectionWrapper(conn) with
             override __.Open() =
-                logger.LogTrace("Opening connection")
+                logger.LogTrace("Opening connection...")
                 conn.Open()
             override __.Close() =
-                logger.LogTrace("Closing connection")
+                logger.LogTrace("Closing connection...")
                 conn.Close()
             override __.Dispose() =
-                logger.LogTrace("Disposing connection")
+                logger.LogTrace("Disposing connection...")
                 conn.Dispose()
         } :> IDbConnection
 
@@ -66,7 +66,7 @@ let P = Sql.Parameter.make
 let (=>) a b = Sql.Parameter.make(a, b)
 
 let createPDB (logger:ILogger) connAsDBA adminUserName adminUserPassword dest keepOpen (name:string) = asyncResult {
-    logger.LogDebug("Creating PDB {pdb}", name)
+    logger.LogDebug("Creating PDB {pdb}...", name)
     let closeSql = if (keepOpen) then "" else sprintf @"execute immediate 'alter pluggable database %s close immediate';" name
     let! result = 
         sprintf 
@@ -90,12 +90,12 @@ let createPDB (logger:ILogger) connAsDBA adminUserName adminUserPassword dest ke
     "
             name adminUserName adminUserPassword dest name closeSql name
         |> execAsync name connAsDBA
-    logger.LogDebug("Created PDB {pdb}", name)
+    logger.LogDebug("Created PDB {pdb}.", name)
     return result
 }
 
 let grantPDB (logger:ILogger) connAsDBAIn (name:string) =
-    logger.LogDebug("Granting PDB {pdb}", name)
+    logger.LogDebug("Granting PDB {pdb}...", name)
     @"
 BEGIN
     execute immediate 'GRANT execute ON sys.dbms_lock TO public';
@@ -107,7 +107,7 @@ END;
     |> execAsync name (connAsDBAIn name)
 
 let createDirectory (logger:ILogger) connAsDBAIn dirName dirPath grantUser (name:string) =
-    logger.LogDebug("Creating directory {dir} in PDB {pdb}", dirName, name)
+    logger.LogDebug("Creating directory {dir} in PDB {pdb}...", dirName, name)
     sprintf 
         @"
 BEGIN
@@ -119,21 +119,21 @@ END;
     |> execAsync name (connAsDBAIn name)
 
 let closePDB (logger:ILogger) connAsDBA (name:string) = async {
-    logger.LogDebug("Closing PDB {pdb}", name)
+    logger.LogDebug("Closing PDB {pdb}...", name)
     let! result = 
         sprintf @"ALTER PLUGGABLE DATABASE %s CLOSE IMMEDIATE" name
         |> execAsync name connAsDBA
     return
         match result with
         | Ok _ -> 
-            logger.LogDebug("Closed PDB {pdb}", name)
+            logger.LogDebug("Closed PDB {pdb}.", name)
             result
         | Error ex ->
             match ex with
             | :? Oracle.ManagedDataAccess.Client.OracleException as ex -> 
                 match ex.Number with
                 | 65020 -> // already closed -> ignore it
-                    logger.LogDebug("Closed PDB {pdb}", name)
+                    logger.LogDebug("Closed PDB {pdb}.", name)
                     Ok name
                 | _ -> 
                     result
@@ -142,10 +142,10 @@ let closePDB (logger:ILogger) connAsDBA (name:string) = async {
 
 // Warning! Does not check existence of snapshots
 let deletePDB (logger:ILogger) connAsDBA closeIfOpen (name:string) = asyncResult {
-    logger.LogDebug("Deleting PDB {pdb}", name)
+    logger.LogDebug("Deleting PDB {pdb}...", name)
     let! _ = if (closeIfOpen) then closePDB logger connAsDBA name else AsyncResult.retn name
     let! result = sprintf @"DROP PLUGGABLE DATABASE %s INCLUDING DATAFILES" name |> execAsync name connAsDBA
-    logger.LogDebug("Deleted PDB {pdb}", name)
+    logger.LogDebug("Deleted PDB {pdb}.", name)
     return result
 }
 
@@ -155,12 +155,13 @@ let createPDBCompensable (logger:ILogger) connAsDBA adminUserName adminUserPassw
         (deletePDB logger connAsDBA true)
 
 let openPDB (logger:ILogger) connAsDBA readWrite (name:string) = asyncResult {
-    logger.LogDebug("Opening PDB {pdb}", name)
+    let mode = if readWrite then "read-write" else "read-only"
+    logger.LogDebug("Opening PDB {pdb} {mode}...", name, mode)
     let readMode = if readWrite then "READ WRITE" else "READ ONLY"
     let! result = 
         sprintf @"ALTER PLUGGABLE DATABASE %s OPEN %s FORCE" name readMode
         |> execAsync name connAsDBA
-    logger.LogDebug("Opened PDB {pdb}", name)
+    logger.LogDebug("Opened PDB {pdb} {mode}.", name, mode)
     return result
 }
 
@@ -200,11 +201,11 @@ let schemaExists connAsDBAIn (schema:string) (name:string) = async {
 }
 
 let deleteSchema (logger:ILogger) connAsDBAIn (schema:string) name =
-    logger.LogDebug("Creating schema {schema}", schema)
+    logger.LogDebug("Creating schema {schema}...", schema)
     sprintf "drop user %s cascade" schema |> execAsync name (connAsDBAIn name)
     
 let createSchema (logger:ILogger) connAsDBAIn (schema:string) (pass:string) deleteExisting (name:string) = asyncResult {
-    logger.LogDebug("Creating schema {schema}", schema)
+    logger.LogDebug("Creating schema {schema}...", schema)
     let! _ = 
         if deleteExisting then
             asyncResult {
@@ -294,7 +295,7 @@ let importSchemas
             |> String.concat ","
             |> sprintf "remap_schema=%s"
         ]
-        logger.LogDebug("Running the following command : impdp {0:l}", args |> String.concat " ")
+        logger.LogDebug("Running the following command : impdp {0:l}...", args |> String.concat " ")
         let! exitCode = 
             runProcessAsync 
                 timeout
@@ -334,7 +335,7 @@ let createAndGrantPDB (logger:ILogger) connAsDBA connAsDBAIn keepOpen adminUserN
     ] |> composeAsync logger
 
 let exportPDB (logger:ILogger) connAsDBA manifest (name:string) = 
-    logger.LogDebug("Exporting PDB {pdb}", name)
+    logger.LogDebug("Exporting PDB {pdb}...", name)
     sprintf 
         @"
 BEGIN
@@ -387,7 +388,7 @@ let createManifestFromDump
     ] |> composeAsync logger
 
 let importPDB (logger:ILogger) connAsDBA manifest dest (name:string) =
-    logger.LogDebug("Importing PDB {pdb}", name)
+    logger.LogDebug("Importing PDB {pdb}...", name)
     sprintf 
         @"
 BEGIN
@@ -417,12 +418,12 @@ let importAndOpen (logger:ILogger) connAsDBA manifest dest readWrite script =
     [
         importPDBCompensable logger connAsDBA manifest dest
         openPDBCompensable logger connAsDBA true
-        notCompensableAsync (fun name -> match script with | Some script -> execAsync name connAsDBA script | None -> async { return Ok name })
-        notCompensableAsync (fun name -> if readWrite then async { return Ok name } else openPDB logger connAsDBA false name)
+        notCompensableAsync (script |> Option.defaultValue AsyncResult.retn)
+        notCompensableAsync (if readWrite then AsyncResult.retn else openPDB logger connAsDBA false)
     ] |> composeAsync logger
 
 let snapshotPDB (logger:ILogger) connAsDBA sourcePDB destFolder name =
-    logger.LogDebug("Snapshoting PDB {sourcePDB} to {snapshotCopy}", sourcePDB, name)
+    logger.LogDebug("Snapshoting PDB {sourcePDB} to {snapshotCopy}...", sourcePDB, name)
     sprintf 
         @"
 BEGIN
@@ -455,7 +456,7 @@ let snapshotAndOpenPDB (logger:ILogger) connAsDBA sourcePDB destFolder =
     ] |> composeAsync logger
 
 let clonePDB (logger:ILogger) connAsDBA sourcePDB destFolder name =
-    logger.LogDebug("Cloning PDB {sourcePDB} to {destPDB}", sourcePDB, name)
+    logger.LogDebug("Cloning PDB {sourcePDB} to {destPDB}...", sourcePDB, name)
     sprintf 
         @"
 BEGIN
@@ -662,7 +663,8 @@ let deletePDBSnapshots (logger:ILogger) connAsDBA (folder:string option) (olderT
         return false
 }
 
-let [<Literal>] cDisableScheduledJobsSQL = @"
+let disableUserScheduledJobs host port user password pdb =
+    let disableScheduledJobsSQL = @"
 DECLARE
 job_is_not_running EXCEPTION;
 PRAGMA exception_init ( job_is_not_running,-27366 );
@@ -728,29 +730,11 @@ FOR i IN (
         i.state = 'RUNNING'
     THEN
         stop_job(i.job_name);
-    ELSE --double check to make sure the jobs has not started in the meantime
-        BEGIN
-            SELECT
-                state
-            INTO
-                v_state
-            FROM
-                user_scheduler_jobs
-            WHERE
-                job_name = i.job_name;
-
-            IF
-                i.state = 'RUNNING'
-            THEN
-                stop_job(i.job_name);
-            END IF;
-        EXCEPTION
-            WHEN no_data_found THEN
-                CONTINUE; --seems like someone has dropped the job in the meantime
-        END;
     END IF;
 
 END LOOP;
 
 END;
 "
+    let connMgr = Sql.withNewConnection (openConn host port pdb user password false)
+    execAsync pdb connMgr disableScheduledJobsSQL

@@ -185,7 +185,7 @@ type FakeOracleAPI(existingPDBs : Map<string, bool>) =
             this.Logger.LogDebug("Exporting PDB {PDB}...", name)
             return Ok name 
         }
-        member this.ImportPDB _ folder readWrite name = async { 
+        member this.ImportPDB _ folder readWrite _ name = async { 
             this.Logger.LogDebug("Importing PDB {PDB}...", name)
             addExistingPDB readWrite name
             addPDBFolder name folder

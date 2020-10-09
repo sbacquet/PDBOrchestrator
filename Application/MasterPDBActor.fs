@@ -55,7 +55,7 @@ type private Collaborators = {
     OracleDiskIntensiveTaskExecutor : IActorRef<OracleDiskIntensiveActor.Command>
 }
 
-let private getOrSpawnVersionActor parameters instance (masterPDBName:string) (version:MasterPDBVersion) collaborators workingCopyFactory ctx =
+let private getOrSpawnVersionActor parameters instance (masterPDB:MasterPDB) (version:MasterPDBVersion) collaborators workingCopyFactory ctx =
     let versionActorMaybe = collaborators.MasterPDBVersionActors |> Map.tryFind version.VersionNumber
     match versionActorMaybe with
     | Some versionActor -> collaborators, versionActor
@@ -68,7 +68,8 @@ let private getOrSpawnVersionActor parameters instance (masterPDBName:string) (v
                 collaborators.OracleLongTaskExecutor
                 collaborators.OracleDiskIntensiveTaskExecutor
                 workingCopyFactory
-                masterPDBName
+                masterPDB.Name
+                masterPDB.Schemas
                 version
         
         { collaborators with MasterPDBVersionActors = collaborators.MasterPDBVersionActors.Add(version.VersionNumber, versionActor) }, 
@@ -189,7 +190,7 @@ let private masterPDBActorBody
                             return! loop state
                         else
                             let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                            oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestFromVersion version), instance.MasterPDBDestPath, true, editionPDBName)
+                            oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestFromVersion version), instance.MasterPDBDestPath, true, None, editionPDBName)
                             return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
 
                 | Commit (requestId, unlocker, _) ->
@@ -242,7 +243,7 @@ let private masterPDBActorBody
                         else
                             let (requestId, requester) = requestRef
                             valid requestId
-                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collaborators workingCopyFactory ctx
+                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB version collaborators workingCopyFactory ctx
                             versionActor.Tell(MasterPDBVersionActor.CreateWorkingCopy (requestId, name, snapshot, durable, force), untyped requester)
                             return! loop { state with Collaborators = newCollabs }
 
@@ -265,7 +266,7 @@ let private masterPDBActorBody
                     let collectVersionGarbage collabs version =
                         match masterPDB.Versions |> Map.tryFind version with
                         | Some version -> 
-                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB.Name version collabs workingCopyFactory ctx
+                            let newCollabs, versionActor = getOrSpawnVersionActor parameters instance masterPDB version collabs workingCopyFactory ctx
                             versionActor <! MasterPDBVersionActor.CollectGarbage
                             newCollabs
                         | None -> 

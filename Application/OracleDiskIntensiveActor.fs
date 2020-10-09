@@ -7,7 +7,7 @@ open Akka.Routing
 open Application.Parameters
 
 type Command =
-| ImportPDB of WithOptionalRequestId<string, string, bool, string>
+| ImportPDB of WithOptionalRequestId<string, string, bool, (string*string) list option, string>
 | ClonePDB of WithOptionalRequestId<string, string, string> // responds with OraclePDBResultWithReqId
 | DeletePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
 
@@ -22,10 +22,10 @@ let private oracleDiskIntensiveTaskExecutorBody (oracleAPI : IOracleAPI) (ctx : 
         let! command = ctx.Receive()
 
         match command with
-        | ImportPDB (requestId, manifest, dest, readWrite, name) -> 
+        | ImportPDB (requestId, manifest, dest, readWrite, users, name) -> 
             ctx.Log.Value.Debug("Importing PDB {pdb}...", name)
             stopWatch.Restart()
-            let! result = oracleAPI.ImportPDB manifest dest readWrite name
+            let! result = oracleAPI.ImportPDB manifest dest readWrite users name
             stopWatch.Stop()
             result |> Result.map (fun pdb -> ctx.Log.Value.Info("PDB {PDB} imported in {0} s", pdb, stopWatch.Elapsed.TotalSeconds)) |> ignore
             match requestId with
