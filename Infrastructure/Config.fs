@@ -3,6 +3,8 @@
 open Microsoft.Extensions.Configuration
 open Domain.Common.Validation
 
+// Application parameters
+
 let validateServerInstanceName (config:IConfigurationRoot) =
     let configEntry = "UniqueName"
     let name = config.GetValue configEntry
@@ -97,6 +99,15 @@ let validateTemporaryWorkingCopyLifetime (config:IConfigurationRoot) =
         else Invalid [ sprintf "config entry %s must be >= 0" configEntry ]
     with _ -> Invalid [ sprintf "config entry %s is not a valid floating point number" configEntry ] 
 
+let validateCompletedRequestRetrievalTimeout (config:IConfigurationRoot) =
+    let configEntry = "CompletedRequestRetrievalTimeoutInMinutes"
+    try
+        let delayInMinutes = config.GetValue(configEntry, 5.)
+        if (delayInMinutes >= 0.)
+        then System.TimeSpan.FromMinutes(delayInMinutes) |> Valid
+        else Invalid [ sprintf "config entry %s must be >= 0" configEntry ]
+    with _ -> Invalid [ sprintf "config entry %s is not a valid floating point number" configEntry ] 
+
 let configToApplicationParameters (config:IConfigurationRoot) = 
     let serverInstanceName = validateServerInstanceName config
     let shortTimeout = validateShortTimeout config
@@ -107,6 +118,7 @@ let configToApplicationParameters (config:IConfigurationRoot) =
     let numberOfOracleDiskIntensiveTaskExecutors = validateNumberOfOracleDiskIntensiveTaskExecutors config
     let temporaryWorkingCopyLifetime = validateTemporaryWorkingCopyLifetime config
     let numberOfWorkingCopyWorkers = validateNumberOfWorkingCopyWorkers config
+    let completedRequestRetrievalTimeout = validateCompletedRequestRetrievalTimeout config
     retn Application.Parameters.consParameters 
         <*> serverInstanceName
         <*> shortTimeout
@@ -117,6 +129,9 @@ let configToApplicationParameters (config:IConfigurationRoot) =
         <*> numberOfOracleDiskIntensiveTaskExecutors
         <*> temporaryWorkingCopyLifetime
         <*> numberOfWorkingCopyWorkers
+        <*> completedRequestRetrievalTimeout
+
+// Infrastructure parameters
 
 let validateRoot (config:IConfigurationRoot) = 
     let configEntry = "Root"

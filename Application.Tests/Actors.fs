@@ -39,6 +39,7 @@ let parameters : Application.Parameters.Parameters = {
     NumberOfOracleDiskIntensiveTaskExecutors = 1
     NumberOfWorkingCopyWorkers = 10
     TemporaryWorkingCopyLifetime = TimeSpan.FromMinutes(1.)
+    CompletedRequestRetrievalTimeout = TimeSpan.FromMinutes(1.)
 }
 
 let quickTimeout = 

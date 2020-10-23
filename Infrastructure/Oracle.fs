@@ -415,10 +415,17 @@ let importPDBCompensable (logger:ILogger) connAsDBA manifest dest =
         (deletePDB logger connAsDBA true)
 
 let importAndOpen (logger:ILogger) connAsDBA manifest dest readWrite script =
+    let prepareForStatsScript = @"
+BEGIN
+DBMS_ADVISOR.SETUP_REPOSITORY();
+DBMS_STATS.INIT_PACKAGE();
+END;
+"
     [
         importPDBCompensable logger connAsDBA manifest dest
         openPDBCompensable logger connAsDBA true
         notCompensableAsync (script |> Option.defaultValue AsyncResult.retn)
+        notCompensableAsync (fun name -> execAsync name connAsDBA prepareForStatsScript)
         notCompensableAsync (if readWrite then AsyncResult.retn else openPDB logger connAsDBA false)
     ] |> composeAsync logger
 

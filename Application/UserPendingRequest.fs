@@ -42,7 +42,9 @@ type CompletedUserRequest<'S> = {
     Id: RequestId 
     Status: 'S
     User: User
+    CompletionTime: System.DateTime
     Duration: System.TimeSpan
+    RetrievedByClient: bool
 }
 
 type CompletedUserRequestMap<'R> = Map<RequestId, CompletedUserRequest<'R>>
@@ -52,11 +54,14 @@ let completeUserRequest<'C, 'S> log (pendingRequests : PendingUserRequestMap<'C>
     if pendingRequest.Deleted then
         completedRequests
     else
+        let now = System.DateTime.Now
         let completedRequest = { 
             Id = pendingRequest.Id
             Status = status
             User = pendingRequest.User
-            Duration = System.DateTime.Now - pendingRequest.StartTime
+            CompletionTime = now
+            Duration = now - pendingRequest.StartTime
+            RetrievedByClient = false
         }
         log pendingRequest.Id pendingRequest.Command completedRequest
         completedRequests |> Map.add pendingRequest.Id completedRequest
@@ -73,3 +78,18 @@ let deletePendingRequest<'C, 'S> log (pendingRequests : PendingUserRequestMap<'C
             pendingRequests |> Map.add pendingRequest.Id { pendingRequest with Deleted = true }, newCompletedRequests
         | None -> pendingRequests, newCompletedRequests
     
+let isTimedOut timeout (completedRequest:CompletedUserRequest<'S>) =
+    System.DateTime.Now - completedRequest.CompletionTime > timeout
+
+let markAsRetrieved (completedRequests : CompletedUserRequestMap<'S>) (completedRequest:CompletedUserRequest<'S>) =
+    completedRequests |> Map.add completedRequest.Id { completedRequest with RetrievedByClient = true }
+
+let notRetrievedCompletedRequests (completedRequests : seq<CompletedUserRequest<'S>>) =
+    completedRequests |> Seq.filter (fun request -> not request.RetrievedByClient)
+
+let cleanTimedOutCompletedRequests timeout (completedRequests : CompletedUserRequestMap<'S>) =
+    let timedOut, notTimedOut = completedRequests |> Map.toList |> List.map snd |> List.partition (isTimedOut timeout)
+    if timedOut |> List.isEmpty then
+        None
+    else
+        Some (notTimedOut |> List.map (fun req -> req.Id, req) |> Map.ofList, timedOut)

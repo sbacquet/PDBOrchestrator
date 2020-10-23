@@ -10,6 +10,7 @@ type Parameters = {
     NumberOfOracleDiskIntensiveTaskExecutors : int
     TemporaryWorkingCopyLifetime : System.TimeSpan
     NumberOfWorkingCopyWorkers : int
+    CompletedRequestRetrievalTimeout : System.TimeSpan
 }
 
 let consParameters
@@ -21,7 +22,8 @@ let consParameters
     numberOfOracleLongTaskExecutors
     numberOfOracleDiskIntensiveTaskExecutors
     temporaryWorkingCopyLifetime
-    numberOfWorkingCopyWorkers = 
+    numberOfWorkingCopyWorkers
+    completedRequestRetrievalTimeout = 
     {
         ServerInstanceName = serverInstanceName
         ShortTimeout = shortTimeout
@@ -32,4 +34,5 @@ let consParameters
         NumberOfOracleDiskIntensiveTaskExecutors = numberOfOracleDiskIntensiveTaskExecutors
         TemporaryWorkingCopyLifetime = temporaryWorkingCopyLifetime
         NumberOfWorkingCopyWorkers = numberOfWorkingCopyWorkers
+        CompletedRequestRetrievalTimeout = completedRequestRetrievalTimeout
     }
