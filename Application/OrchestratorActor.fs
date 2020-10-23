@@ -244,9 +244,17 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
             if ctx.Log.Value.IsDebugEnabled then
                 let count = state.PendingRequests |> alivePendingRequests |> Seq.length in 
                     if count > 0 then ctx.Log.Value.Debug("Number of pending requests : {0}", count)
-                let count = state.CompletedRequests.Count in 
-                    if count > 0 then ctx.Log.Value.Debug("Number of completed requests : {0}", count)
+                let count = state.CompletedRequests |> Map.toSeq |> Seq.map snd |> notRetrievedCompletedRequests |> Seq.length in 
+                    if count > 0 then ctx.Log.Value.Debug("Number of completed requests waiting for retrieval : {0}", count)
             
+            match (cleanTimedOutCompletedRequests parameters.CompletedRequestRetrievalTimeout state.CompletedRequests) with
+            | Some (newCompletedRequests, timedOutRequests) ->
+                let notRetrievedByClient = timedOutRequests |> notRetrievedCompletedRequests
+                if not (notRetrievedByClient |> Seq.isEmpty) then
+                    ctx.Log.Value.Warning("The following completed requests have not been retrieved on time :\n{requests:l}", notRetrievedByClient)
+                return! loop { state with CompletedRequests = newCompletedRequests }
+            | None ->
+                
             let! (msg:obj) = ctx.Receive()
 
             match msg with
@@ -487,8 +495,8 @@ let private orchestratorActorBody (parameters:Application.Parameters.Parameters)
                         return! loop state
                     | Some request ->
                         sender <! (requestId, Done (request.Status, request.Duration))
-                        ctx.Log.Value.Debug("Request {requestId} completed => removed from the list", requestId)
-                        return! loop { state with CompletedRequests = state.CompletedRequests |> Map.remove requestId }
+                        ctx.Log.Value.Debug("Request {requestId} retrieved by client", requestId)
+                        return! loop { state with CompletedRequests = request |> markAsRetrieved state.CompletedRequests }
 
             | DeleteRequest requestId ->
                 let (newPendingRequests, newCompletedRequests) = requestId |> deleteRequest state

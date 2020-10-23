@@ -3,6 +3,7 @@
 open Akkling
 open Akka.Actor
 open Domain.MasterPDBVersion
+open Domain.MasterPDB
 open Application.PendingRequest
 open Application.Oracle
 open Application.Parameters
@@ -11,7 +12,6 @@ open Domain.Common.Exceptional
 open Domain.OracleInstance
 open Application.Common
 open Application
-open Domain.MasterPDBWorkingCopy
 
 type Command =
 | CreateWorkingCopy of WithRequestId<string, bool, bool, bool> // responds with OraclePDBResultWithReqId
@@ -32,6 +32,7 @@ let private masterPDBVersionActorBody
     (oracleDiskIntensiveTaskExecutor:IActorRef<OracleDiskIntensiveActor.Command>)
     (workingCopyFactory:IActorRef<Application.WorkingCopyFactoryActor.Command>)
     (masterPDBName:string)
+    masterPDBSchemas
     (masterPDBVersion:MasterPDBVersion) 
     (ctx : Actor<Command>) =
 
@@ -42,10 +43,9 @@ let private masterPDBVersionActorBody
     let deleteSnaphotSourcePDB pdb : OraclePDBResult = 
         oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.DeletePDB (None, pdb)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
-    let importPDB manifest path name : OraclePDBResult =
-        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, name)
+    let createSnaphotSourcePDB manifest path name : OraclePDBResult =
+        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, false, Some (usersAndPasswords masterPDBSchemas), name)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot import PDB %s : timeout exceeded" name |> exn |> Error)
-
     let rec loop () =
         
         actor {
@@ -62,7 +62,7 @@ let private masterPDBVersionActorBody
                     let! snapshotSourceExists = pdbExists snapshotSourceName
                     let! _ = 
                         if (not snapshotSourceExists) then
-                            importPDB sourceManifest instance.SnapshotSourcePDBDestPath snapshotSourceName
+                            createSnaphotSourcePDB sourceManifest instance.SnapshotSourcePDBDestPath snapshotSourceName
                         else
                             ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
                             Ok ""
@@ -97,10 +97,6 @@ let private masterPDBVersionActorBody
 
         | Delete ->
             ctx.Log.Value.Info("Deleting version {pdbversion} of {pdb}", masterPDBVersion.VersionNumber, masterPDBName)
-            let sourceManifest = Domain.MasterPDBVersion.manifestFile masterPDBName masterPDBVersion.VersionNumber
-            // TODO : read manifest file and get Oracle files location
-            // TODO : delete Oracle files
-            // TODO : delete manifest file
             if instance.SnapshotCapable then deleteSnaphotSourcePDB snapshotSourceName |> ignore else ()
             retype (ctx.Parent()) <! KillVersion masterPDBVersion.VersionNumber
             return! loop ()
@@ -115,7 +111,10 @@ let spawn
         (longTaskExecutor:IActorRef<Application.OracleLongTaskExecutor.Command>) 
         (oracleDiskIntensiveTaskExecutor:IActorRef<Application.OracleDiskIntensiveActor.Command>)
         (workingCopyFactory:IActorRef<Application.WorkingCopyFactoryActor.Command>)
-        (masterPDBName:string) (masterPDBVersion:MasterPDBVersion) (actorFactory:IActorRefFactory) =
+        (masterPDBName:string)
+        (masterPDBSchemas:Domain.MasterPDB.Schema list)
+        (masterPDBVersion:MasterPDBVersion)
+        (actorFactory:IActorRefFactory) =
 
     (Akkling.Spawn.spawnAnonymous actorFactory
         <| props (
@@ -127,6 +126,7 @@ let spawn
                 oracleDiskIntensiveTaskExecutor
                 workingCopyFactory
                 masterPDBName
+                masterPDBSchemas
                 masterPDBVersion
         )).Retype<Command>()
 

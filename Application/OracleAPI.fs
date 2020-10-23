@@ -10,11 +10,11 @@ let getOracleServerPort port = port |> Option.defaultValue 1521
 
 type IOracleAPI =
     abstract member NewPDBFromDump : 
-        timeout:System.TimeSpan option ->
-        name:string ->
-        dumpPath:string -> 
-        schemas:string list -> 
-        targetSchemas:(string * string) list
+        timeout : System.TimeSpan option ->
+        name : string ->
+        dumpPath : string -> 
+        schemas : string list -> 
+        targetSchemas : (string * string) list
         -> Async<OraclePDBResult>
 
     abstract member OpenPDB : readWrite:bool -> name:string -> Async<OraclePDBResult>
@@ -25,7 +25,13 @@ type IOracleAPI =
 
     abstract member ExportPDB : manifest:string -> name:string -> Async<OraclePDBResult>
 
-    abstract member ImportPDB : manifest:string -> destFolder:string -> name:string -> Async<OraclePDBResult>
+    abstract member ImportPDB : 
+        manifest : string ->
+        destFolder : string ->
+        readWrite : bool -> 
+        users : (string * string) list option ->
+        name : string
+        -> Async<OraclePDBResult>
 
     abstract member SnapshotPDB : sourcePDB:string -> destFolder:string -> name:string -> Async<OraclePDBResult>
 

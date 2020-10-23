@@ -5,8 +5,10 @@ open Microsoft.Extensions.Logging
 open Application.Oracle
 open Domain.Common
 
+let portOrDefault (instance:Domain.OracleInstance.OracleInstance) = instance.Port |> Option.defaultValue 1521
+
 let connAsDBAInFromInstance (logger:ILogger) (instance:Domain.OracleInstance.OracleInstance) service =
-    let port = instance.Port |> Option.defaultValue 1521
+    let port = instance |> portOrDefault
     Sql.withNewConnection (openConn instance.Server port service instance.DBAUser instance.DBAPassword true)
 
 let connAsDBAFromInstance (logger:ILogger) instance = connAsDBAInFromInstance logger instance instance.Name
@@ -57,7 +59,14 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
 
         member __.ExportPDB manifest name = closeAndExportPDB logger connAsDBA (getManifestPath manifest) name
 
-        member __.ImportPDB manifest destFolder name = importAndOpen logger connAsDBA (getManifestPath manifest) destFolder name
+        member __.ImportPDB manifest destFolder readWrite users name = 
+            let script = users |> Option.map (fun users pdb ->
+                users 
+                |> List.map (fun (user, pass) -> disableUserScheduledJobs instance.Server (instance |> portOrDefault) user pass pdb)
+                |> AsyncResult.sequenceS
+                |> AsyncResult.map (fun _ -> pdb)
+            )
+            importAndOpen logger connAsDBA (getManifestPath manifest) destFolder readWrite script name
 
         member __.SnapshotPDB sourcePDB destFolder name = snapshotAndOpenPDB logger connAsDBA sourcePDB destFolder name
 

@@ -39,6 +39,7 @@ let parameters : Application.Parameters.Parameters = {
     NumberOfOracleDiskIntensiveTaskExecutors = 1
     NumberOfWorkingCopyWorkers = 10
     TemporaryWorkingCopyLifetime = TimeSpan.FromMinutes(1.)
+    CompletedRequestRetrievalTimeout = TimeSpan.FromMinutes(1.)
 }
 
 let quickTimeout = 
@@ -142,15 +143,15 @@ let instance2 =
         "" ""
         false
 
-type FakeOracleAPI(existingPDBs : Set<string>) = 
-    let mutable _existingPDBs = existingPDBs |> Set.map (fun pdb -> pdb.ToUpper())
+type FakeOracleAPI(existingPDBs : Map<string, bool>) = 
+    let mutable _existingPDBs = existingPDBs
     let _existingPDBsLock = new Object()
     let mutable _pdbFolderMap : Map<string, string> = Map.empty
     let _pdbFolderMapLock = new Object()
 
-    let addExistingPDB (pdb:string) = lock _existingPDBsLock (fun () -> _existingPDBs <- _existingPDBs |> Set.add (pdb.ToUpper()))
-    let removeExistingPDB (pdb:string) = lock _existingPDBsLock (fun () -> _existingPDBs <- _existingPDBs |> Set.remove (pdb.ToUpper()))
-    let pdbExists (pdb:string) = lock _existingPDBsLock (fun () -> _existingPDBs |> Set.contains (pdb.ToUpper()))
+    let addExistingPDB (readWrite:bool) (pdb:string) = lock _existingPDBsLock (fun () -> _existingPDBs <- _existingPDBs |> Map.add (pdb.ToUpper()) readWrite)
+    let removeExistingPDB (pdb:string) = lock _existingPDBsLock (fun () -> _existingPDBs <- _existingPDBs |> Map.remove (pdb.ToUpper()))
+    let pdbExists (pdb:string) = lock _existingPDBsLock (fun () -> _existingPDBs |> Map.containsKey (pdb.ToUpper()))
 
     let addPDBFolder (pdb:string) folder = lock _pdbFolderMapLock (fun () -> _pdbFolderMap <- _pdbFolderMap |> Map.add (pdb.ToUpper()) folder)
     let removePDBFolder (pdb:string) = lock _pdbFolderMapLock (fun () -> _pdbFolderMap <- _pdbFolderMap |> Map.remove (pdb.ToUpper()))
@@ -185,21 +186,29 @@ type FakeOracleAPI(existingPDBs : Set<string>) =
             this.Logger.LogDebug("Exporting PDB {PDB}...", name)
             return Ok name 
         }
-        member this.ImportPDB _ folder name = async { 
+        member this.ImportPDB _ folder readWrite _ name = async { 
             this.Logger.LogDebug("Importing PDB {PDB}...", name)
-            addExistingPDB name
+            addExistingPDB readWrite name
             addPDBFolder name folder
             return Ok name 
         }
         member this.SnapshotPDB sourcePDB folder name = async { 
             this.Logger.LogDebug("Snapshoting PDB {sourcePDB} to {snapshotCopy}...", sourcePDB, name)
-            addExistingPDB name
-            addPDBFolder name folder
-            return Ok name 
+            let exists = _existingPDBs.TryFind sourcePDB
+            match exists with
+            | Some readWrite ->
+                if (readWrite) then 
+                    return Error <| (sprintf "Source PDB %s is not read only" sourcePDB |> exn)
+                else
+                    addExistingPDB true name
+                    addPDBFolder name folder
+                    return Ok name 
+            | None -> 
+                return Error <| (printf "Source PDB %s does not exist" sourcePDB |> exn)
         }
         member this.ClonePDB sourcePDB folder name = async { 
             this.Logger.LogDebug("Cloning PDB {sourcePDB} to {destPDB}...", sourcePDB, name)
-            addExistingPDB name
+            addExistingPDB true name
             addPDBFolder name folder
             return Ok name 
         }
@@ -273,8 +282,8 @@ type FakeOrchestratorRepo(orchestrator) =
 
 let orchestratorRepo = FakeOrchestratorRepo(orchestratorState)
 
-let spawnOrchestratorActor = OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI(Set.empty)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
-let spawnOracleInstanceActor = OracleInstanceActor.spawn parameters (fun _ -> FakeOracleAPI(Set.empty)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo
+let spawnOrchestratorActor = OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI(Map.empty)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+let spawnOracleInstanceActor = OracleInstanceActor.spawn parameters (fun _ -> FakeOracleAPI(Map.empty)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo
 let spawnMasterPDBActor = MasterPDBActor.spawn parameters
 
 let me = "me" |> UserRights.consUserWithDefaults []
@@ -429,7 +438,7 @@ let ``API fails to create a PDB`` () = test <| fun tck ->
 
 [<Fact>]
 let ``Lock master PDB`` () = test <| fun tck ->
-    let fakeOracleAPI = FakeOracleAPI(Set.empty)
+    let fakeOracleAPI = FakeOracleAPI(Map.empty)
     let shortTaskExecutor = tck |> OracleShortTaskExecutor.spawn parameters fakeOracleAPI
     let longTaskExecutor = tck |> OracleLongTaskExecutor.spawn parameters fakeOracleAPI
     let oracleDiskIntensiveTaskExecutor = tck |> OracleDiskIntensiveActor.spawn parameters fakeOracleAPI
@@ -577,7 +586,7 @@ let ``API creates a snapshot working copy`` () = test <| fun tck ->
 [<Fact>]
 let ``API must create the PDB if not exists even if working copy registered`` () = test <| fun tck ->
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "WORKINGCOPY", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" true "WORKINGCOPY" ] |> Map.ofList }) :> IOracleInstanceRepository
-    let oracleAPI = FakeOracleAPI(Set.empty) :> IOracleAPI
+    let oracleAPI = FakeOracleAPI(Map.empty) :> IOracleAPI
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
 
@@ -854,7 +863,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
         | name -> failwithf "Oracle instance %s does not exist" name
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with MasterPDBs = "LOCKED" :: instance1.MasterPDBs }) :> IOracleInstanceRepository
     let orchestratorRepo = FakeOrchestratorRepo { OracleInstanceNames = [ "server1" ]; PrimaryInstance = "server1" }
-    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "locked"; "locked_EDITION" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ ("LOCKED", true); ("LOCKED_EDITION", true) ] |> Map.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
     // Enqueue a read-only request
     API.createWorkingCopy ctx me "server1" "test1" 1 "snap1" true false false |> runQuick |> ignore
@@ -874,7 +883,7 @@ let ``API gets pending changes`` () = test <| fun tck ->
 [<Fact>]
 let ``API can delete an existing temp working copy`` () = test <| fun tck ->
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "TEST1WC", newTempWorkingCopy (System.TimeSpan.FromDays 1.) "me" (SpecificVersion 1) "TEST1" true "TEST1WC" ] |> Map.ofList }) :> IOracleInstanceRepository
-    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ ("TEST1WC", true) ] |> Map.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
@@ -901,7 +910,7 @@ let ``API cannot delete a working copy of different durability than requested`` 
                     "TEST1WC_durable", newDurableWorkingCopy "me" (SpecificVersion 1) "TEST1" true "TEST1WC_durable"
                 ] |> Map.ofList }
         ) :> IOracleInstanceRepository
-    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc"; "TEST1WC_durable" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ ("TEST1WC", true); ("TEST1WC_DURABLE", true) ] |> Map.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
 
     let request = API.deleteWorkingCopy ctx me "server1" "TEST1WC_durable" false |> runQuick
@@ -913,7 +922,7 @@ let ``API cannot delete a working copy of different durability than requested`` 
 [<Fact>]
 let ``API can delete an existing durable working copy`` () = test <| fun tck ->
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ "TEST1WC", newDurableWorkingCopy "me" (SpecificVersion 1) "TEST1" true "TEST1WC" ] |> Map.ofList }) :> IOracleInstanceRepository
-    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ ("TEST1WC", true) ] |> Map.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
 
     let instanceState = "server1" |> API.getInstanceState ctx |> runQuick
@@ -932,7 +941,7 @@ let ``API can delete an existing durable working copy`` () = test <| fun tck ->
 
 [<Fact>]
 let ``API can delete a temp working copy even if not registered`` () = test <| fun tck ->
-    let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
+    let oracleAPI = FakeOracleAPI([ ("TEST1WC", true) ] |> Map.ofList)
     oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder false)
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
@@ -943,7 +952,7 @@ let ``API can delete a temp working copy even if not registered`` () = test <| f
 
 [<Fact>]
 let ``API cannot delete a durable working copy if not registered`` () = test <| fun tck ->
-    let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
+    let oracleAPI = FakeOracleAPI([ ("TEST1WC", true) ] |> Map.ofList)
     oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder true)
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
@@ -953,7 +962,7 @@ let ``API cannot delete a durable working copy if not registered`` () = test <| 
 
 [<Fact>]
 let ``API can overwrite a temp working copy that exists but is not registered`` () = test <| fun tck ->
-    let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
+    let oracleAPI = FakeOracleAPI([ ("TEST1WC", true) ] |> Map.ofList)
     oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder false)
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
@@ -984,7 +993,7 @@ let ``API can overwrite a temp working copy that exists but is not registered`` 
 
 [<Fact>]
 let ``API cannot create a temp working copy if durable copy exists with same name and is not registered`` () = test <| fun tck ->
-    let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
+    let oracleAPI = FakeOracleAPI([ ("TEST1WC", true) ] |> Map.ofList)
     oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder true)
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
@@ -1008,7 +1017,7 @@ let ``API cannot create a temp working copy if durable copy exists with same nam
 
 [<Fact>]
 let ``API can force creating a durable working copy if temp copy exists with same name and is not registered`` () = test <| fun tck ->
-    let oracleAPI = FakeOracleAPI([ "test1wc" ] |> Set.ofList)
+    let oracleAPI = FakeOracleAPI([ ("TEST1WC", true) ] |> Map.ofList)
     oracleAPI.AddPDBFolder "test1wc" (cWorkingCopiesPath |> buildWorkingCopyFolder false)
     let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> oracleAPI) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
@@ -1031,7 +1040,7 @@ let ``API can force creating a durable working copy if temp copy exists with sam
 let ``API extends a temporary working copy`` () = test <| fun tck ->
     let wc = consWorkingCopy (System.DateTime.Parse "01/01/2020") (Temporary (System.DateTime.Parse "02/01/2020")) "me" (SpecificVersion 1) "TEST1" true "TEST1WC"
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ wc.Name, wc ] |> Map.ofList }) :> IOracleInstanceRepository
-    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ ("TEST1WC", true) ] |> Map.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
 
     let result = API.extendWorkingCopy ctx "server1" "test1wc" |> runQuick
@@ -1052,7 +1061,7 @@ let ``API extends a temporary working copy`` () = test <| fun tck ->
 let ``API extends a durable working copy`` () = test <| fun tck ->
     let wc = consWorkingCopy (System.DateTime.Parse "01/01/2020") Durable "me" (SpecificVersion 1) "TEST1" true "TEST1WC"
     let getInstanceRepo _ = FakeOracleInstanceRepo ({ instance1 with WorkingCopies = [ wc.Name, wc ] |> Map.ofList }) :> IOracleInstanceRepository
-    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ "test1wc" ] |> Set.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
+    let orchestrator = tck |> OrchestratorActor.spawn parameters (fun _ -> FakeOracleAPI([ ("TEST1WC", true) ] |> Map.ofList)) getInstanceRepo getMasterPDBRepo newMasterPDBRepo orchestratorRepo
     let ctx = context tck orchestrator
 
     let result = API.extendWorkingCopy ctx "server1" "test1wc" |> runQuick
