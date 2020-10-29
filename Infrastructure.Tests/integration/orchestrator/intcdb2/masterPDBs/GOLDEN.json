@@ -4,12 +4,12 @@
   "schemas": [
     {
       "user": "fusioninvest",
-      "password": "eJR9vJWJjdObZuWTQYrCmA==",
+      "password": "G5Jsq4IWgyi8MWJozoNAuw==",
       "type": "Invest"
     },
     {
       "user": "af",
-      "password": "eJR9vJWJjdObZuWTQYrCmA==",
+      "password": "G5Jsq4IWgyi8MWJozoNAuw==",
       "type": "SRM"
     }
   ],
@@ -28,5 +28,5 @@
     }
   ],
   "_version": 1,
-  "_iv": "174QdsxzVN/aCKVJ82AjRw=="
+  "_iv": "nl8HZvHQ0yiyka79NnFoew=="
 }

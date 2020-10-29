@@ -35,6 +35,7 @@ type WithOptionalRequestId<'T1, 'T2> = RequestId option * 'T1 * 'T2
 type WithOptionalRequestId<'T1, 'T2, 'T3> = RequestId option * 'T1 * 'T2 * 'T3
 type WithOptionalRequestId<'T1, 'T2, 'T3, 'T4> = RequestId option * 'T1 * 'T2 * 'T3 * 'T4
 type WithOptionalRequestId<'T1, 'T2, 'T3, 'T4, 'T5> = RequestId option * 'T1 * 'T2 * 'T3 * 'T4 * 'T5
+type WithOptionalRequestId<'T1, 'T2, 'T3, 'T4, 'T5, 'T6> = RequestId option * 'T1 * 'T2 * 'T3 * 'T4 * 'T5 * 'T6
 
 type RequestMap<'C> = Map<RequestId, PendingRequest<'C>>
 

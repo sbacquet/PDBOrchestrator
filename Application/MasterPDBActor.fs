@@ -190,7 +190,14 @@ let private masterPDBActorBody
                             return! loop state
                         else
                             let newRequests = requests |> registerRequest requestId command (ctx.Sender())
-                            oracleDiskIntensiveTaskExecutor <! OracleDiskIntensiveActor.ImportPDB (Some requestId, (manifestFromVersion version), instance.MasterPDBDestPath, true, None, editionPDBName)
+                            oracleDiskIntensiveTaskExecutor <! 
+                                OracleDiskIntensiveActor.ImportPDB (
+                                    Some requestId, 
+                                    (manifestFromVersion version), 
+                                    instance.MasterPDBDestPath, 
+                                    true, 
+                                    (usersAndPasswords masterPDB.Schemas), 
+                                    editionPDBName)
                             return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
 
                 | Commit (requestId, unlocker, _) ->
@@ -258,7 +265,16 @@ let private masterPDBActorBody
                         if state.EditionOperationInProgress then
                             sender <! (requestId, Error (sprintf "PDB %s has a pending edition operation in progress" masterPDB.Name |> exn))
                         else
-                            workingCopyFactory <<! WorkingCopyFactoryActor.CreateWorkingCopyOfEdition(Some requestId, editionPDBName, (instance |> getWorkingCopyFolder durable), workingCopyName, durable, force)
+                            workingCopyFactory <<! 
+                                WorkingCopyFactoryActor.CreateWorkingCopyOfEdition(
+                                    Some requestId, 
+                                    editionPDBName, 
+                                    (instance |> getWorkingCopyFolder durable), 
+                                    workingCopyName, 
+                                    durable, 
+                                    force, 
+                                    (userNames masterPDB.Schemas)
+                                )
                         return! loop state
 
                 | CollectVersionsGarbage versions ->

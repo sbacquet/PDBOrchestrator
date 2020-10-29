@@ -59,18 +59,26 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
 
         member __.ExportPDB manifest name = closeAndExportPDB logger connAsDBA (getManifestPath manifest) name
 
-        member __.ImportPDB manifest destFolder readWrite users name = 
-            let script = users |> Option.map (fun users pdb ->
-                users 
-                |> List.map (fun (user, pass) -> disableUserScheduledJobs instance.Server (instance |> portOrDefault) user pass pdb)
-                |> AsyncResult.sequenceS
-                |> AsyncResult.map (fun _ -> pdb)
-            )
-            importAndOpen logger connAsDBA (getManifestPath manifest) destFolder readWrite script name
+        member __.ImportPDB manifest destFolder readWrite schemas name = 
+            let script pdb = asyncResult {
+                let! _ =
+                    if readWrite then recreateTempTablespaceForUsers connAsDBAIn (schemas |> List.map fst) pdb
+                    else AsyncResult.retn pdb
+                let! _ = 
+                    schemas 
+                    |> List.map (fun (user, pass) -> disableUserScheduledJobs instance.Server (instance |> portOrDefault) user pass pdb)
+                    |> AsyncResult.sequenceS
+                return pdb
+            }
+            importAndOpen logger connAsDBA connAsDBAIn (getManifestPath manifest) destFolder readWrite (Some script) name
 
-        member __.SnapshotPDB sourcePDB destFolder name = snapshotAndOpenPDB logger connAsDBA sourcePDB destFolder name
+        member __.SnapshotPDB sourcePDB destFolder schemas name =
+            let script = recreateTempTablespaceForUsers connAsDBAIn schemas
+            snapshotAndOpenPDB logger connAsDBA sourcePDB destFolder (Some script) name
 
-        member __.ClonePDB sourcePDB destFolder name = cloneAndOpenPDB logger connAsDBA sourcePDB destFolder name
+        member __.ClonePDB sourcePDB destFolder schemas name =
+            let script = recreateTempTablespaceForUsers connAsDBAIn schemas
+            cloneAndOpenPDB logger connAsDBA sourcePDB destFolder (Some script) name
 
         member __.PDBHasSnapshots name = pdbHasSnapshots connAsDBA name
 

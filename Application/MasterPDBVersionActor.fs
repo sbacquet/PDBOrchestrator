@@ -44,7 +44,7 @@ let private masterPDBVersionActorBody
         oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.DeletePDB (None, pdb)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" pdb |> exn |> Error)
     let createSnaphotSourcePDB manifest path name : OraclePDBResult =
-        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, false, Some (usersAndPasswords masterPDBSchemas), name)
+        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, false, (usersAndPasswords masterPDBSchemas), name)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot import PDB %s : timeout exceeded" name |> exn |> Error)
     let rec loop () =
         
@@ -66,10 +66,10 @@ let private masterPDBVersionActorBody
                         else
                             ctx.Log.Value.Debug("Snapshot source PDB {pdb} already exists", snapshotSourceName)
                             Ok ""
-                    workingCopyFactory <<! WorkingCopyFactoryActor.CreateWorkingCopyBySnapshot(Some requestId, snapshotSourceName, destPath, workingCopyName, durable, force)
+                    workingCopyFactory <<! WorkingCopyFactoryActor.CreateWorkingCopyBySnapshot(Some requestId, snapshotSourceName, destPath, workingCopyName, durable, force, (userNames masterPDBSchemas))
                     return ()
                 else
-                    workingCopyFactory <<! WorkingCopyFactoryActor.CreateWorkingCopyByClone(Some requestId, sourceManifest, destPath, workingCopyName, durable, force)
+                    workingCopyFactory <<! WorkingCopyFactoryActor.CreateWorkingCopyByClone(Some requestId, sourceManifest, destPath, workingCopyName, durable, force, (usersAndPasswords masterPDBSchemas))
                     return ()
             }
             match result with

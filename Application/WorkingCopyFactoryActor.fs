@@ -12,9 +12,9 @@ open Akka.Routing
 open Domain.MasterPDBWorkingCopy
 
 type Command =
-| CreateWorkingCopyBySnapshot of WithOptionalRequestId<string, string, string, bool, bool> // responds with OraclePDBResultWithReqId
-| CreateWorkingCopyByClone of WithOptionalRequestId<string, string, string, bool, bool> // responds with OraclePDBResultWithReqId
-| CreateWorkingCopyOfEdition of WithOptionalRequestId<string, string, string, bool, bool> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopyBySnapshot of WithOptionalRequestId<string, string, string, bool, bool, string list> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopyByClone of WithOptionalRequestId<string, string, string, bool, bool, (string*string) list> // responds with OraclePDBResultWithReqId
+| CreateWorkingCopyOfEdition of WithOptionalRequestId<string, string, string, bool, bool, string list> // responds with OraclePDBResultWithReqId
 | DeleteWorkingCopy of WithOptionalRequestId<MasterPDBWorkingCopy>
 | DeleteUnregisteredWorkingCopy of WithOptionalRequestId<string>
 
@@ -35,14 +35,14 @@ let private workingCopyFactoryActorBody
             |> runWithin parameters.LongTimeout id (fun () -> sprintf "PDB %s cannot be deleted : timeout exceeded" wc.Name |> exn |> Error)
         else
             deletePDB wc.Name
-    let importPDB manifest path name : OraclePDBResult =
-        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, true, None, name)
+    let importPDB manifest path schemas name : OraclePDBResult =
+        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ImportPDB (None, manifest, path, true, schemas, name)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot import PDB %s : timeout exceeded" name |> exn |> Error)
-    let snapshotPDB source path name : OraclePDBResult =
-        oracleLongTaskExecutor <? OracleLongTaskExecutor.SnapshotPDB (None, source, path, name)
+    let snapshotPDB source path schemas name : OraclePDBResult =
+        oracleLongTaskExecutor <? OracleLongTaskExecutor.SnapshotPDB (None, source, path, schemas, name)
         |> runWithin parameters.LongTimeout id (fun () -> sprintf "cannot snapshot PDB %s to %s : timeout exceeded" source name |> exn |> Error)
-    let clonePDB editionPDBName path name : OraclePDBResult =
-        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ClonePDB (None, editionPDBName, path, name)
+    let clonePDB editionPDBName path schemas name : OraclePDBResult =
+        oracleDiskIntensiveTaskExecutor <? OracleDiskIntensiveActor.ClonePDB (None, editionPDBName, path, schemas, name)
         |> runWithin parameters.VeryLongTimeout id (fun () -> sprintf "cannot clone PDB %s to %s : timeout exceeded" editionPDBName name |> exn |> Error)
     let isTempWorkingCopy (pdb:string) : Exceptional.Exceptional<bool> = result {
         let! (folder:string option) = 
@@ -97,21 +97,21 @@ let private workingCopyFactoryActorBody
         let! command = ctx.Receive()
 
         match command with
-        | CreateWorkingCopyBySnapshot (requestId, snapshotSourceName, destPath, workingCopyName, durable, force) -> 
+        | CreateWorkingCopyBySnapshot (requestId, snapshotSourceName, destPath, workingCopyName, durable, force, schemas) -> 
             ctx.Log.Value.Debug("Creating working copy {pdb} by snapshot...", workingCopyName)
-            let result = createWorkingCopyIfNeeded workingCopyName durable force <| snapshotPDB snapshotSourceName destPath
+            let result = createWorkingCopyIfNeeded workingCopyName durable force <| snapshotPDB snapshotSourceName destPath schemas
             result |> reply requestId
             return! loop ()
 
-        | CreateWorkingCopyByClone (requestId, sourceManifest, destPath, workingCopyName, durable, force) -> 
+        | CreateWorkingCopyByClone (requestId, sourceManifest, destPath, workingCopyName, durable, force, schemas) -> 
             ctx.Log.Value.Debug("Creating working copy {pdb} by clone...", workingCopyName)
-            let result = createWorkingCopyIfNeeded workingCopyName durable force <| importPDB sourceManifest destPath
+            let result = createWorkingCopyIfNeeded workingCopyName durable force <| importPDB sourceManifest destPath schemas
             result |> reply requestId
             return! loop ()
 
-        | CreateWorkingCopyOfEdition (requestId, editionPDBName, destPath, workingCopyName, durable, force) ->
+        | CreateWorkingCopyOfEdition (requestId, editionPDBName, destPath, workingCopyName, durable, force, schemas) ->
             ctx.Log.Value.Debug("Creating working copy {pdb} of edition...", workingCopyName)
-            let result = createWorkingCopyIfNeeded workingCopyName durable force <| clonePDB editionPDBName destPath
+            let result = createWorkingCopyIfNeeded workingCopyName durable force <| clonePDB editionPDBName destPath schemas
             result |> reply requestId
             return! loop ()
 
@@ -144,9 +144,9 @@ let spawn parameters instance shortTaskExecutor longTaskExecutor oracleDiskInten
         match command with
         | :? Command as command -> 
             match command with
-            | CreateWorkingCopyBySnapshot (_, _, _, workingCopyName, _, _)
-            | CreateWorkingCopyByClone (_, _, _, workingCopyName, _, _)
-            | CreateWorkingCopyOfEdition (_, _, _, workingCopyName, _, _)
+            | CreateWorkingCopyBySnapshot (_, _, _, workingCopyName, _, _, _)
+            | CreateWorkingCopyByClone (_, _, _, workingCopyName, _, _, _)
+            | CreateWorkingCopyOfEdition (_, _, _, workingCopyName, _, _, _)
             | DeleteUnregisteredWorkingCopy (_, workingCopyName)
                 -> upcast workingCopyName
             | DeleteWorkingCopy (_, workingCopy)

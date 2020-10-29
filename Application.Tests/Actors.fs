@@ -192,7 +192,7 @@ type FakeOracleAPI(existingPDBs : Map<string, bool>) =
             addPDBFolder name folder
             return Ok name 
         }
-        member this.SnapshotPDB sourcePDB folder name = async { 
+        member this.SnapshotPDB sourcePDB folder _ name = async { 
             this.Logger.LogDebug("Snapshoting PDB {sourcePDB} to {snapshotCopy}...", sourcePDB, name)
             let exists = _existingPDBs.TryFind sourcePDB
             match exists with
@@ -206,7 +206,7 @@ type FakeOracleAPI(existingPDBs : Map<string, bool>) =
             | None -> 
                 return Error <| (printf "Source PDB %s does not exist" sourcePDB |> exn)
         }
-        member this.ClonePDB sourcePDB folder name = async { 
+        member this.ClonePDB sourcePDB folder _ name = async { 
             this.Logger.LogDebug("Cloning PDB {sourcePDB} to {destPDB}...", sourcePDB, name)
             addExistingPDB true name
             addPDBFolder name folder

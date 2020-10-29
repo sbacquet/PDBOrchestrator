@@ -14,8 +14,8 @@ type IOracleAPI =
         name : string ->
         dumpPath : string -> 
         schemas : string list -> 
-        targetSchemas : (string * string) list
-        -> Async<OraclePDBResult>
+        targetSchemas : (string * string) list ->
+        Async<OraclePDBResult>
 
     abstract member OpenPDB : readWrite:bool -> name:string -> Async<OraclePDBResult>
 
@@ -29,13 +29,23 @@ type IOracleAPI =
         manifest : string ->
         destFolder : string ->
         readWrite : bool -> 
-        users : (string * string) list option ->
-        name : string
-        -> Async<OraclePDBResult>
+        schemas : (string * string) list ->
+        name : string ->
+        Async<OraclePDBResult>
 
-    abstract member SnapshotPDB : sourcePDB:string -> destFolder:string -> name:string -> Async<OraclePDBResult>
+    abstract member SnapshotPDB :
+        sourcePDB:string -> 
+        destFolder:string -> 
+        schemas : string list ->
+        name:string ->
+        Async<OraclePDBResult>
 
-    abstract member ClonePDB : sourcePDB:string -> destFolder:string -> name:string -> Async<OraclePDBResult>
+    abstract member ClonePDB :
+        sourcePDB:string -> 
+        destFolder:string -> 
+        schemas : string list ->
+        name:string -> 
+        Async<OraclePDBResult>
 
     abstract member PDBHasSnapshots : name:string -> Async<Exceptional<bool>>
 
