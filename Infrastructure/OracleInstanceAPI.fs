@@ -82,16 +82,7 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
 
         member __.PDBHasSnapshots name = pdbHasSnapshots connAsDBA name
 
-        member __.PDBExists name = async {
-            let! result = PDBExistsOnServer connAsDBA name
-            match result with
-            | Ok _ -> return result
-            | Error error ->
-                // Retry 1 time, because seems to fail sometimes for unknown reason
-                logger.LogError("PDBExists failed ({0}), retrying 1 more time...", error.Message)
-                do! Async.Sleep 5000
-                return! PDBExistsOnServer connAsDBA name
-        }
+        member __.PDBExists name = PDBExistsOnServer connAsDBA name
 
         member __.PDBSnapshots name = pdbSnapshots connAsDBA None None name
 
