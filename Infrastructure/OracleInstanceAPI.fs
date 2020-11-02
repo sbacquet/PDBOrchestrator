@@ -21,6 +21,50 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
 
     let getManifestPath = sprintf "%s/%s" instance.MasterPDBManifestsPath
 
+    let recreateTempTablespaceForUsers users pdb =
+        if users |> List.isEmpty then
+            AsyncResult.retn pdb
+        else
+            let userTempFileName = "users_temp.dbf"
+            let createEmptyTablespaceSQL = 
+                sprintf @"
+FOR r IN (select regexp_replace(pathtmp, '/[^/]+$', '', 1, 1) as pathtmp from (select FILE_NAME as pathtmp from dba_temp_files where TABLESPACE_NAME = 'TEMP' and rownum <=1))
+LOOP
+   EXECUTE IMMEDIATE 'create tablespace EMPTY datafile ''' || r.pathtmp || '/%s'' size 128M AUTOEXTEND ON NEXT 1M';
+   EXECUTE IMMEDIATE 'drop tablespace EMPTY';
+   EXECUTE IMMEDIATE 'create temporary tablespace USERSTEMP tempfile ''' || r.pathtmp || '/%s'' REUSE AUTOEXTEND ON NEXT 10M';
+END LOOP;
+"                   userTempFileName userTempFileName
+            let alterUsersTempTablespaceSQL =
+                users
+                |> List.map (sprintf "EXECUTE IMMEDIATE 'alter user %s temporary tablespace USERSTEMP';")
+                |> String.concat ""
+            let script = 
+                sprintf @"
+BEGIN
+%s
+%s
+END;
+"                   createEmptyTablespaceSQL alterUsersTempTablespaceSQL
+            execAsync pdb (connAsDBAIn pdb) script
+
+    let resetTempTablespaceForUsers users pdb =
+        if users |> List.isEmpty then
+            AsyncResult.retn pdb
+        else
+            let alterUsersTempTablespaceSQL =
+                users
+                |> List.map (sprintf "EXECUTE IMMEDIATE 'alter user %s temporary tablespace TEMP';")
+                |> String.concat ""
+            let script = 
+                sprintf @"
+BEGIN
+%s
+EXECUTE IMMEDIATE 'DROP TABLESPACE USERSTEMP INCLUDING CONTENTS AND DATAFILES CASCADE CONSTRAINTS';
+END;
+"                   alterUsersTempTablespaceSQL
+            execAsync pdb (connAsDBAIn pdb) script
+
     interface IOracleAPI with
         member __.NewPDBFromDump timeout name dumpPath schemas targetSchemas =
             let manifest = Domain.MasterPDBVersion.manifestFile name 1 |> getManifestPath
@@ -57,12 +101,16 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
 
         member __.DeletePDB name = deleteSourcePDB logger connAsDBA name
 
-        member __.ExportPDB manifest name = closeAndExportPDB logger connAsDBA (getManifestPath manifest) name
+        member __.ExportPDB manifest schemas name = asyncResult {
+            let! _ = resetTempTablespaceForUsers schemas name
+            let! _ = closeAndExportPDB logger connAsDBA (getManifestPath manifest) name
+            return name
+        }
 
         member __.ImportPDB manifest destFolder readWrite schemas name = 
             let script pdb = asyncResult {
                 let! _ =
-                    if readWrite then recreateTempTablespaceForUsers connAsDBAIn (schemas |> List.map fst) pdb
+                    if readWrite then recreateTempTablespaceForUsers (schemas |> List.map fst) pdb
                     else AsyncResult.retn pdb
                 let! _ = 
                     schemas 
@@ -73,12 +121,11 @@ type OracleInstanceAPI(loggerFactory : ILoggerFactory, instance : Domain.OracleI
             importAndOpen logger connAsDBA connAsDBAIn (getManifestPath manifest) destFolder readWrite (Some script) name
 
         member __.SnapshotPDB sourcePDB destFolder schemas name =
-            let script = recreateTempTablespaceForUsers connAsDBAIn schemas
+            let script = recreateTempTablespaceForUsers schemas
             snapshotAndOpenPDB logger connAsDBA sourcePDB destFolder (Some script) name
 
         member __.ClonePDB sourcePDB destFolder schemas name =
-            let script = recreateTempTablespaceForUsers connAsDBAIn schemas
-            cloneAndOpenPDB logger connAsDBA sourcePDB destFolder (Some script) name
+            cloneAndOpenPDB logger connAsDBA sourcePDB destFolder None name
 
         member __.PDBHasSnapshots name = pdbHasSnapshots connAsDBA name
 

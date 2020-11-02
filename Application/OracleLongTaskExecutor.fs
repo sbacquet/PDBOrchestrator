@@ -19,7 +19,7 @@ type Command =
 | OpenPDB of WithOptionalRequestId<string,bool> // responds with OraclePDBResultWithReqId
 | ClosePDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
 | SnapshotPDB of WithOptionalRequestId<string, string, string list, string> // responds with OraclePDBResultWithReqId
-| ExportPDB of WithOptionalRequestId<string, string> // responds with OraclePDBResultWithReqId
+| ExportPDB of WithOptionalRequestId<string, string list, string> // responds with OraclePDBResultWithReqId
 | DeleteSnapshotPDB of WithOptionalRequestId<string> // responds with OraclePDBResultWithReqId
 
 let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOracleAPI) (ctx : Actor<Command>) =
@@ -65,8 +65,8 @@ let private oracleLongTaskExecutorBody (parameters:Parameters) (oracleAPI : IOra
             | None -> ctx.Sender() <! result
             return! loop ()
 
-        | ExportPDB (requestId, manifest, name) -> 
-            let! result = oracleAPI.ExportPDB manifest name
+        | ExportPDB (requestId, manifest, schemas, name) -> 
+            let! result = oracleAPI.ExportPDB manifest schemas name
             match requestId with
             | Some reqId -> ctx.Sender() <! (reqId, result)
             | None -> ctx.Sender() <! result

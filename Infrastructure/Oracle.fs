@@ -750,30 +750,3 @@ END;
 "
     let connMgr = Sql.withNewConnection (openConn host port pdb user password false)
     execAsync pdb connMgr disableScheduledJobsSQL
-
-let recreateTempTablespaceForUsers connAsDBAIn users pdb =
-    if users |> List.isEmpty then
-        AsyncResult.retn pdb
-    else
-        let userTempFileName = "users_temp.dbf"
-        let createEmptyTablespaceSQL = 
-            sprintf @"
-FOR r IN (select regexp_replace(pathtmp, '/[^/]+$', '', 1, 1) as pathtmp from (select FILE_NAME as pathtmp from dba_temp_files where TABLESPACE_NAME = 'TEMP' and rownum <=1))
-LOOP
-   EXECUTE IMMEDIATE 'create tablespace EMPTY datafile ''' || r.pathtmp || '/%s'' size 128M AUTOEXTEND ON NEXT 1M';
-   EXECUTE IMMEDIATE 'drop tablespace EMPTY';
-   EXECUTE IMMEDIATE 'create temporary tablespace USERSTEMP tempfile ''' || r.pathtmp || '/%s'' REUSE AUTOEXTEND ON NEXT 10M';
-END LOOP;
-"               userTempFileName userTempFileName
-        let alterUsersTempTablespaceSQL =
-            users
-            |> List.map (sprintf "EXECUTE IMMEDIATE 'alter user %s temporary tablespace USERSTEMP';")
-            |> String.concat ""
-        let script = 
-            sprintf @"
-BEGIN
-%s
-%s
-END;
-"               createEmptyTablespaceSQL alterUsersTempTablespaceSQL
-        execAsync pdb (connAsDBAIn pdb) script

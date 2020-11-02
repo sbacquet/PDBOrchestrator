@@ -23,7 +23,11 @@ type IOracleAPI =
 
     abstract member DeletePDB : name:string -> Async<OraclePDBResult>
 
-    abstract member ExportPDB : manifest:string -> name:string -> Async<OraclePDBResult>
+    abstract member ExportPDB :
+        manifest:string ->
+        schemas : string list ->
+        name:string ->
+        Async<OraclePDBResult>
 
     abstract member ImportPDB : 
         manifest : string ->

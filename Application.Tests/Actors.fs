@@ -182,7 +182,7 @@ type FakeOracleAPI(existingPDBs : Map<string, bool>) =
                 removePDBFolder name
                 return Ok name 
         }
-        member this.ExportPDB _ name = async { 
+        member this.ExportPDB _ _ name = async { 
             this.Logger.LogDebug("Exporting PDB {PDB}...", name)
             return Ok name 
         }

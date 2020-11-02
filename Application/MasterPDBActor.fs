@@ -216,7 +216,7 @@ let private masterPDBActorBody
                             return! loop state
                         else
                             let manifest = manifestFromVersion (getNextAvailableVersion masterPDB)
-                            oracleLongTaskExecutor <! OracleLongTaskExecutor.ExportPDB (Some requestId, manifest, editionPDBName)
+                            oracleLongTaskExecutor <! OracleLongTaskExecutor.ExportPDB (Some requestId, manifest, (userNames masterPDB.Schemas), editionPDBName)
                             let newRequests = requests |> registerRequest requestId command (ctx.Sender())
                             return! loop { state with Requests = newRequests; EditionOperationInProgress = true }
 
