@@ -7,6 +7,7 @@
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="CompensableActionTests.fs" />
     <Compile Include="GITTests.fs" />
     <Compile Include="InstanceAffinityTests.fs" />
     <Compile Include="FileTransfer.fs" />

@@ -414,18 +414,21 @@ let importPDBCompensable (logger:ILogger) connAsDBA manifest dest =
         (importPDB logger connAsDBA manifest dest) 
         (deletePDB logger connAsDBA true)
 
-let importAndOpen (logger:ILogger) connAsDBA manifest dest readWrite script =
+let importAndOpen (logger:ILogger) connAsDBA connAsDBAIn manifest dest readWrite script =
     let prepareForStatsScript = @"
 BEGIN
 DBMS_ADVISOR.SETUP_REPOSITORY();
 DBMS_STATS.INIT_PACKAGE();
+DBMS_AUTO_TASK_ADMIN.disable( client_name => 'sql tuning advisor', operation => NULL, window_name => NULL);
+DBMS_AUTO_TASK_ADMIN.disable( client_name => 'auto optimizer stats collection', operation => NULL, window_name => NULL);
+DBMS_AUTO_TASK_ADMIN.disable( client_name => 'auto space advisor', operation => NULL, window_name => NULL);
 END;
 "
     [
         importPDBCompensable logger connAsDBA manifest dest
         openPDBCompensable logger connAsDBA true
+        notCompensableAsync (fun name -> execAsync name (connAsDBAIn name) prepareForStatsScript)
         notCompensableAsync (script |> Option.defaultValue AsyncResult.retn)
-        notCompensableAsync (fun name -> execAsync name connAsDBA prepareForStatsScript)
         notCompensableAsync (if readWrite then AsyncResult.retn else openPDB logger connAsDBA false)
     ] |> composeAsync logger
 
@@ -456,10 +459,11 @@ let snapshotPDBCompensable (logger:ILogger) connAsDBA sourcePDB destFolder =
         (snapshotPDB logger connAsDBA sourcePDB destFolder) 
         (deletePDB logger connAsDBA true)
 
-let snapshotAndOpenPDB (logger:ILogger) connAsDBA sourcePDB destFolder =
+let snapshotAndOpenPDB (logger:ILogger) connAsDBA sourcePDB destFolder script =
     [
         snapshotPDBCompensable logger connAsDBA sourcePDB destFolder
         openPDBCompensable logger connAsDBA true
+        notCompensableAsync (script |> Option.defaultValue AsyncResult.retn)
     ] |> composeAsync logger
 
 let clonePDB (logger:ILogger) connAsDBA sourcePDB destFolder name =
@@ -478,10 +482,11 @@ let clonePDBCompensable (logger:ILogger) connAsDBA manifest dest =
         (clonePDB logger connAsDBA manifest dest) 
         (deletePDB logger connAsDBA true)
 
-let cloneAndOpenPDB (logger:ILogger) connAsDBA manifest dest =
+let cloneAndOpenPDB (logger:ILogger) connAsDBA manifest dest script =
     [
         clonePDBCompensable logger connAsDBA manifest dest
         openPDBCompensable logger connAsDBA true
+        notCompensableAsync (script |> Option.defaultValue AsyncResult.retn)
     ] |> composeAsync logger
 
 type RawOraclePDB = {

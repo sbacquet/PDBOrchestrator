@@ -128,3 +128,5 @@ let isLockedForEdition masterPDB = masterPDB.EditionState.IsSome
 let masterPDBEditionName (masterPDBName:string) = sprintf "%s_EDITION" (masterPDBName.ToUpper())
 
 let usersAndPasswords schemas = schemas |> List.map (fun (schema:Schema) -> (schema.User, schema.Password))
+
+let userNames schemas = schemas |> List.map (fun (schema:Schema) -> schema.User)
